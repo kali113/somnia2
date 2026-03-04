@@ -88,7 +88,7 @@ export default function WalletPanel() {
       <div className="rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3 mb-3">
         <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Balance</span>
         <p className="text-lg font-mono font-bold text-[#3ae8ff] mt-0.5">
-          {balance ? `${Number(balance.formatted).toFixed(4)} STT` : '-- STT'}
+          {balance && !isNaN(Number(balance.formatted)) ? `${Number(balance.formatted).toFixed(4)} STT` : '-- STT'}
         </p>
       </div>
 
