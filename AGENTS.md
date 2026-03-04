@@ -1,42 +1,33 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `app/` contains Next.js App Router pages and layouts (`/`, `/play`, `/game`).
-- `components/` holds reusable UI primitives in `components/ui/` plus feature-level components in `components/game/` and `components/dashboard/`.
-- `lib/` contains shared TypeScript logic, including `lib/game/` (engine systems) and `lib/somnia/` (chain config, contracts, session wallet).
-- `server/` is a standalone Express + WebSocket TypeScript service (`routes/`, `store.ts`, `indexer.ts`).
-- `contracts/` stores Solidity sources and ABI; `public/` stores static images/icons.
+## WHY (Project Purpose)
+Pixel Royale is a Somnia demo: a static-exported Next.js frontend plus an optional Node orchestrator server for queueing, events, and leaderboard APIs.
 
-## Build, Test, and Development Commands
-- `pnpm install` installs frontend dependencies (root project).
-- `pnpm dev` starts the Next.js app locally on port 3000.
-- `pnpm build` creates the static export (`out/`) used by GitHub Pages.
-- `pnpm lint` runs ESLint across the repository (`eslint .`).
-- `cd server && pnpm install` installs backend dependencies.
-- `cd server && pnpm dev` runs the orchestrator server with hot reload (`tsx watch`).
-- `cd server && pnpm build && pnpm start` builds backend TS and runs `dist/index.js`.
+## WHAT (Codebase Map)
+- `app/`: Next.js App Router pages (`/`, `/play`, `/game`).
+- `components/game`, `lib/game`: gameplay UI and engine logic.
+- `components/dashboard`, `lib/somnia`: wallet, chain integration, queue/reward UX.
+- `server/`: Express + WebSocket backend (`routes/`, `store.ts`, `indexer.ts`).
+- `contracts/`: Solidity + ABI used by frontend/server integrations.
 
-## Coding Style & Naming Conventions
-- Language: TypeScript with `strict: true` in both frontend and backend configs.
-- Follow existing formatting: 2-space indentation, single quotes, and no semicolons.
-- Use `PascalCase` for React component files (`GameCanvas.tsx`, `WalletPanel.tsx`).
-- Use lowercase module names for non-component logic (`engine.ts`, `collision.ts`).
-- Prefer the `@/*` import alias for root-relative frontend imports.
-- Run `pnpm lint` before opening a PR.
+## HOW (Default Workflow)
+- Frontend: `pnpm install`, `pnpm dev`, `pnpm lint`, `pnpm build`.
+- Backend: `cd server && pnpm install`, `pnpm dev` or `pnpm build && pnpm start`.
+- Required verification before finishing work:
+  - Root: `pnpm lint && pnpm build`
+  - Server changes: `cd server && pnpm build`
+  - Manual smoke checks for `/`, `/play`, `/game`, and `/api/health` when backend is touched.
 
-## Testing Guidelines
-- No automated test framework is currently configured in root or `server/`.
-- Required pre-PR checks: `pnpm lint`, `pnpm build`, and `cd server && pnpm build`.
-- Manual smoke test at minimum: `/`, `/play`, `/game`, plus `GET /api/health` on local backend.
-- If adding tests, use `*.test.ts` or `*.test.tsx` naming and cover game logic, queue flow, and API edge cases.
+## Progressive Disclosure (Read Only What You Need)
+Start with one or two docs below, then follow their file pointers:
+- `agent_docs/build-and-verify.md`: install, run, and verification workflow.
+- `agent_docs/frontend-map.md`: app routes, UI layers, and game engine entry points.
+- `agent_docs/backend-map.md`: API/WebSocket flow and in-memory state model.
+- `agent_docs/chain-and-contracts.md`: Somnia config, wallet/session, contract bindings.
+- `agent_docs/deploy-pages.md`: static export behavior and GitHub Pages pipeline.
 
-## Commit & Pull Request Guidelines
-- Match existing commit style: short, imperative, capitalized subjects (e.g., `Fix Pages workflow pnpm setup order`).
-- Keep commits focused by concern (UI, engine logic, backend routes, deployment config).
-- PRs should include: what changed, why, how to verify, and linked issue/ticket.
-- Add screenshots or short recordings for UI changes, and call out any `.env` or contract-address impacts.
-
-## Configuration & Security Tips
-- Frontend build is static-exported via `next.config.mjs`; avoid introducing frontend runtime server dependencies.
-- Backend secrets come from environment variables in `server/index.ts` (`SOMNIA_RPC_URL`, `GAME_CONTRACT_ADDRESS`, `ORCHESTRATOR_PRIVATE_KEY`, `CORS_ORIGIN`).
-- Never commit `.env` files or private keys.
+## Guardrails
+- Keep edits minimal and local to the task.
+- Follow existing TypeScript style already present in touched files.
+- Do not add style-only churn; use lint/build as deterministic quality gates.
+- Never commit secrets (`.env`, private keys).

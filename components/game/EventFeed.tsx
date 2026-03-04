@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SomniaEvent } from '@/lib/somnia/events'
 import { formatEventMessage } from '@/lib/somnia/events'
 import { Zap, Cloud, Award, Link2, AlertTriangle } from 'lucide-react'
@@ -28,12 +28,20 @@ const EVENT_COLORS: Record<string, string> = {
 
 export default function EventFeed({ events, isLive }: EventFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0
     }
   }, [events.length])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="absolute left-3 top-16 z-10 w-64 pointer-events-none">
@@ -67,7 +75,7 @@ export default function EventFeed({ events, isLive }: EventFeedProps) {
             const Icon = EVENT_ICONS[event.type] || Zap
             const color = EVENT_COLORS[event.type] || '#fff'
             const message = formatEventMessage(event)
-            const timeAgo = Math.floor((Date.now() - event.timestamp) / 1000)
+            const timeAgo = Math.floor((nowMs - event.timestamp) / 1000)
             const timeStr = timeAgo < 60 ? `${timeAgo}s` : `${Math.floor(timeAgo / 60)}m`
 
             return (
