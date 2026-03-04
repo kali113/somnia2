@@ -62,9 +62,10 @@ export default function GameCanvas({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let lastTime = performance.now()
+    let lastTime = -1
 
     const loop = (timestamp: number) => {
+      if (lastTime < 0) lastTime = timestamp
       const dt = Math.min((timestamp - lastTime) / 1000, 0.05) // Cap at 50ms
       lastTime = timestamp
 

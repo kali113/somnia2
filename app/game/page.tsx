@@ -128,6 +128,8 @@ export default function GamePage() {
   }, [])
 
   // ── Game callbacks ───────────────────────────────────────────────────
+  const handleSupplyDrop = useCallback(() => {}, [])
+
   const handlePlayAgain = useCallback(() => {
     window.location.reload()
   }, [])
@@ -151,7 +153,7 @@ export default function GamePage() {
         onPhaseChange={setPhase}
         onPlayerUpdate={setPlayer}
         onStormUpdate={setStorm}
-        onSupplyDrop={() => {}}
+        onSupplyDrop={handleSupplyDrop}
         gameStateRef={gameStateRef}
       />
 
