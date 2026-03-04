@@ -11,7 +11,7 @@ export default function KillFeed({ entries, gameTime }: KillFeedProps) {
   if (entries.length === 0) return null
 
   return (
-    <div className="absolute right-3 top-16 z-10 flex flex-col gap-1 pointer-events-none">
+    <div className="absolute right-3 top-[184px] z-10 flex flex-col gap-1 pointer-events-none">
       {entries.slice(0, 6).map((entry, i) => {
         const age = gameTime - entry.time
         const opacity = Math.max(0, 1 - age / 8)

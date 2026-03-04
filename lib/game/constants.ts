@@ -174,10 +174,65 @@ export const STORM_PHASES: StormPhase[] = [
 // ── Building ────────────────────────────────────────────────────────────────
 
 export const BUILDING_GRID = 32
+export const BUILD_PLACE_RANGE = 180
+
+export type BuildMaterial = 'wood' | 'stone' | 'metal'
+export type BuildPieceId = 'wall' | 'barricade' | 'bunker'
+
 export const BUILDING_HEALTH: Record<string, number> = {
   wood: 150,
   stone: 300,
   metal: 500,
+}
+
+export interface BuildPieceDef {
+  id: BuildPieceId
+  name: string
+  gridW: number
+  gridH: number
+  baseCost: number
+  healthMultiplier: number
+  blocksMovement: boolean
+  blocksProjectiles: boolean
+  purpose: string
+}
+
+export const BUILD_PIECE_ORDER: BuildPieceId[] = ['wall', 'barricade', 'bunker']
+
+export const BUILD_PIECES: Record<BuildPieceId, BuildPieceDef> = {
+  wall: {
+    id: 'wall',
+    name: 'Wall',
+    gridW: 1,
+    gridH: 1,
+    baseCost: 10,
+    healthMultiplier: 1,
+    blocksMovement: true,
+    blocksProjectiles: true,
+    purpose: 'Fast cover in open fights',
+  },
+  barricade: {
+    id: 'barricade',
+    name: 'Barricade',
+    gridW: 2,
+    gridH: 1,
+    baseCost: 16,
+    healthMultiplier: 1.2,
+    blocksMovement: true,
+    blocksProjectiles: true,
+    purpose: 'Seal lanes and choke points',
+  },
+  bunker: {
+    id: 'bunker',
+    name: 'Bunker',
+    gridW: 2,
+    gridH: 2,
+    baseCost: 28,
+    healthMultiplier: 1.65,
+    blocksMovement: true,
+    blocksProjectiles: true,
+    purpose: 'High-HP hold for late circles',
+  },
 }
 
 export const MATERIAL_HARVEST: Record<string, { wood: number; stone: number; metal: number }> = {
