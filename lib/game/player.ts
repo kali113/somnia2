@@ -3,7 +3,9 @@
 import {
   PLAYER_SIZE, PLAYER_SPEED, PLAYER_MAX_HEALTH, PLAYER_MAX_SHIELD,
   WEAPONS, type WeaponDef, type Rarity, BUILDING_GRID, BUILDING_HEALTH,
+  BUILD_PIECE_ORDER, BUILD_PIECES, BUILD_PLACE_RANGE,
   MAP_WIDTH, MAP_HEIGHT,
+  type BuildMaterial, type BuildPieceId,
 } from './constants'
 import type { InputState } from './input'
 import type { GameMap, PlayerBuild } from './map'
@@ -42,7 +44,9 @@ export interface Player {
 
   // Building
   buildMode: boolean
-  buildMaterial: 'wood' | 'stone' | 'metal'
+  buildMaterial: BuildMaterial
+  buildPiece: BuildPieceId
+  buildRotation: 0 | 1
 
   // Combat
   lastFireTime: number
@@ -73,6 +77,8 @@ export function createPlayer(x: number, y: number, name: string): Player {
     metal: 30,
     buildMode: false,
     buildMaterial: 'wood',
+    buildPiece: 'wall',
+    buildRotation: 0,
     lastFireTime: 0,
     reloading: false,
     reloadStart: 0,
@@ -88,6 +94,102 @@ export function getActiveWeapon(player: Player): WeaponDef | null {
   const slot = player.slots[player.activeSlot]
   if (!slot) return null
   return WEAPONS[slot.weaponId] ?? null
+}
+
+function getPieceSize(pieceId: BuildPieceId, rotation: 0 | 1): { w: number; h: number } {
+  const def = BUILD_PIECES[pieceId]
+  const rotate = rotation === 1 && def.gridW !== def.gridH
+  const gridW = rotate ? def.gridH : def.gridW
+  const gridH = rotate ? def.gridW : def.gridH
+  return {
+    w: gridW * BUILDING_GRID,
+    h: gridH * BUILDING_GRID,
+  }
+}
+
+function getBuildOverlay(map: GameMap): AABB[] {
+  const overlay: AABB[] = []
+  for (const t of map.trees) {
+    if (t.health <= 0) continue
+    overlay.push({ x: t.x - 10, y: t.y - 10, w: 20, h: 20 })
+  }
+  for (const r of map.rocks) {
+    if (r.health <= 0) continue
+    overlay.push({ x: r.x - 12, y: r.y - 10, w: 24, h: 20 })
+  }
+  for (const c of map.cars) {
+    if (c.health <= 0) continue
+    overlay.push({ x: c.x - 16, y: c.y - 10, w: 32, h: 20 })
+  }
+  return overlay
+}
+
+export interface BuildPlacement extends AABB {
+  pieceId: BuildPieceId
+  rotation: 0 | 1
+  material: BuildMaterial
+  cost: number
+  blocksMovement: boolean
+  blocksProjectiles: boolean
+}
+
+export function getBuildPlacement(player: Player, input: InputState): BuildPlacement {
+  const piece = BUILD_PIECES[player.buildPiece]
+  const size = getPieceSize(player.buildPiece, player.buildRotation)
+  const gx = Math.floor((input.mouseWorldX - size.w / 2) / BUILDING_GRID) * BUILDING_GRID
+  const gy = Math.floor((input.mouseWorldY - size.h / 2) / BUILDING_GRID) * BUILDING_GRID
+
+  return {
+    x: gx,
+    y: gy,
+    w: size.w,
+    h: size.h,
+    pieceId: player.buildPiece,
+    rotation: player.buildRotation,
+    material: player.buildMaterial,
+    cost: piece.baseCost,
+    blocksMovement: piece.blocksMovement,
+    blocksProjectiles: piece.blocksProjectiles,
+  }
+}
+
+export function canPlaceBuild(player: Player, map: GameMap, build: BuildPlacement): boolean {
+  if (build.x < 0 || build.y < 0 || build.x + build.w > MAP_WIDTH || build.y + build.h > MAP_HEIGHT) {
+    return false
+  }
+
+  const centerX = build.x + build.w / 2
+  const centerY = build.y + build.h / 2
+  const dx = centerX - player.x
+  const dy = centerY - player.y
+  if (dx * dx + dy * dy > BUILD_PLACE_RANGE * BUILD_PLACE_RANGE) {
+    return false
+  }
+
+  for (const existing of map.playerBuilds) {
+    if (aabbOverlap(build, existing)) return false
+  }
+
+  for (const wall of map.wallColliders) {
+    if (aabbOverlap(build, wall)) return false
+  }
+
+  const blockedAreas = getBuildOverlay(map)
+  for (const area of blockedAreas) {
+    if (aabbOverlap(build, area)) return false
+  }
+
+  if (circleAABBOverlap(player.x, player.y, PLAYER_SIZE / 2, build)) {
+    return false
+  }
+
+  return true
+}
+
+function cycleBuildPiece(player: Player, delta: number) {
+  const idx = BUILD_PIECE_ORDER.indexOf(player.buildPiece)
+  const next = (idx + delta + BUILD_PIECE_ORDER.length) % BUILD_PIECE_ORDER.length
+  player.buildPiece = BUILD_PIECE_ORDER[next]
 }
 
 // ── Update Player ───────────────────────────────────────────────────────────
@@ -124,8 +226,6 @@ export function updatePlayer(
 
   // Collision check
   const pSize = PLAYER_SIZE / 2
-  const playerAABB: AABB = { x: newX - pSize, y: newY - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
-
   let blockedX = false, blockedY = false
 
   for (const c of allColliders) {
@@ -156,11 +256,15 @@ export function updatePlayer(
 
   // Scroll wheel switching
   if (input.scrollDelta !== 0) {
-    let next = player.activeSlot + Math.sign(input.scrollDelta)
-    if (next < 0) next = 4
-    if (next > 4) next = 0
-    player.activeSlot = next
-    player.reloading = false
+    if (player.buildMode) {
+      cycleBuildPiece(player, Math.sign(input.scrollDelta))
+    } else {
+      let next = player.activeSlot + Math.sign(input.scrollDelta)
+      if (next < 0) next = 4
+      if (next > 4) next = 0
+      player.activeSlot = next
+      player.reloading = false
+    }
   }
 
   // ── Build Mode ────────────────────────────────────────────────────────
@@ -169,39 +273,37 @@ export function updatePlayer(
   }
 
   if (player.buildMode && input.justPressed.has('r')) {
-    const mats = ['wood', 'stone', 'metal'] as const
+    const mats: BuildMaterial[] = ['wood', 'stone', 'metal']
     const idx = mats.indexOf(player.buildMaterial)
     player.buildMaterial = mats[(idx + 1) % 3]
   }
 
+  if (player.buildMode && input.justPressed.has('e')) {
+    player.buildRotation = player.buildRotation === 0 ? 1 : 0
+  }
+
+  if (player.buildMode && input.justPressed.has('f')) {
+    cycleBuildPiece(player, 1)
+  }
+
+  if (player.buildMode && input.justPressed.has('z')) player.buildPiece = 'wall'
+  if (player.buildMode && input.justPressed.has('x')) player.buildPiece = 'barricade'
+  if (player.buildMode && input.justPressed.has('c')) player.buildPiece = 'bunker'
+
   if (player.buildMode && input.justClicked) {
-    const gx = Math.floor(input.mouseWorldX / BUILDING_GRID) * BUILDING_GRID
-    const gy = Math.floor(input.mouseWorldY / BUILDING_GRID) * BUILDING_GRID
-    const cost = 10
-    const mat = player.buildMaterial
+    const placement = getBuildPlacement(player, input)
+    const mat = placement.material
 
-    if (player[mat] >= cost) {
-      // Check no overlap with existing builds
-      const newBuild: AABB = { x: gx, y: gy, w: BUILDING_GRID, h: BUILDING_GRID }
-      let canPlace = true
-      for (const pb of map.playerBuilds) {
-        if (aabbOverlap(newBuild, pb)) { canPlace = false; break }
+    if (player[mat] >= placement.cost && canPlaceBuild(player, map, placement)) {
+      player[mat] -= placement.cost
+      const maxHealth = Math.round(BUILDING_HEALTH[mat] * BUILD_PIECES[placement.pieceId].healthMultiplier)
+      const pb: PlayerBuild = {
+        ...placement,
+        health: maxHealth,
+        maxHealth,
       }
-      // Don't place on self
-      if (circleAABBOverlap(player.x, player.y, pSize, newBuild)) canPlace = false
-
-      if (canPlace) {
-        player[mat] -= cost
-        const pb: PlayerBuild = {
-          ...newBuild,
-          material: mat,
-          health: BUILDING_HEALTH[mat],
-          maxHealth: BUILDING_HEALTH[mat],
-        }
-        map.playerBuilds.push(pb)
-        map.wallColliders.push(pb)
-        buildPlaced = true
-      }
+      map.playerBuilds.push(pb)
+      buildPlaced = true
     }
   }
 

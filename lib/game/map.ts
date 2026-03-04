@@ -3,8 +3,9 @@
 import {
   TILE_SIZE, MAP_TILES_X, MAP_TILES_Y, MAP_WIDTH, MAP_HEIGHT,
   POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS,
+  type BuildMaterial, type BuildPieceId,
 } from './constants'
-import { drawTree, drawRock, drawChest, drawBuildPiece } from './sprites'
+import { drawTree, drawRock, drawCar, drawChest, drawBuildPiece } from './sprites'
 import type { AABB } from './collision'
 import type { Camera } from './camera'
 
@@ -31,6 +32,11 @@ export interface RockObj {
   health: number
 }
 
+export interface CarObj {
+  x: number; y: number
+  health: number
+}
+
 export interface ChestObj {
   x: number; y: number
   opened: boolean
@@ -49,7 +55,11 @@ export interface BuildingRect extends AABB {
 }
 
 export interface PlayerBuild extends AABB {
-  material: 'wood' | 'stone' | 'metal'
+  material: BuildMaterial
+  pieceId: BuildPieceId
+  rotation: 0 | 1
+  blocksMovement: boolean
+  blocksProjectiles: boolean
   health: number
   maxHealth: number
 }
@@ -60,6 +70,7 @@ export interface GameMap {
   tiles: Uint8Array
   trees: TreeObj[]
   rocks: RockObj[]
+  cars: CarObj[]
   chests: ChestObj[]
   floorLoot: FloorLoot[]
   buildings: BuildingRect[]
@@ -97,6 +108,7 @@ export function generateMap(seed = 42): GameMap {
   const tiles = new Uint8Array(MAP_TILES_X * MAP_TILES_Y)
   const trees: TreeObj[] = []
   const rocks: RockObj[] = []
+  const cars: CarObj[] = []
   const chests: ChestObj[] = []
   const floorLoot: FloorLoot[] = []
   const buildings: BuildingRect[] = []
@@ -267,7 +279,21 @@ export function generateMap(seed = 42): GameMap {
     }
   }
 
-  // 7) Floor loot
+  // 7) Cars (metal harvest)
+  const carCount = 90
+  for (let i = 0; i < carCount; i++) {
+    const cx = 80 + rng() * (MAP_WIDTH - 160)
+    const cy = 80 + rng() * (MAP_HEIGHT - 160)
+    const tileX = Math.floor(cx / TILE_SIZE)
+    const tileY = Math.floor(cy / TILE_SIZE)
+    if (tileX < 0 || tileX >= MAP_TILES_X || tileY < 0 || tileY >= MAP_TILES_Y) continue
+    const tile = tiles[tileY * MAP_TILES_X + tileX]
+    if (tile === TileType.Road || tile === TileType.BuildingFloor || tile === TileType.Sand) {
+      cars.push({ x: cx, y: cy, health: 130 })
+    }
+  }
+
+  // 8) Floor loot
   const weaponIds = ['ar', 'shotgun', 'smg', 'sniper']
   const rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
   for (let i = 0; i < FLOOR_LOOT_COUNT; i++) {
@@ -284,7 +310,7 @@ export function generateMap(seed = 42): GameMap {
   }
 
   return {
-    tiles, trees, rocks, chests, floorLoot,
+    tiles, trees, rocks, cars, chests, floorLoot,
     buildings, playerBuilds: [], wallColliders, poiLabels,
   }
 }
@@ -363,7 +389,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, map: GameMap, cam: Came
     const sx = pb.x - cam.x
     const sy = pb.y - cam.y
     if (sx + pb.w < -10 || sx > cam.width + 10 || sy + pb.h < -10 || sy > cam.height + 10) continue
-    drawBuildPiece(ctx, sx, sy, pb.w, pb.h, pb.material, pb.health, pb.maxHealth)
+    drawBuildPiece(ctx, sx, sy, pb.w, pb.h, pb.material, pb.pieceId, pb.rotation, pb.health, pb.maxHealth)
   }
 
   // Trees
@@ -382,6 +408,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, map: GameMap, cam: Came
     const sy = r.y - cam.y
     if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
     drawRock(ctx, sx, sy)
+  }
+
+  // Cars
+  for (const car of map.cars) {
+    if (car.health <= 0) continue
+    const sx = car.x - cam.x
+    const sy = car.y - cam.y
+    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
+    drawCar(ctx, sx, sy, car.health / 130)
   }
 
   // Chests
@@ -421,6 +456,32 @@ export function getEnvironmentColliders(map: GameMap, x: number, y: number, rang
     if (r.health <= 0) continue
     if (Math.abs(r.x - x) < range && Math.abs(r.y - y) < range) {
       colliders.push({ x: r.x - 10, y: r.y - 8, w: 20, h: 16 })
+    }
+  }
+  for (const c of map.cars) {
+    if (c.health <= 0) continue
+    if (Math.abs(c.x - x) < range && Math.abs(c.y - y) < range) {
+      colliders.push({ x: c.x - 16, y: c.y - 10, w: 32, h: 20 })
+    }
+  }
+  return colliders
+}
+
+export function getStructureColliders(map: GameMap, x: number, y: number, range: number): AABB[] {
+  const colliders: AABB[] = []
+  for (const wall of map.wallColliders) {
+    const centerX = wall.x + wall.w / 2
+    const centerY = wall.y + wall.h / 2
+    if (Math.abs(centerX - x) < range && Math.abs(centerY - y) < range) {
+      colliders.push(wall)
+    }
+  }
+  for (const build of map.playerBuilds) {
+    if (!build.blocksMovement || build.health <= 0) continue
+    const centerX = build.x + build.w / 2
+    const centerY = build.y + build.h / 2
+    if (Math.abs(centerX - x) < range && Math.abs(centerY - y) < range) {
+      colliders.push(build)
     }
   }
   return colliders
