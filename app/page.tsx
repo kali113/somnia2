@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { Crosshair, Zap, Shield, Swords, Cloud, Users, ChevronRight } from 'lucide-react'
+import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
 
-// Animated pixel art background canvas
+// Starfield / blockchain-node network background
 function PixelBackground() {
   useEffect(() => {
     const canvas = document.getElementById('bg-canvas') as HTMLCanvasElement
@@ -13,7 +14,13 @@ function PixelBackground() {
     if (!ctx) return
 
     let animFrame = 0
-    const particles: { x: number; y: number; vx: number; vy: number; size: number; color: string; life: number }[] = []
+    const NODE_COUNT = 80
+    const CONNECT_DIST = 160
+
+    type Node = { x: number; y: number; vx: number; vy: number; r: number; color: string; pulse: number; pulseDir: number }
+    const nodes: Node[] = []
+
+    const nodeColors = ['#3ae8ff', '#7b2dff', '#3ae8ff', '#3ae8ff', '#ffffff']
 
     const resize = () => {
       canvas.width = window.innerWidth
@@ -22,17 +29,16 @@ function PixelBackground() {
     resize()
     window.addEventListener('resize', resize)
 
-    const colors = ['#3ae8ff', '#7b2dff', '#ffd700', '#4cff4c']
-
-    function addParticle() {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: -0.2 - Math.random() * 0.3,
-        size: 2 + Math.random() * 3,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        life: 200 + Math.random() * 300,
+    for (let i = 0; i < NODE_COUNT; i++) {
+      nodes.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        r: 1 + Math.random() * 1.5,
+        color: nodeColors[Math.floor(Math.random() * nodeColors.length)],
+        pulse: Math.random(),
+        pulseDir: Math.random() > 0.5 ? 1 : -1,
       })
     }
 
@@ -40,46 +46,42 @@ function PixelBackground() {
       if (!ctx) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      // Grid lines
-      ctx.strokeStyle = 'rgba(58, 232, 255, 0.03)'
-      ctx.lineWidth = 1
-      const gridSize = 48
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x, canvas.height)
-        ctx.stroke()
-      }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath()
-        ctx.moveTo(0, y)
-        ctx.lineTo(canvas.width, y)
-        ctx.stroke()
+      // Move nodes, bounce off edges
+      for (const n of nodes) {
+        n.x += n.vx
+        n.y += n.vy
+        if (n.x < 0 || n.x > canvas.width) n.vx *= -1
+        if (n.y < 0 || n.y > canvas.height) n.vy *= -1
+        n.pulse += 0.008 * n.pulseDir
+        if (n.pulse > 1) { n.pulse = 1; n.pulseDir = -1 }
+        if (n.pulse < 0.2) { n.pulse = 0.2; n.pulseDir = 1 }
       }
 
-      // Particles
-      if (Math.random() < 0.15) addParticle()
-
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i]
-        p.x += p.vx
-        p.y += p.vy
-        p.life--
-
-        if (p.life <= 0 || p.y < -10) {
-          particles.splice(i, 1)
-          continue
+      // Draw edges
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j]
+          const dx = a.x - b.x, dy = a.y - b.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < CONNECT_DIST) {
+            const alpha = (1 - dist / CONNECT_DIST) * 0.18
+            ctx.beginPath()
+            ctx.moveTo(a.x, a.y)
+            ctx.lineTo(b.x, b.y)
+            ctx.strokeStyle = `rgba(58,232,255,${alpha})`
+            ctx.lineWidth = 0.8
+            ctx.stroke()
+          }
         }
+      }
 
-        const alpha = Math.min(1, p.life / 100)
-        ctx.globalAlpha = alpha * 0.6
-        ctx.fillStyle = p.color
-        ctx.fillRect(
-          Math.floor(p.x / 2) * 2,
-          Math.floor(p.y / 2) * 2,
-          p.size,
-          p.size,
-        )
+      // Draw nodes
+      for (const n of nodes) {
+        ctx.beginPath()
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2)
+        ctx.fillStyle = n.color
+        ctx.globalAlpha = n.pulse * 0.85
+        ctx.fill()
       }
       ctx.globalAlpha = 1
 
@@ -94,35 +96,11 @@ function PixelBackground() {
     }
   }, [])
 
-  return (
-    <canvas
-      id="bg-canvas"
-      className="fixed inset-0 z-0"
-      style={{ imageRendering: 'pixelated' }}
-    />
-  )
+  return <canvas id="bg-canvas" className="fixed inset-0 z-0" />
 }
 
-// Fake lobby players
-const LOBBY_PLAYERS = [
-  'ShadowSniper', 'PixelProwler', 'NeonNinja', 'BlazeMaster',
-  'CyberSamurai', 'GhostReaper', 'FrostByte', 'ThunderStrike',
-  'VortexKing', 'DarkPhoenix', 'CrimsonBlade', 'SilverArrow',
-]
-
 export default function HomePage() {
-  const [lobbyCount, setLobbyCount] = useState(18)
-  const [showPlayers, setShowPlayers] = useState(false)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLobbyCount(prev => {
-        const delta = Math.random() > 0.5 ? 1 : -1
-        return Math.max(12, Math.min(25, prev + delta))
-      })
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [])
+  const { queue, backendConfigured } = useMatchmaking()
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050508]">
@@ -147,7 +125,7 @@ export default function HomePage() {
             <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-[#4cff4c]" style={{ boxShadow: '0 0 6px #4cff4c' }} />
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">
-                {lobbyCount} players online
+                {backendConfigured ? `${queue?.size ?? 0} players queued` : 'Matchmaking offline'}
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-[rgba(123,45,255,0.15)] px-3 py-1 border border-[rgba(123,45,255,0.3)]">
@@ -222,7 +200,7 @@ export default function HomePage() {
             <FeatureCard
               icon={<Users className="h-5 w-5" />}
               title="Online Lobby"
-              description="Multiplayer-ready architecture with live lobby, simulated opponents, and kill feed tracking."
+              description="On-chain queue tracking with live matchmaking assignments and backend orchestration."
               color="#ff8c00"
             />
           </div>
