@@ -4,10 +4,10 @@ import {
   PLAYER_SIZE, PLAYER_SPEED, PLAYER_MAX_HEALTH, MAP_WIDTH, MAP_HEIGHT,
   WEAPONS, BOT_NAMES, RARITY_ORDER, type Rarity,
 } from './constants'
-import type { Player, InventorySlot } from './player'
+import type { Player } from './player'
 import { takeDamage } from './player'
 import type { GameMap } from './map'
-import { getEnvironmentColliders } from './map'
+import { getEnvironmentColliders, getStructureColliders } from './map'
 import type { StormState } from './storm'
 import { isInStorm } from './storm'
 import { distance, angleBetween, aabbOverlap, type AABB } from './collision'
@@ -56,9 +56,18 @@ export function createBot(id: number, x: number, y: number): Bot {
     metal: 10 + Math.floor(Math.random() * 30),
     buildMode: false,
     buildMaterial: 'wood',
+    buildPiece: 'wall',
+    buildRotation: 0,
     lastFireTime: 0,
     reloading: false,
     reloadStart: 0,
+    consumables: {
+      medkit: 0,
+      bandage: 0,
+      shield_potion: 0,
+      mini_shield: 0,
+    },
+    activeConsumableUse: null,
     kills: 0,
     damageDealt: 0,
     itemsCollected: 0,
@@ -66,7 +75,7 @@ export function createBot(id: number, x: number, y: number): Bot {
     targetX: x + (Math.random() - 0.5) * 400,
     targetY: y + (Math.random() - 0.5) * 400,
     aiTimer: 2 + Math.random() * 3,
-    fireAngle: 0,
+    fireAngle: Math.random() * Math.PI * 2,
     accuracy: 0.3 + Math.random() * 0.5,
     aggressiveness: 0.3 + Math.random() * 0.6,
     sightRange: 300 + Math.random() * 200,
@@ -155,6 +164,7 @@ export function updateBot(
       for (const loot of map.floorLoot) {
         if (loot.picked) continue
         if (distance(bot.x, bot.y, loot.x, loot.y) < 30) {
+          if (loot.kind !== 'weapon') continue
           loot.picked = true
           // Equip if better
           const slot = bot.slots[1]
@@ -188,8 +198,16 @@ export function updateBot(
 
     case 'fight': {
       if (nearestThreat) {
-        bot.angle = angleBetween(bot.x, bot.y, nearestThreat.x, nearestThreat.y)
-        bot.fireAngle = bot.angle
+        const trueAngle = angleBetween(bot.x, bot.y, nearestThreat.x, nearestThreat.y)
+        bot.angle = trueAngle
+
+        // Smooth aim tracking — bots don't instantly snap to the target
+        const turnSpeed = 1.0 + bot.accuracy * 2.5 // rad/s; more accurate = faster tracking
+        let aimDiff = trueAngle - bot.fireAngle
+        while (aimDiff > Math.PI) aimDiff -= 2 * Math.PI
+        while (aimDiff < -Math.PI) aimDiff += 2 * Math.PI
+        const maxTurn = turnSpeed * dt
+        bot.fireAngle += Math.sign(aimDiff) * Math.min(Math.abs(aimDiff), maxTurn)
 
         // Strafe while fighting
         const strafeAngle = bot.angle + Math.PI / 2 * (Math.sin(now * 2) > 0 ? 1 : -1)
@@ -235,7 +253,8 @@ export function updateBot(
   // ── Collision with trees/rocks ────────────────────────────────────────
   const pSize = PLAYER_SIZE / 2
   const envColliders = getEnvironmentColliders(map, bot.x, bot.y, 100)
-  for (const c of envColliders) {
+  const structureColliders = getStructureColliders(map, bot.x, bot.y, 260)
+  for (const c of [...envColliders, ...structureColliders]) {
     const testX: AABB = { x: bot.x - pSize, y: prevY - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
     if (aabbOverlap(testX, c)) bot.x = prevX
 

@@ -108,8 +108,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
 
 // ── Item Definitions ───────────────────────────────────────────────────────
 
+export const CONSUMABLE_IDS = ['medkit', 'bandage', 'shield_potion', 'mini_shield'] as const
+export type ConsumableId = typeof CONSUMABLE_IDS[number]
+
 export interface ItemDef {
-  id: string
+  id: ConsumableId
   name: string
   healAmount?: number
   shieldAmount?: number
@@ -118,7 +121,7 @@ export interface ItemDef {
   maxStack: number
 }
 
-export const ITEMS: Record<string, ItemDef> = {
+export const ITEMS: Record<ConsumableId, ItemDef> = {
   medkit: {
     id: 'medkit',
     name: 'Medkit',
@@ -153,6 +156,13 @@ export const ITEMS: Record<string, ItemDef> = {
   },
 }
 
+export const CONSUMABLE_LOOT_RARITY: Record<ConsumableId, Rarity> = {
+  bandage: 'common',
+  mini_shield: 'uncommon',
+  shield_potion: 'rare',
+  medkit: 'epic',
+}
+
 // ── Storm Phases ────────────────────────────────────────────────────────────
 
 export interface StormPhase {
@@ -179,7 +189,7 @@ export const BUILD_PLACE_RANGE = 180
 export type BuildMaterial = 'wood' | 'stone' | 'metal'
 export type BuildPieceId = 'wall' | 'barricade' | 'bunker'
 
-export const BUILDING_HEALTH: Record<string, number> = {
+export const BUILDING_HEALTH: Record<BuildMaterial, number> = {
   wood: 150,
   stone: 300,
   metal: 500,
@@ -235,7 +245,7 @@ export const BUILD_PIECES: Record<BuildPieceId, BuildPieceDef> = {
   },
 }
 
-export const MATERIAL_HARVEST: Record<string, { wood: number; stone: number; metal: number }> = {
+export const MATERIAL_HARVEST: Record<'tree' | 'rock' | 'car' | 'wall', { wood: number; stone: number; metal: number }> = {
   tree: { wood: 30, stone: 0, metal: 0 },
   rock: { wood: 0, stone: 30, metal: 0 },
   car: { wood: 0, stone: 0, metal: 25 },

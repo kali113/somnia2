@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import type { GameState, GamePhase, KillFeedEntry } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
@@ -32,6 +32,7 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
 
 function GamePageInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const gameStateRef = useRef<GameState | null>(null)
   const reactivityRef = useRef<ReturnType<typeof createReactivityConnection> | null>(null)
 
@@ -155,8 +156,8 @@ function GamePageInner() {
   }, [])
 
   const handleBackToMenu = useCallback(() => {
-    window.location.href = '/play'
-  }, [])
+    router.push('/')
+  }, [router])
 
   const toggleMute = useCallback(() => {
     const newMuted = !muted

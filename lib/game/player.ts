@@ -2,10 +2,10 @@
 
 import {
   PLAYER_SIZE, PLAYER_SPEED, PLAYER_MAX_HEALTH, PLAYER_MAX_SHIELD,
-  WEAPONS, type WeaponDef, type Rarity, BUILDING_GRID, BUILDING_HEALTH,
+  WEAPONS, ITEMS, type WeaponDef, type Rarity, BUILDING_GRID, BUILDING_HEALTH,
   BUILD_PIECE_ORDER, BUILD_PIECES, BUILD_PLACE_RANGE,
   MAP_WIDTH, MAP_HEIGHT,
-  type BuildMaterial, type BuildPieceId,
+  type BuildMaterial, type BuildPieceId, type ConsumableId,
 } from './constants'
 import type { InputState } from './input'
 import type { GameMap, PlayerBuild } from './map'
@@ -18,6 +18,12 @@ export interface InventorySlot {
   rarity: Rarity
   ammo: number
   maxAmmo: number
+}
+
+export interface ActiveConsumableUse {
+  itemId: ConsumableId
+  startedAt: number
+  endsAt: number
 }
 
 // ── Player State ────────────────────────────────────────────────────────────
@@ -52,6 +58,8 @@ export interface Player {
   lastFireTime: number
   reloading: boolean
   reloadStart: number
+  consumables: Record<ConsumableId, number>
+  activeConsumableUse: ActiveConsumableUse | null
 
   // Stats
   kills: number
@@ -82,6 +90,13 @@ export function createPlayer(x: number, y: number, name: string): Player {
     lastFireTime: 0,
     reloading: false,
     reloadStart: 0,
+    consumables: {
+      medkit: 0,
+      bandage: 0,
+      shield_potion: 0,
+      mini_shield: 0,
+    },
+    activeConsumableUse: null,
     kills: 0,
     damageDealt: 0,
     itemsCollected: 0,
@@ -94,6 +109,108 @@ export function getActiveWeapon(player: Player): WeaponDef | null {
   const slot = player.slots[player.activeSlot]
   if (!slot) return null
   return WEAPONS[slot.weaponId] ?? null
+}
+
+function getConsumableCap(player: Player, itemId: ConsumableId): number {
+  if (itemId === 'bandage') return 75
+  if (itemId === 'mini_shield') return 50
+  return itemId === 'medkit' ? PLAYER_MAX_HEALTH : PLAYER_MAX_SHIELD
+}
+
+function getConsumableEffectiveAmount(player: Player, itemId: ConsumableId): number {
+  const item = ITEMS[itemId]
+  if (item.healAmount) {
+    const cap = getConsumableCap(player, itemId)
+    return Math.max(0, Math.min(item.healAmount, cap - player.health))
+  }
+  if (item.shieldAmount) {
+    const cap = getConsumableCap(player, itemId)
+    return Math.max(0, Math.min(item.shieldAmount, cap - player.shield))
+  }
+  return 0
+}
+
+export function canUseConsumable(player: Player, itemId: ConsumableId): boolean {
+  if (!player.alive) return false
+  if (player.consumables[itemId] <= 0) return false
+  return getConsumableEffectiveAmount(player, itemId) > 0
+}
+
+export function selectBestConsumable(player: Player): ConsumableId | null {
+  const healthItems: ConsumableId[] = ['bandage', 'medkit']
+  const shieldItems: ConsumableId[] = ['mini_shield', 'shield_potion']
+  const pickFrom = healthItems.some((id) => canUseConsumable(player, id))
+    ? healthItems
+    : shieldItems
+
+  let best: ConsumableId | null = null
+  let bestScore = -1
+  let bestAmount = -1
+  for (const itemId of pickFrom) {
+    if (!canUseConsumable(player, itemId)) continue
+    const item = ITEMS[itemId]
+    const amount = getConsumableEffectiveAmount(player, itemId)
+    const score = amount / item.useTime
+    if (score > bestScore || (score === bestScore && amount > bestAmount)) {
+      best = itemId
+      bestScore = score
+      bestAmount = amount
+    }
+  }
+  return best
+}
+
+export function tryPickupConsumable(player: Player, itemId: ConsumableId): boolean {
+  const item = ITEMS[itemId]
+  const current = player.consumables[itemId]
+  if (current >= item.maxStack) return false
+  player.consumables[itemId] = current + 1
+  player.itemsCollected++
+  return true
+}
+
+export function startConsumableUse(player: Player, itemId: ConsumableId, now: number): boolean {
+  if (player.activeConsumableUse) return false
+  if (!canUseConsumable(player, itemId)) return false
+  const item = ITEMS[itemId]
+  player.activeConsumableUse = {
+    itemId,
+    startedAt: now,
+    endsAt: now + item.useTime,
+  }
+  player.reloading = false
+  return true
+}
+
+export function cancelConsumableUse(player: Player): boolean {
+  if (!player.activeConsumableUse) return false
+  player.activeConsumableUse = null
+  return true
+}
+
+export function completeConsumableUseIfReady(
+  player: Player,
+  now: number,
+): { itemId: ConsumableId; amount: number } | null {
+  const active = player.activeConsumableUse
+  if (!active || now < active.endsAt) return null
+  player.activeConsumableUse = null
+
+  const itemId = active.itemId
+  if (player.consumables[itemId] <= 0) return null
+
+  const amount = getConsumableEffectiveAmount(player, itemId)
+  if (amount <= 0) return null
+
+  const item = ITEMS[itemId]
+  if (item.healAmount) {
+    player.health = Math.min(getConsumableCap(player, itemId), player.health + amount)
+  } else if (item.shieldAmount) {
+    player.shield = Math.min(getConsumableCap(player, itemId), player.shield + amount)
+  }
+
+  player.consumables[itemId]--
+  return { itemId, amount }
 }
 
 function getPieceSize(pieceId: BuildPieceId, rotation: 0 | 1): { w: number; h: number } {
@@ -282,7 +399,7 @@ export function updatePlayer(
     player.buildRotation = player.buildRotation === 0 ? 1 : 0
   }
 
-  if (player.buildMode && input.justPressed.has('f')) {
+  if (player.buildMode && input.justPressed.has('g')) {
     cycleBuildPiece(player, 1)
   }
 

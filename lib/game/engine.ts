@@ -2,13 +2,17 @@
 
 import {
   MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, BOT_COUNT, COLORS,
-  WEAPONS, RARITY_COLORS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST,
-  type Rarity,
+  WEAPONS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST, CONSUMABLE_LOOT_RARITY,
+  type Rarity, type ConsumableId,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
 import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type GameMap } from './map'
-import { createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, takeDamage, getBuildPlacement, canPlaceBuild, type Player } from './player'
+import {
+  createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, tryPickupConsumable,
+  takeDamage, getBuildPlacement, canPlaceBuild, selectBestConsumable,
+  startConsumableUse, cancelConsumableUse, completeConsumableUseIfReady, type Player,
+} from './player'
 import { createBot, updateBot, processBotHit, type Bot } from './bot'
 import { createStorm, updateStorm, isInStorm, renderStorm, renderStormMinimap, type StormState } from './storm'
 import { createParticleSystem, updateParticles, renderParticles, emitSparks, emitHitMarker, emitElimination, type ParticleSystem } from './particles'
@@ -130,6 +134,35 @@ export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: numbe
   return state
 }
 
+function randomWeaponId(): string {
+  const weaponIds = ['ar', 'shotgun', 'smg', 'sniper'] as const
+  return weaponIds[Math.floor(Math.random() * weaponIds.length)]
+}
+
+function randomConsumableId(): ConsumableId {
+  const roll = Math.random()
+  if (roll < 0.45) return 'bandage'
+  if (roll < 0.75) return 'mini_shield'
+  if (roll < 0.90) return 'shield_potion'
+  return 'medkit'
+}
+
+function actionCancelsConsumableUse(state: GameState): boolean {
+  const { input, player } = state
+  if (input.mouseDown) return true
+  if (input.justPressed.has('r')) return true
+  if (input.scrollDelta !== 0) return true
+  for (let i = 1; i <= 5; i++) {
+    if (input.justPressed.has(String(i))) return true
+  }
+  if (input.justPressed.has('b') || input.justPressed.has('q')) return true
+  if (!player.buildMode) return false
+  if (input.justClicked) return true
+  if (input.justPressed.has('e') || input.justPressed.has('g')) return true
+  if (input.justPressed.has('z') || input.justPressed.has('x') || input.justPressed.has('c')) return true
+  return false
+}
+
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
@@ -151,6 +184,18 @@ export function updateGame(state: GameState, dt: number) {
     ...structureColliders,
     ...envColliders,
   ]
+
+  const cancelAction = actionCancelsConsumableUse(state)
+  if (state.player.activeConsumableUse) {
+    if (state.input.justPressed.has('f') || cancelAction) {
+      cancelConsumableUse(state.player)
+    }
+  } else if (state.input.justPressed.has('f') && !state.player.buildMode && !cancelAction) {
+    const itemId = selectBestConsumable(state.player)
+    if (itemId) {
+      startConsumableUse(state.player, itemId, now)
+    }
+  }
 
   // ── Update player ────────────────────────────────────────────────────
   const { fired, buildPlaced } = updatePlayer(
@@ -192,7 +237,10 @@ export function updateGame(state: GameState, dt: number) {
   for (const loot of state.map.floorLoot) {
     if (loot.picked) continue
     if (distance(state.player.x, state.player.y, loot.x, loot.y) < 30) {
-      if (tryPickupWeapon(state.player, loot.weaponId, loot.rarity as Rarity)) {
+      const picked = loot.kind === 'weapon'
+        ? tryPickupWeapon(state.player, loot.weaponId, loot.rarity)
+        : tryPickupConsumable(state.player, loot.itemId)
+      if (picked) {
         loot.picked = true
         playPickup()
       }
@@ -205,15 +253,24 @@ export function updateGame(state: GameState, dt: number) {
       chest.opened = true
       playChestOpen()
       // Spawn loot near chest
-      const weaponIds = ['ar', 'shotgun', 'smg', 'sniper']
       const rarities: Rarity[] = ['uncommon', 'rare', 'epic']
-      const wId = weaponIds[Math.floor(Math.random() * weaponIds.length)]
+      const wId = randomWeaponId()
       const r = rarities[Math.floor(Math.random() * rarities.length)]
       state.map.floorLoot.push({
+        kind: 'weapon',
         x: chest.x + (Math.random() - 0.5) * 30,
         y: chest.y + 20,
         weaponId: wId,
         rarity: r,
+        picked: false,
+      })
+      const itemId = randomConsumableId()
+      state.map.floorLoot.push({
+        kind: 'consumable',
+        x: chest.x + (Math.random() - 0.5) * 28,
+        y: chest.y - 16,
+        itemId,
+        rarity: CONSUMABLE_LOOT_RARITY[itemId],
         picked: false,
       })
       // Add materials
@@ -229,10 +286,10 @@ export function updateGame(state: GameState, dt: number) {
       drop.opened = true
       playChestOpen()
       // Give legendary weapon
-      const wIds = ['ar', 'shotgun', 'sniper']
-      const wId = wIds[Math.floor(Math.random() * wIds.length)]
+      const wId = randomWeaponId()
       tryPickupWeapon(state.player, wId, 'legendary')
-      state.player.shield = Math.min(100, state.player.shield + 50)
+      tryPickupConsumable(state.player, 'shield_potion')
+      tryPickupConsumable(state.player, 'medkit')
       state.player.wood += 100
       state.player.stone += 100
       state.player.metal += 100
@@ -251,7 +308,7 @@ export function updateGame(state: GameState, dt: number) {
       if (slot) {
         const wep = WEAPONS[slot.weaponId]
         if (wep && !wep.isMelee) {
-          const inaccuracy = (1 - bot.accuracy) * 0.3
+          const inaccuracy = (1 - bot.accuracy) * 0.5
           const spread = (Math.random() - 0.5) * (wep.spread + inaccuracy) * 2
           const angle = bot.fireAngle + spread
           const burstCount = wep.burstCount ?? 1
@@ -293,6 +350,9 @@ export function updateGame(state: GameState, dt: number) {
         const { shieldDmg, healthDmg } = takeDamage(state.player, p.damage)
         if (shieldDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, shieldDmg, true)
         if (healthDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, healthDmg, false)
+        if (shieldDmg > 0 || healthDmg > 0) {
+          cancelConsumableUse(state.player)
+        }
         playHit()
         state.projectiles.splice(i, 1)
 
@@ -397,7 +457,10 @@ export function updateGame(state: GameState, dt: number) {
   // ── Storm damage to player ───────────────────────────────────────────
   if (state.player.alive && isInStorm(state.storm, state.player.x, state.player.y)) {
     const dmg = state.storm.damagePerTick * dt * 2
-    takeDamage(state.player, dmg)
+    const stormDamage = takeDamage(state.player, dmg)
+    if (stormDamage.shieldDmg > 0 || stormDamage.healthDmg > 0) {
+      cancelConsumableUse(state.player)
+    }
     if (!state.player.alive) {
       emitElimination(state.particles, state.player.x, state.player.y)
       playEliminated()
@@ -406,6 +469,11 @@ export function updateGame(state: GameState, dt: number) {
       state.phase = 'eliminated'
       state.onPhaseChange?.('eliminated')
     }
+  }
+
+  const consumableResult = completeConsumableUseIfReady(state.player, now)
+  if (consumableResult) {
+    playPickup()
   }
 
   // ── Update storm ─────────────────────────────────────────────────────
@@ -457,8 +525,12 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
     if (d < weapon.range && angleDiff < 1.0) {
       playHit()
       const eliminated = processBotHit(bot, weapon.damage, state.particles)
-      // Harvest materials from environment objects near hit
-      harvestNearby(state, attacker.x + Math.cos(attacker.angle) * 40, attacker.y + Math.sin(attacker.angle) * 40, attacker)
+      harvestNearby(
+        state,
+        attacker.x + Math.cos(attacker.angle) * 40,
+        attacker.y + Math.sin(attacker.angle) * 40,
+        attacker,
+      )
 
       if (eliminated) {
         playElim()
@@ -484,32 +556,125 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
 }
 
 function harvestNearby(state: GameState, x: number, y: number, player: Player) {
-  for (const tree of state.map.trees) {
-    if (tree.health <= 0) continue
-    if (distance(x, y, tree.x, tree.y) < 25) {
-      tree.health -= 25
-      player.wood += 10
-      emitSparks(state.particles, tree.x, tree.y, 4, '#6b4226')
-      if (tree.health <= 0) {
-        player.wood += 20
-        emitSparks(state.particles, tree.x, tree.y, 8, '#2d5a1e')
-      }
-      return
+  type HarvestTarget =
+    | { kind: 'tree'; index: number; dist: number }
+    | { kind: 'rock'; index: number; dist: number }
+    | { kind: 'car'; index: number; dist: number }
+    | { kind: 'build'; index: number; dist: number }
+
+  let best: HarvestTarget | null = null
+  const updateBest = (candidate: HarvestTarget) => {
+    if (!best || candidate.dist < best.dist) best = candidate
+  }
+
+  for (let i = 0; i < state.map.playerBuilds.length; i++) {
+    const build = state.map.playerBuilds[i]
+    const d = pointToAABBDistance(x, y, build)
+    if (d <= 14) {
+      updateBest({ kind: 'build', index: i, dist: d })
     }
   }
-  for (const rock of state.map.rocks) {
-    if (rock.health <= 0) continue
-    if (distance(x, y, rock.x, rock.y) < 25) {
-      rock.health -= 25
-      player.stone += 10
-      emitSparks(state.particles, rock.x, rock.y, 4, '#888')
-      if (rock.health <= 0) {
-        player.stone += 20
-        emitSparks(state.particles, rock.x, rock.y, 8, '#aaa')
-      }
-      return
+
+  for (let i = 0; i < state.map.trees.length; i++) {
+    const tree = state.map.trees[i]
+    const d = distance(x, y, tree.x, tree.y)
+    if (d <= 26) {
+      updateBest({ kind: 'tree', index: i, dist: d })
     }
   }
+
+  for (let i = 0; i < state.map.rocks.length; i++) {
+    const rock = state.map.rocks[i]
+    const d = distance(x, y, rock.x, rock.y)
+    if (d <= 28) {
+      updateBest({ kind: 'rock', index: i, dist: d })
+    }
+  }
+
+  for (let i = 0; i < state.map.cars.length; i++) {
+    const car = state.map.cars[i]
+    const d = distance(x, y, car.x, car.y)
+    if (d <= 34) {
+      updateBest({ kind: 'car', index: i, dist: d })
+    }
+  }
+
+  if (!best) return
+
+  if (best.kind === 'tree') {
+    const tree = state.map.trees[best.index]
+    if (!tree) return
+    tree.health -= 40
+    grantMaterials(player, { wood: 6, stone: 0, metal: 0 })
+    emitSparks(state.particles, tree.x, tree.y, 4, '#6b4226')
+    if (tree.health <= 0) {
+      grantMaterials(player, { wood: MATERIAL_HARVEST.tree.wood - 12, stone: 0, metal: 0 })
+      state.map.trees.splice(best.index, 1)
+      emitSparks(state.particles, tree.x, tree.y, 10, '#2d5a1e')
+    }
+    return
+  }
+
+  if (best.kind === 'rock') {
+    const rock = state.map.rocks[best.index]
+    if (!rock) return
+    rock.health -= 45
+    grantMaterials(player, { wood: 0, stone: 6, metal: 0 })
+    emitSparks(state.particles, rock.x, rock.y, 4, '#888')
+    if (rock.health <= 0) {
+      grantMaterials(player, { wood: 0, stone: MATERIAL_HARVEST.rock.stone - 12, metal: 0 })
+      state.map.rocks.splice(best.index, 1)
+      emitSparks(state.particles, rock.x, rock.y, 10, '#aaa')
+    }
+    return
+  }
+
+  if (best.kind === 'car') {
+    const car = state.map.cars[best.index]
+    if (!car) return
+    car.health -= 45
+    grantMaterials(player, { wood: 0, stone: 0, metal: 5 })
+    emitSparks(state.particles, car.x, car.y, 5, '#8f9aa6')
+    if (car.health <= 0) {
+      grantMaterials(player, { wood: 0, stone: 0, metal: MATERIAL_HARVEST.car.metal - 10 })
+      state.map.cars.splice(best.index, 1)
+      emitSparks(state.particles, car.x, car.y, 12, '#d4dde8')
+    }
+    return
+  }
+
+  const build = state.map.playerBuilds[best.index]
+  if (!build) return
+  build.health -= 50
+  grantMaterials(player, materialToReward(build.material, 2))
+  emitSparks(state.particles, x, y, 4, '#b9c0c8')
+  if (build.health <= 0) {
+    grantMaterials(player, materialToReward(build.material, 8))
+    state.map.playerBuilds.splice(best.index, 1)
+    emitSparks(state.particles, x, y, 10, '#dde3ea')
+  }
+}
+
+function pointToAABBDistance(px: number, py: number, box: AABB): number {
+  const cx = Math.max(box.x, Math.min(px, box.x + box.w))
+  const cy = Math.max(box.y, Math.min(py, box.y + box.h))
+  const dx = px - cx
+  const dy = py - cy
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function materialToReward(material: 'wood' | 'stone' | 'metal', amount: number) {
+  return {
+    wood: material === 'wood' ? amount : 0,
+    stone: material === 'stone' ? amount : 0,
+    metal: material === 'metal' ? amount : 0,
+  }
+}
+
+function grantMaterials(player: Player, reward: { wood: number; stone: number; metal: number }) {
+  player.wood += reward.wood
+  player.stone += reward.stone
+  player.metal += reward.metal
 }
 
 // ── Add Kill Feed Entry ─────────────────────────────────────────────────────
@@ -553,7 +718,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     const sx = loot.x - cam.x
     const sy = loot.y - cam.y
     if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
-    drawLootItem(ctx, sx, sy, loot.rarity as Rarity, true, state.time)
+    drawLootItem(ctx, sx, sy, loot.rarity, loot.kind === 'weapon', state.time)
   }
 
   // ── Supply drops ──────────────────────────────────────────────────────
@@ -590,9 +755,23 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
 
     // Build mode preview
     if (player.buildMode) {
-      const gx = Math.floor(state.input.mouseWorldX / 32) * 32
-      const gy = Math.floor(state.input.mouseWorldY / 32) * 32
-      drawBuildPieceSprite(ctx, gx - cam.x, gy - cam.y, 32, 32, player.buildMaterial, 100, 100, true)
+      const preview = getBuildPlacement(player, state.input)
+      const canAfford = player[preview.material] >= preview.cost
+      const canPlace = canAfford && canPlaceBuild(player, map, preview)
+      drawBuildPieceSprite(
+        ctx,
+        preview.x - cam.x,
+        preview.y - cam.y,
+        preview.w,
+        preview.h,
+        preview.material,
+        preview.pieceId,
+        preview.rotation,
+        100,
+        100,
+        true,
+        canPlace,
+      )
     }
   }
 
@@ -623,7 +802,9 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + 10)
     ctx.stroke()
   } else if (player.buildMode) {
-    ctx.strokeStyle = '#4cff4c'
+    const preview = getBuildPlacement(player, state.input)
+    const valid = player[preview.material] >= preview.cost && canPlaceBuild(player, map, preview)
+    ctx.strokeStyle = valid ? '#4cff4c' : '#ff6666'
     ctx.lineWidth = 2
     const cx = state.input.mouseX
     const cy = state.input.mouseY

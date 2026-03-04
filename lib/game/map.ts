@@ -3,7 +3,9 @@
 import {
   TILE_SIZE, MAP_TILES_X, MAP_TILES_Y, MAP_WIDTH, MAP_HEIGHT,
   POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS,
+  CONSUMABLE_LOOT_RARITY,
   type BuildMaterial, type BuildPieceId,
+  type Rarity, type ConsumableId,
 } from './constants'
 import { drawTree, drawRock, drawCar, drawChest, drawBuildPiece } from './sprites'
 import type { AABB } from './collision'
@@ -42,12 +44,23 @@ export interface ChestObj {
   opened: boolean
 }
 
-export interface FloorLoot {
+interface FloorLootBase {
   x: number; y: number
-  weaponId: string
-  rarity: string
+  rarity: Rarity
   picked: boolean
 }
+
+export interface WeaponFloorLoot extends FloorLootBase {
+  kind: 'weapon'
+  weaponId: string
+}
+
+export interface ConsumableFloorLoot extends FloorLootBase {
+  kind: 'consumable'
+  itemId: ConsumableId
+}
+
+export type FloorLoot = WeaponFloorLoot | ConsumableFloorLoot
 
 export interface BuildingRect extends AABB {
   hasDoor: boolean
@@ -294,17 +307,39 @@ export function generateMap(seed = 42): GameMap {
   }
 
   // 8) Floor loot
-  const weaponIds = ['ar', 'shotgun', 'smg', 'sniper']
-  const rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
+  const weaponIds = ['ar', 'shotgun', 'smg', 'sniper'] as const
+  const rarities: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
   for (let i = 0; i < FLOOR_LOOT_COUNT; i++) {
     const lx = 100 + rng() * (MAP_WIDTH - 200)
     const ly = 100 + rng() * (MAP_HEIGHT - 200)
-    const r = rng()
-    const rarityIdx = r < 0.35 ? 0 : r < 0.60 ? 1 : r < 0.80 ? 2 : r < 0.95 ? 3 : 4
+    if (rng() < 0.65) {
+      const r = rng()
+      const rarityIdx = r < 0.35 ? 0 : r < 0.60 ? 1 : r < 0.80 ? 2 : r < 0.95 ? 3 : 4
+      floorLoot.push({
+        kind: 'weapon',
+        x: lx, y: ly,
+        weaponId: weaponIds[Math.floor(rng() * weaponIds.length)],
+        rarity: rarities[rarityIdx],
+        picked: false,
+      })
+      continue
+    }
+
+    const itemRoll = rng()
+    const itemId: ConsumableId = itemRoll < 0.45
+      ? 'bandage'
+      : itemRoll < 0.75
+        ? 'mini_shield'
+        : itemRoll < 0.90
+          ? 'shield_potion'
+          : 'medkit'
+
     floorLoot.push({
-      x: lx, y: ly,
-      weaponId: weaponIds[Math.floor(rng() * weaponIds.length)],
-      rarity: rarities[rarityIdx],
+      kind: 'consumable',
+      x: lx,
+      y: ly,
+      itemId,
+      rarity: CONSUMABLE_LOOT_RARITY[itemId],
       picked: false,
     })
   }

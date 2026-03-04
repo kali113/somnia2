@@ -1,6 +1,6 @@
 'use client'
 
-import { WEAPONS, RARITY_COLORS, type Rarity } from '@/lib/game/constants'
+import { WEAPONS, ITEMS, RARITY_COLORS, BUILD_PIECE_ORDER, BUILD_PIECES } from '@/lib/game/constants'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
 import { Shield, Heart, TreePine, Mountain, Wrench } from 'lucide-react'
@@ -15,8 +15,13 @@ interface GameHUDProps {
 export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUDProps) {
   if (!player) return null
 
-  const activeSlot = player.slots[player.activeSlot]
-  const activeWeapon = activeSlot ? WEAPONS[activeSlot.weaponId] : null
+  const activePiece = BUILD_PIECES[player.buildPiece]
+  const canAffordPiece = player[player.buildMaterial] >= activePiece.baseCost
+  const activeUse = player.activeConsumableUse
+  const activeUseDef = activeUse ? ITEMS[activeUse.itemId] : null
+  const activeUseDuration = activeUse ? Math.max(0.001, activeUse.endsAt - activeUse.startedAt) : 1
+  const activeUseProgress = activeUse ? Math.min(1, Math.max(0, (gameTime - activeUse.startedAt) / activeUseDuration)) : 0
+  const activeUseRemaining = activeUse ? Math.max(0, activeUse.endsAt - gameTime) : 0
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60)
@@ -156,10 +161,50 @@ export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUD
           </div>
         </div>
 
+        {/* Consumables */}
+        <div className="flex gap-2 text-[10px] font-mono">
+          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffd27a]">Bandage {player.consumables.bandage}</div>
+          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffe8b0]">Medkit {player.consumables.medkit}</div>
+          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#6dd0ff]">Mini {player.consumables.mini_shield}</div>
+          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#4ca6ff]">Big {player.consumables.shield_potion}</div>
+        </div>
+
+        {/* Consumable use */}
+        {activeUse && activeUseDef && (
+          <div className="w-72 rounded-lg border border-[rgba(120,210,255,0.45)] bg-[rgba(26,45,62,0.75)] px-3 py-2">
+            <div className="mb-1 flex items-center justify-between font-mono text-[11px] text-[#9be4ff]">
+              <span>USING {activeUseDef.name.toUpperCase()}</span>
+              <span>{activeUseRemaining.toFixed(1)}s</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded bg-[rgba(255,255,255,0.15)]">
+              <div
+                className="h-full bg-[#63d7ff] transition-all duration-100"
+                style={{ width: `${activeUseProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Build mode indicator */}
         {player.buildMode && (
-          <div className="rounded-lg bg-[rgba(76,255,76,0.2)] px-4 py-1 text-sm font-mono text-[#4cff4c] border border-[rgba(76,255,76,0.4)]">
-            BUILD MODE - {player.buildMaterial.toUpperCase()} (R to cycle)
+          <div className="rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] px-4 py-2 font-mono text-xs text-[#d7ffe0]">
+            <div className="text-[11px] text-[#4cff4c]">
+              BUILD: {activePiece.name.toUpperCase()} ({player.buildMaterial.toUpperCase()}) - {activePiece.baseCost} mats
+            </div>
+            <div className={canAffordPiece ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}>
+              {canAffordPiece ? activePiece.purpose : `Need ${activePiece.baseCost} ${player.buildMaterial}`}
+            </div>
+            <div className="mt-1 flex gap-2 text-[10px] text-[rgba(255,255,255,0.65)]">
+              {BUILD_PIECE_ORDER.map((pieceId, index) => {
+                const piece = BUILD_PIECES[pieceId]
+                const selected = pieceId === player.buildPiece
+                return (
+                  <span key={pieceId} className={selected ? 'text-[#4cff4c]' : ''}>
+                    {index === 0 ? 'Z' : index === 1 ? 'X' : 'C'}:{piece.name}
+                  </span>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -174,8 +219,8 @@ export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUD
       {/* Controls hint */}
       <div className="absolute bottom-3 left-3 text-[10px] font-mono text-[rgba(255,255,255,0.3)] leading-relaxed">
         <div>WASD Move | Mouse Aim & Shoot</div>
-        <div>1-5 Slots | R Reload | B Build</div>
-        <div>Scroll Wheel Switch | Q Toggle Build</div>
+        <div>1-5 Slots | R Reload | F Use/Cancel Heal | B/Q Build Mode</div>
+        <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
       </div>
     </div>
   )

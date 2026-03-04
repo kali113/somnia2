@@ -34,7 +34,7 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
     }
     state.keys.add(key)
     // Prevent default for game keys
-    if (['w', 'a', 's', 'd', 'e', 'q', 'r', 'b', 'tab', ' '].includes(key)) {
+    if (['w', 'a', 's', 'd', 'e', 'q', 'r', 'f', 'b', 'g', 'z', 'x', 'c', 'tab', ' '].includes(key)) {
       e.preventDefault()
     }
   }
