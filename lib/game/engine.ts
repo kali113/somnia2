@@ -630,10 +630,21 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
   const mx = state.camera.width - mSize - MINIMAP_PADDING
   const my = MINIMAP_PADDING
   const scale = mSize / MAP_WIDTH
+  const radius = mSize / 2
+  const cx = mx + radius
+  const cy = my + radius
 
   // Background
   ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-  ctx.fillRect(mx - 2, my - 2, mSize + 4, mSize + 4)
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+  ctx.clip()
+
   ctx.fillStyle = '#2a5a2a'
   ctx.fillRect(mx, my, mSize, mSize)
 
@@ -657,10 +668,14 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
     drawMinimapDot(ctx, mx + state.player.x * scale, my + state.player.y * scale, COLORS.player, 3)
   }
 
+  ctx.restore()
+
   // Border
   ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-  ctx.lineWidth = 1
-  ctx.strokeRect(mx - 2, my - 2, mSize + 4, mSize + 4)
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(cx, cy, radius + 1.5, 0, Math.PI * 2)
+  ctx.stroke()
 }
 
 // ── Resize ──────────────────────────────────────────────────────────────────
