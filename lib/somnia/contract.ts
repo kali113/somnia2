@@ -1,10 +1,15 @@
-import { getContract, formatEther, parseEther, type Address, type PublicClient } from 'viem'
-import { somniaTestnet } from '@/lib/wagmi-config'
+import { formatEther, parseEther, type Address } from 'viem'
 import PIXEL_ROYALE_ABI from '@/contracts/abi.json'
+import {
+  contractAddressOrFallback,
+  isContractConfigured,
+  contractConfigError,
+} from './runtime-config'
 
-// ── Contract Address ────────────────────────────────────────────────────────
-// Replace this with your deployed contract address on Somnia Testnet
-export const PIXEL_ROYALE_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
+// ── Contract Configuration ─────────────────────────────────────────────────
+export const PIXEL_ROYALE_ADDRESS: Address = contractAddressOrFallback
+export const pixelRoyaleConfigured = isContractConfigured
+export const pixelRoyaleConfigError = contractConfigError
 
 // ── Entry fee (must match contract) ─────────────────────────────────────────
 export const ENTRY_FEE = parseEther('0.001') // 0.001 STT

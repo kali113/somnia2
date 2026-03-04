@@ -1,62 +1,33 @@
-import { Router } from 'express'
+import { Router, type Router as ExpressRouter } from 'express'
 import type { GameStore } from '../store.js'
 
-export const queueRouter = Router()
+export const queueRouter: ExpressRouter = Router()
 
 /**
  * GET /api/queue/status
- * Returns current queue state.
+ * Returns current on-chain mirrored queue state.
  */
-queueRouter.get('/status', (req, res) => {
-  const store = (req as any).store as GameStore
+queueRouter.get('/status', (_req, res) => {
+  const store = (_req as any).store as GameStore
   res.json(store.getQueueState())
 })
 
 /**
  * POST /api/queue/join
- * Add a player to the server-side queue tracking.
- * Note: The actual on-chain queue join is done by the frontend directly.
- * This endpoint syncs the backend's view.
+ * Deprecated: queue mutations are on-chain only via joinQueue().
  */
-queueRouter.post('/join', (req, res) => {
-  const store = (req as any).store as GameStore
-  const { address } = req.body
-
-  if (!address || !address.startsWith('0x')) {
-    return res.status(400).json({ error: 'Invalid address' })
-  }
-
-  const added = store.addToQueue(address)
-  if (!added) {
-    return res.status(409).json({ error: 'Already in queue or queue full' })
-  }
-
-  // Broadcast via WebSocket
-  const broadcast = (req.app as any).broadcastQueueUpdate
-  if (broadcast) broadcast()
-
-  res.json({ success: true, queue: store.getQueueState() })
+queueRouter.post('/join', (_req, res) => {
+  return res.status(410).json({
+    error: 'Queue mutations moved on-chain. Use contract joinQueue() from the frontend.',
+  })
 })
 
 /**
  * POST /api/queue/leave
- * Remove a player from the server-side queue tracking.
+ * Deprecated: queue mutations are on-chain only via leaveQueue().
  */
-queueRouter.post('/leave', (req, res) => {
-  const store = (req as any).store as GameStore
-  const { address } = req.body
-
-  if (!address || !address.startsWith('0x')) {
-    return res.status(400).json({ error: 'Invalid address' })
-  }
-
-  const removed = store.removeFromQueue(address)
-  if (!removed) {
-    return res.status(404).json({ error: 'Not in queue' })
-  }
-
-  const broadcast = (req.app as any).broadcastQueueUpdate
-  if (broadcast) broadcast()
-
-  res.json({ success: true, queue: store.getQueueState() })
+queueRouter.post('/leave', (_req, res) => {
+  return res.status(410).json({
+    error: 'Queue mutations moved on-chain. Use contract leaveQueue() from the frontend.',
+  })
 })

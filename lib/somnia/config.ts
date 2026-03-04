@@ -1,3 +1,6 @@
+import { type Address } from 'viem'
+import { configuredContractAddress } from './runtime-config'
+
 // ── Somnia Testnet Configuration ────────────────────────────────────────────
 
 export const SOMNIA_TESTNET = {
@@ -23,47 +26,67 @@ export const SOMNIA_TESTNET = {
   testnet: true,
 } as const
 
-// ── Game Contract (placeholder address for testnet deployment) ──────────────
-
-export const GAME_CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000' as const
-
-// ── Event Topics (keccak256 hashes of event signatures) ─────────────────────
-
-export const EVENT_TOPICS = {
-  SupplyDrop: '0x' + 'a1b2c3d4e5f6'.padEnd(64, '0'),
-  StormPhaseChanged: '0x' + 'b2c3d4e5f6a1'.padEnd(64, '0'),
-  PlayerKillMilestone: '0x' + 'c3d4e5f6a1b2'.padEnd(64, '0'),
-} as const
-
-// ── ABI for game events ─────────────────────────────────────────────────────
+export const GAME_CONTRACT_ADDRESS: Address | null = configuredContractAddress
 
 export const GAME_EVENTS_ABI = [
   {
     type: 'event',
-    name: 'SupplyDropEvent',
-    inputs: [
-      { name: 'x', type: 'uint256', indexed: false },
-      { name: 'y', type: 'uint256', indexed: false },
-      { name: 'rarity', type: 'uint8', indexed: false },
-      { name: 'itemCount', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'StormPhaseChanged',
-    inputs: [
-      { name: 'phase', type: 'uint8', indexed: false },
-      { name: 'centerX', type: 'uint256', indexed: false },
-      { name: 'centerY', type: 'uint256', indexed: false },
-      { name: 'radius', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'PlayerKillMilestone',
+    name: 'PlayerJoinedQueue',
     inputs: [
       { name: 'player', type: 'address', indexed: true },
-      { name: 'killCount', type: 'uint256', indexed: false },
+      { name: 'queueSize', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PlayerLeftQueue',
+    inputs: [
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'queueSize', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'GameStarted',
+    inputs: [
+      { name: 'gameId', type: 'uint256', indexed: true },
+      { name: 'players', type: 'address[]', indexed: false },
+      { name: 'prizePool', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'GameEnded',
+    inputs: [
+      { name: 'gameId', type: 'uint256', indexed: true },
+      { name: 'winner', type: 'address', indexed: true },
+      { name: 'placements', type: 'address[]', indexed: false },
+      { name: 'prizePool', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'RewardClaimed',
+    inputs: [
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SessionKeyApproved',
+    inputs: [
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'sessionKey', type: 'address', indexed: true },
+      { name: 'expiry', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SessionKeyRevoked',
+    inputs: [
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'sessionKey', type: 'address', indexed: true },
     ],
   },
 ] as const

@@ -15,8 +15,9 @@ interface GameCanvasProps {
   onPhaseChange: (phase: GamePhase) => void
   onPlayerUpdate: (player: Player) => void
   onStormUpdate: (storm: StormState) => void
-  onSupplyDrop: (drop: SupplyDrop) => void
+  onSupplyDrop?: (drop: SupplyDrop) => void
   gameStateRef: React.MutableRefObject<GameState | null>
+  botCount?: number
 }
 
 export default function GameCanvas({
@@ -27,6 +28,7 @@ export default function GameCanvas({
   onStormUpdate,
   onSupplyDrop,
   gameStateRef,
+  botCount,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
@@ -48,7 +50,7 @@ export default function GameCanvas({
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
 
-    const state = initGame(canvas)
+    const state = initGame(canvas, { botCount })
     gameStateRef.current = state
 
     // Wire up callbacks
@@ -92,7 +94,7 @@ export default function GameCanvas({
     }
   }, [
     handleResize, onKillFeedUpdate, onAliveCountUpdate,
-    onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop, gameStateRef,
+    onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop, gameStateRef, botCount,
   ])
 
   return (

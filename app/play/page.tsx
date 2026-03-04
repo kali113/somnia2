@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
-import { useAccount, useConnect } from 'wagmi'
+import { useAccount } from 'wagmi'
+import { useRouter } from 'next/navigation'
 import WalletPanel from '@/components/dashboard/WalletPanel'
 import QueuePanel from '@/components/dashboard/QueuePanel'
 import StatsPanel from '@/components/dashboard/StatsPanel'
@@ -10,6 +11,7 @@ import MatchHistory from '@/components/dashboard/MatchHistory'
 import Leaderboard from '@/components/dashboard/Leaderboard'
 import RewardsPanel from '@/components/dashboard/RewardsPanel'
 import SessionKeyPanel from '@/components/dashboard/SessionKeyPanel'
+import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
 import {
   Crosshair,
   ArrowLeft,
@@ -99,7 +101,20 @@ function DashboardBackground() {
 }
 
 export default function PlayPage() {
-  const { isConnected } = useAccount()
+  const router = useRouter()
+  const { address, isConnected } = useAccount()
+  const {
+    queue,
+    me,
+    error: matchmakingError,
+    backendConfigured,
+  } = useMatchmaking(isConnected ? address : undefined)
+
+  useEffect(() => {
+    if (me?.status === 'matched' && typeof me.matchId === 'number') {
+      router.push(`/game?matchId=${me.matchId}`)
+    }
+  }, [me, router])
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -181,7 +196,11 @@ export default function PlayPage() {
 
             {/* Center Column — Queue + Stats */}
             <div className="lg:col-span-5 space-y-6">
-              <QueuePanel />
+              <QueuePanel
+                queueSnapshot={queue}
+                backendConfigured={backendConfigured}
+                backendError={matchmakingError}
+              />
               <StatsPanel />
               <MatchHistory />
             </div>

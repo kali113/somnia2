@@ -11,12 +11,25 @@ import {
   ENTRY_FEE,
   truncateAddress,
   SOMNIA_FAUCET_URL,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
 } from '@/lib/somnia/contract'
-import { Users, Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
-import { useState, useEffect, useCallback } from 'react'
+import { Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
+import { useEffect, useCallback } from 'react'
 import { formatEther } from 'viem'
+import type { QueueSnapshot } from '@/lib/somnia/matchmaking-client'
 
-export default function QueuePanel() {
+interface QueuePanelProps {
+  queueSnapshot?: QueueSnapshot | null
+  backendConfigured?: boolean
+  backendError?: string | null
+}
+
+export default function QueuePanel({
+  queueSnapshot = null,
+  backendConfigured = false,
+  backendError = null,
+}: QueuePanelProps) {
   const { address, isConnected } = useAccount()
   const { data: balance } = useBalance({
     address,
@@ -26,17 +39,17 @@ export default function QueuePanel() {
   // ── Read contract state ───────────────────────────────────────────────
   const { data: queueSize, refetch: refetchQueueSize } = useReadContract({
     ...getQueueSizeArgs(),
-    query: { refetchInterval: 5000 },
+    query: { enabled: pixelRoyaleConfigured, refetchInterval: 5000 },
   })
 
   const { data: queuePlayers, refetch: refetchQueuePlayers } = useReadContract({
     ...getQueuePlayersArgs(),
-    query: { refetchInterval: 5000 },
+    query: { enabled: pixelRoyaleConfigured, refetchInterval: 5000 },
   })
 
   const { data: isInQueue, refetch: refetchInQueue } = useReadContract({
     ...getInQueueArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address, refetchInterval: 5000 },
+    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 5000 },
   })
 
   // ── Write contract ────────────────────────────────────────────────────
@@ -65,16 +78,22 @@ export default function QueuePanel() {
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleJoinQueue = useCallback(() => {
+    if (!pixelRoyaleConfigured) return
     joinQueue(joinQueueArgs())
   }, [joinQueue])
 
   const handleLeaveQueue = useCallback(() => {
+    if (!pixelRoyaleConfigured) return
     leaveQueue(leaveQueueArgs())
   }, [leaveQueue])
 
-  const currentQueueSize = queueSize ? Number(queueSize) : 0
+  const fallbackQueuePlayers = (queuePlayers as string[]) ?? []
+  const effectiveQueuePlayers = queueSnapshot?.players ?? fallbackQueuePlayers
+  const currentQueueSize = queueSnapshot?.size ?? (queueSize ? Number(queueSize) : 0)
   const hasEnoughBalance = balance ? balance.value >= ENTRY_FEE : false
-  const playerInQueue = isInQueue === true
+  const playerInQueue = queueSnapshot
+    ? !!address && effectiveQueuePlayers.includes(address.toLowerCase())
+    : isInQueue === true
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
 
   // Queue progress percentage
@@ -116,13 +135,13 @@ export default function QueuePanel() {
       </div>
 
       {/* Queued Players List */}
-      {queuePlayers && (queuePlayers as string[]).length > 0 && (
+      {effectiveQueuePlayers.length > 0 && (
         <div className="mb-4 max-h-32 overflow-y-auto rounded-lg bg-[rgba(0,0,0,0.3)] p-3">
           <span className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] uppercase mb-2 block">
             Queued Players
           </span>
           <div className="space-y-1">
-            {(queuePlayers as string[]).map((player, i) => (
+            {effectiveQueuePlayers.map((player, i) => (
               <div
                 key={player}
                 className={`flex items-center gap-2 text-xs font-mono ${
@@ -139,6 +158,31 @@ export default function QueuePanel() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {!backendConfigured && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.1)] border border-[rgba(255,140,0,0.2)] p-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff8c00] flex-shrink-0" />
+          <p className="text-xs font-mono text-[#ff8c00]">
+            Matchmaking backend is not configured. Live queue sync is unavailable.
+          </p>
+        </div>
+      )}
+
+      {backendError && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
+          <p className="text-xs font-mono text-[#ff4444]">{backendError}</p>
+        </div>
+      )}
+
+      {!pixelRoyaleConfigured && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
+          <p className="text-xs font-mono text-[#ff4444]">
+            {pixelRoyaleConfigError || 'Contract configuration is missing.'}
+          </p>
         </div>
       )}
 
@@ -170,7 +214,7 @@ export default function QueuePanel() {
       ) : playerInQueue ? (
         <button
           onClick={handleLeaveQueue}
-          disabled={isBusy}
+          disabled={isBusy || !pixelRoyaleConfigured}
           className="w-full rounded-lg bg-[rgba(255,68,68,0.15)] border border-[rgba(255,68,68,0.3)] px-4 py-3 font-mono font-bold text-sm text-[#ff4444] hover:bg-[rgba(255,68,68,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLeaving || leaveConfirming ? (
@@ -185,7 +229,7 @@ export default function QueuePanel() {
       ) : (
         <button
           onClick={handleJoinQueue}
-          disabled={isBusy || currentQueueSize >= 20}
+          disabled={isBusy || currentQueueSize >= 20 || !pixelRoyaleConfigured}
           className="group relative w-full"
         >
           <div className="absolute -inset-0.5 rounded-xl bg-[#ffd700] opacity-20 blur group-hover:opacity-40 transition-opacity" />

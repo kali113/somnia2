@@ -1,7 +1,12 @@
 'use client'
 
 import { useAccount, useReadContract } from 'wagmi'
-import { getPlayerStatsArgs, formatSTT } from '@/lib/somnia/contract'
+import {
+  getPlayerStatsArgs,
+  formatSTT,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
+} from '@/lib/somnia/contract'
 import { Trophy, Crosshair, Gamepad2, TrendingUp } from 'lucide-react'
 
 export default function StatsPanel() {
@@ -9,7 +14,7 @@ export default function StatsPanel() {
 
   const { data: rawStats } = useReadContract({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address, refetchInterval: 15000 },
+    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 15000 },
   })
 
   const stats = rawStats as any
@@ -66,6 +71,17 @@ export default function StatsPanel() {
         <h3 className="font-mono font-bold text-white text-sm mb-4">Player Stats</h3>
         <p className="text-xs font-mono text-[rgba(255,255,255,0.3)] text-center py-4">
           Connect wallet to view stats
+        </p>
+      </div>
+    )
+  }
+
+  if (!pixelRoyaleConfigured) {
+    return (
+      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
+        <h3 className="font-mono font-bold text-white text-sm mb-4">Player Stats</h3>
+        <p className="text-xs font-mono text-[#ff8c00] text-center py-4">
+          {pixelRoyaleConfigError}
         </p>
       </div>
     )
