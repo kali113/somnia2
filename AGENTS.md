@@ -26,6 +26,14 @@ Start with one or two docs below, then follow their file pointers:
 - `agent_docs/chain-and-contracts.md`: Somnia config, wallet/session, contract bindings.
 - `agent_docs/deploy-pages.md`: static export behavior and GitHub Pages pipeline.
 
+## Git Workflow
+- Always create a feature branch before starting work: `git checkout -b <short-description>`.
+- Commit frequently with descriptive messages as you make progress.
+- Run required verification (`pnpm lint && pnpm build`) before the final commit.
+- Push the branch and open a PR targeting `main`: `git push -u origin <branch>`.
+- Merge only after verification passes; delete the branch after merge.
+- Never commit directly to `main`.
+
 ## Guardrails
 - Keep edits minimal and local to the task.
 - Follow existing TypeScript style already present in touched files.
