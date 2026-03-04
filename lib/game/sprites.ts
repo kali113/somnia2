@@ -1,7 +1,7 @@
 // ── Pixel Art Sprite Drawing ─────────────────────────────────────────────────
 // All sprites drawn procedurally via Canvas 2D API. No image assets needed.
 
-import { COLORS, RARITY_COLORS, type Rarity } from './constants'
+import { COLORS, RARITY_COLORS, type Rarity, type BuildMaterial, type BuildPieceId } from './constants'
 
 // ── Player / Bot ────────────────────────────────────────────────────────────
 
@@ -124,6 +124,27 @@ export function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.fill()
 }
 
+// ── Cars ────────────────────────────────────────────────────────────────────
+
+export function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, healthPct: number) {
+  const bodyColor = healthPct > 0.55 ? '#4f78b3' : healthPct > 0.25 ? '#7a5f40' : '#7f3f3f'
+  const roofColor = healthPct > 0.55 ? '#79a5e3' : healthPct > 0.25 ? '#9a7d5c' : '#a35555'
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  ctx.fillRect(x - 14, y + 8, 28, 3)
+
+  ctx.fillStyle = bodyColor
+  ctx.fillRect(x - 14, y - 6, 28, 12)
+  ctx.fillStyle = roofColor
+  ctx.fillRect(x - 8, y - 10, 16, 8)
+
+  ctx.fillStyle = '#2b2b2b'
+  ctx.fillRect(x - 12, y - 8, 5, 3)
+  ctx.fillRect(x + 7, y - 8, 5, 3)
+  ctx.fillRect(x - 14, y + 4, 6, 3)
+  ctx.fillRect(x + 8, y + 4, 6, 3)
+}
+
 // ── Chest ───────────────────────────────────────────────────────────────────
 
 export function drawChest(ctx: CanvasRenderingContext2D, x: number, y: number, opened: boolean) {
@@ -243,10 +264,13 @@ export function drawBuildPiece(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
   w: number, h: number,
-  material: 'wood' | 'stone' | 'metal',
+  material: BuildMaterial,
+  pieceId: BuildPieceId,
+  rotation: 0 | 1,
   health: number,
   maxHealth: number,
   isPreview?: boolean,
+  canPlace = true,
 ) {
   const alpha = isPreview ? 0.4 : 0.9
   const colors = {
@@ -261,20 +285,42 @@ export function drawBuildPiece(
   // Detail lines
   ctx.strokeStyle = isPreview ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
   ctx.lineWidth = 1
-  if (material === 'wood') {
-    for (let i = 4; i < w; i += 8) {
+  if (pieceId === 'wall') {
+    if (material === 'wood') {
+      for (let i = 4; i < w; i += 8) {
+        ctx.beginPath()
+        ctx.moveTo(x + i, y)
+        ctx.lineTo(x + i, y + h)
+        ctx.stroke()
+      }
+    } else {
+      ctx.strokeRect(x + 2, y + 2, w / 2 - 2, h / 2 - 2)
+      ctx.strokeRect(x + w / 2 + 1, y + h / 2 + 1, w / 2 - 3, h / 2 - 3)
+    }
+  } else if (pieceId === 'barricade') {
+    if (rotation === 0) {
       ctx.beginPath()
-      ctx.moveTo(x + i, y)
-      ctx.lineTo(x + i, y + h)
+      ctx.moveTo(x + 4, y + h / 2)
+      ctx.lineTo(x + w - 4, y + h / 2)
+      ctx.stroke()
+    } else {
+      ctx.beginPath()
+      ctx.moveTo(x + w / 2, y + 4)
+      ctx.lineTo(x + w / 2, y + h - 4)
       ctx.stroke()
     }
-  } else if (material === 'stone') {
-    ctx.strokeRect(x + 2, y + 2, w / 2 - 2, h / 2 - 2)
-    ctx.strokeRect(x + w / 2 + 1, y + h / 2 + 1, w / 2 - 3, h / 2 - 3)
+    ctx.strokeRect(x + 2, y + 2, w - 4, h - 4)
+  } else {
+    ctx.strokeRect(x + 2, y + 2, w - 4, h - 4)
+    ctx.strokeRect(x + 7, y + 7, w - 14, h - 14)
+    ctx.fillStyle = isPreview ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.18)'
+    ctx.fillRect(x + w / 2 - 5, y + h / 2 - 5, 10, 10)
   }
 
   // Border
-  ctx.strokeStyle = isPreview ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'
+  ctx.strokeStyle = isPreview
+    ? (canPlace ? 'rgba(76,255,76,0.8)' : 'rgba(255,80,80,0.85)')
+    : 'rgba(0,0,0,0.5)'
   ctx.lineWidth = isPreview ? 2 : 1
   ctx.strokeRect(x, y, w, h)
 

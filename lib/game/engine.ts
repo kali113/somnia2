@@ -2,13 +2,13 @@
 
 import {
   MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, BOT_COUNT, COLORS,
-  WEAPONS, RARITY_COLORS, MINIMAP_SIZE, MINIMAP_PADDING,
+  WEAPONS, RARITY_COLORS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST,
   type Rarity,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
-import { generateMap, renderMap, getEnvironmentColliders, type GameMap, type FloorLoot } from './map'
-import { createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, takeDamage, type Player } from './player'
+import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type GameMap } from './map'
+import { createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, takeDamage, getBuildPlacement, canPlaceBuild, type Player } from './player'
 import { createBot, updateBot, processBotHit, type Bot } from './bot'
 import { createStorm, updateStorm, isInStorm, renderStorm, renderStormMinimap, type StormState } from './storm'
 import { createParticleSystem, updateParticles, renderParticles, emitSparks, emitHitMarker, emitElimination, type ParticleSystem } from './particles'
@@ -146,10 +146,9 @@ export function updateGame(state: GameState, dt: number) {
 
   // ── Get colliders near player ─────────────────────────────────────────
   const envColliders = getEnvironmentColliders(state.map, state.player.x, state.player.y, 100)
+  const structureColliders = getStructureColliders(state.map, state.player.x, state.player.y, 320)
   const allColliders: AABB[] = [
-    ...state.map.wallColliders.filter(w =>
-      Math.abs(w.x - state.player.x) < 300 && Math.abs(w.y - state.player.y) < 300
-    ),
+    ...structureColliders,
     ...envColliders,
   ]
 
@@ -315,6 +314,7 @@ export function updateGame(state: GameState, dt: number) {
     }
 
     // Hit bots
+    let projectileRemoved = false
     for (let j = 0; j < state.bots.length; j++) {
       const bot = state.bots[j]
       if (!bot.alive || j === p.ownerId) continue
@@ -322,6 +322,7 @@ export function updateGame(state: GameState, dt: number) {
         playHit()
         const eliminated = processBotHit(bot, p.damage, state.particles)
         state.projectiles.splice(i, 1)
+        projectileRemoved = true
 
         if (eliminated) {
           playElim()
@@ -352,19 +353,29 @@ export function updateGame(state: GameState, dt: number) {
         break
       }
     }
+    if (projectileRemoved) continue
 
-    // Hit player builds
+    // Hit world structures
+    let blockedByWall = false
+    for (const wall of state.map.wallColliders) {
+      if (p.x >= wall.x && p.x <= wall.x + wall.w && p.y >= wall.y && p.y <= wall.y + wall.h) {
+        emitSparks(state.particles, p.x, p.y, 2, '#7b6a5a')
+        state.projectiles.splice(i, 1)
+        blockedByWall = true
+        break
+      }
+    }
+    if (blockedByWall) continue
+
     for (let j = state.map.playerBuilds.length - 1; j >= 0; j--) {
       const pb = state.map.playerBuilds[j]
+      if (!pb.blocksProjectiles) continue
       if (p.x >= pb.x && p.x <= pb.x + pb.w && p.y >= pb.y && p.y <= pb.y + pb.h) {
         pb.health -= p.damage
         emitSparks(state.particles, p.x, p.y, 3, '#aaa')
         state.projectiles.splice(i, 1)
         if (pb.health <= 0) {
           state.map.playerBuilds.splice(j, 1)
-          // Also remove from wall colliders
-          const idx = state.map.wallColliders.indexOf(pb)
-          if (idx !== -1) state.map.wallColliders.splice(idx, 1)
         }
         break
       }
