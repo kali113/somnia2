@@ -13,7 +13,7 @@ import {
   createConnectionEvent,
   type SomniaEvent,
 } from './events'
-import { MAP_WIDTH, MAP_HEIGHT, type Rarity, RARITY_ORDER } from '@/lib/game/constants'
+import { MAP_WIDTH, MAP_HEIGHT, RARITY_ORDER } from '@/lib/game/constants'
 
 export interface ReactivityConnection {
   connect: () => Promise<void>

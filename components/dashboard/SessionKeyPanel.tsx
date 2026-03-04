@@ -21,8 +21,8 @@ import { useState, useCallback, useEffect } from 'react'
 
 export default function SessionKeyPanel() {
   const { address } = useAccount()
-  const [session, setSession] = useState<SessionWallet | null>(null)
-  const [timeLeft, setTimeLeft] = useState<string>('')
+  const [session, setSession] = useState<SessionWallet | null>(() => restoreSessionWallet())
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const { writeContract: approveKey, data: approveHash, isPending: isApproving } = useWriteContract()
   const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking } = useWriteContract()
@@ -39,34 +39,20 @@ export default function SessionKeyPanel() {
     query: { enabled: !!address && !!session && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 10000 },
   })
 
-  // Restore session on mount
-  useEffect(() => {
-    const restored = restoreSessionWallet()
-    if (restored) setSession(restored)
-  }, [])
-
   // Countdown timer
   useEffect(() => {
-    if (!session) {
-      setTimeLeft('')
-      return
-    }
+    if (!session) return
 
-    const update = () => {
-      const remaining = session.expiry - Date.now()
-      if (remaining <= 0) {
-        setTimeLeft('Expired')
+    const interval = setInterval(() => {
+      const now = Date.now()
+      if (session.expiry <= now) {
         destroySessionWallet()
         setSession(null)
         return
       }
-      const mins = Math.floor(remaining / 60000)
-      const secs = Math.floor((remaining % 60000) / 1000)
-      setTimeLeft(`${mins}m ${secs}s`)
-    }
+      setNowMs(now)
+    }, 1000)
 
-    update()
-    const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
   }, [session])
 
@@ -83,6 +69,7 @@ export default function SessionKeyPanel() {
 
     const newSession = createSessionWallet(3600_000) // 1 hour
     setSession(newSession)
+    setNowMs(Date.now())
 
     if (address) {
       approveKey(
@@ -103,6 +90,15 @@ export default function SessionKeyPanel() {
   }, [session, address, revokeKey])
 
   const isBusy = isApproving || isRevoking || approveConfirming || revokeConfirming
+  const timeLeft = session
+    ? (() => {
+      const remaining = session.expiry - nowMs
+      if (remaining <= 0) return 'Expired'
+      const mins = Math.floor(remaining / 60000)
+      const secs = Math.floor((remaining % 60000) / 1000)
+      return `${mins}m ${secs}s`
+    })()
+    : ''
 
   if (!address) {
     return (

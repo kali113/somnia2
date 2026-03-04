@@ -50,25 +50,21 @@ export default function QueuePanel() {
     },
   })
 
-  const [sessionAddress, setSessionAddress] = useState<Address | null>(null)
-
-  const syncSessionWallet = useCallback(() => {
-    const session = restoreSessionWallet()
-    setSessionAddress(session?.account.address ?? null)
-  }, [])
+  const [sessionAddress, setSessionAddress] = useState<Address | null>(
+    () => restoreSessionWallet()?.account.address ?? null,
+  )
 
   useEffect(() => {
-    syncSessionWallet()
-
     const handleSessionChanged = () => {
-      syncSessionWallet()
+      const session = restoreSessionWallet()
+      setSessionAddress(session?.account.address ?? null)
     }
 
     window.addEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)
     return () => {
       window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)
     }
-  }, [syncSessionWallet])
+  }, [])
 
   // ── Read contract state ───────────────────────────────────────────────
   const { data: queueSize, refetch: refetchQueueSize } = useReadContract({

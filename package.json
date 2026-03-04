@@ -69,6 +69,8 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "dotenv": "^17.3.1",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "^16.1.6",
     "postcss": "^8.5",
     "solc": "^0.8.34",
     "tailwindcss": "^4.2.0",

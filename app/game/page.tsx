@@ -2,11 +2,10 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import type { GameState, GamePhase, KillFeedEntry, SupplyDrop } from '@/lib/game/engine'
+import type { GameState, GamePhase, KillFeedEntry } from '@/lib/game/engine'
 import { addSupplyDrop } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
-import type { Rarity } from '@/lib/game/constants'
 import {
   type SomniaEvent,
   type SupplyDropEventData,
@@ -48,6 +47,7 @@ export default function GamePage() {
   const [storm, setStorm] = useState<StormState | null>(null)
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([])
   const [gameTime, setGameTime] = useState(0)
+  const [placement, setPlacement] = useState(0)
 
   // Somnia state
   const [somniaEvents, setSomniaEvents] = useState<SomniaEvent[]>([])
@@ -56,13 +56,17 @@ export default function GamePage() {
   const [isLiveMode, setIsLiveMode] = useState(false)
 
   // Audio
-  const [muted, setMutedState] = useState(false)
+  const [muted, setMutedState] = useState(() => isMuted())
 
   // Game time ticker
   useEffect(() => {
     const interval = setInterval(() => {
-      if (gameStateRef.current && gameStateRef.current.phase === 'playing') {
-        setGameTime(gameStateRef.current.time)
+      const state = gameStateRef.current
+      if (!state) return
+
+      setPlacement(state.placement)
+      if (state.phase === 'playing') {
+        setGameTime(state.time)
       }
     }, 500)
     return () => clearInterval(interval)
@@ -188,7 +192,7 @@ export default function GamePage() {
       <VictoryScreen
         phase={phase}
         player={player}
-        placement={gameStateRef.current?.placement ?? 0}
+        placement={placement}
         gameTime={gameTime}
         onPlayAgain={handlePlayAgain}
         onBackToMenu={handleBackToMenu}
