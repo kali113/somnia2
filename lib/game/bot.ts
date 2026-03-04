@@ -169,14 +169,14 @@ export function updateBot(
           // Equip if better
           const slot = bot.slots[1]
           if (slot) {
-            const currentRarityIdx = RARITY_ORDER.indexOf(slot.rarity as Rarity)
-            const newRarityIdx = RARITY_ORDER.indexOf(loot.rarity as Rarity)
+            const currentRarityIdx = RARITY_ORDER.indexOf(slot.rarity)
+            const newRarityIdx = RARITY_ORDER.indexOf(loot.rarity)
             if (newRarityIdx > currentRarityIdx) {
               const wep = WEAPONS[loot.weaponId]
               if (wep) {
                 bot.slots[1] = {
                   weaponId: loot.weaponId,
-                  rarity: loot.rarity as Rarity,
+                  rarity: loot.rarity,
                   ammo: wep.magSize,
                   maxAmmo: wep.magSize,
                 }

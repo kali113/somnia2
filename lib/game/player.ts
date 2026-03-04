@@ -111,7 +111,7 @@ export function getActiveWeapon(player: Player): WeaponDef | null {
   return WEAPONS[slot.weaponId] ?? null
 }
 
-function getConsumableCap(player: Player, itemId: ConsumableId): number {
+function getConsumableCap(itemId: ConsumableId): number {
   if (itemId === 'bandage') return 75
   if (itemId === 'mini_shield') return 50
   return itemId === 'medkit' ? PLAYER_MAX_HEALTH : PLAYER_MAX_SHIELD
@@ -120,11 +120,11 @@ function getConsumableCap(player: Player, itemId: ConsumableId): number {
 function getConsumableEffectiveAmount(player: Player, itemId: ConsumableId): number {
   const item = ITEMS[itemId]
   if (item.healAmount) {
-    const cap = getConsumableCap(player, itemId)
+    const cap = getConsumableCap(itemId)
     return Math.max(0, Math.min(item.healAmount, cap - player.health))
   }
   if (item.shieldAmount) {
-    const cap = getConsumableCap(player, itemId)
+    const cap = getConsumableCap(itemId)
     return Math.max(0, Math.min(item.shieldAmount, cap - player.shield))
   }
   return 0
@@ -204,9 +204,9 @@ export function completeConsumableUseIfReady(
 
   const item = ITEMS[itemId]
   if (item.healAmount) {
-    player.health = Math.min(getConsumableCap(player, itemId), player.health + amount)
+    player.health = Math.min(getConsumableCap(itemId), player.health + amount)
   } else if (item.shieldAmount) {
-    player.shield = Math.min(getConsumableCap(player, itemId), player.shield + amount)
+    player.shield = Math.min(getConsumableCap(itemId), player.shield + amount)
   }
 
   player.consumables[itemId]--
