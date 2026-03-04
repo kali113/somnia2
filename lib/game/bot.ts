@@ -7,9 +7,10 @@ import {
 import type { Player, InventorySlot } from './player'
 import { takeDamage } from './player'
 import type { GameMap } from './map'
+import { getEnvironmentColliders } from './map'
 import type { StormState } from './storm'
 import { isInStorm } from './storm'
-import { distance, angleBetween } from './collision'
+import { distance, angleBetween, aabbOverlap, type AABB } from './collision'
 import type { ParticleSystem } from './particles'
 import { emitHitMarker, emitElimination } from './particles'
 
@@ -132,6 +133,9 @@ export function updateBot(
 
   const speed = PLAYER_SPEED * 0.75 // Bots slightly slower
 
+  const prevX = bot.x
+  const prevY = bot.y
+
   switch (bot.mode) {
     case 'move_to_zone':
     case 'loot': {
@@ -226,6 +230,17 @@ export function updateBot(
       }
       break
     }
+  }
+
+  // ── Collision with trees/rocks ────────────────────────────────────────
+  const pSize = PLAYER_SIZE / 2
+  const envColliders = getEnvironmentColliders(map, bot.x, bot.y, 100)
+  for (const c of envColliders) {
+    const testX: AABB = { x: bot.x - pSize, y: prevY - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
+    if (aabbOverlap(testX, c)) bot.x = prevX
+
+    const testY: AABB = { x: prevX - pSize, y: bot.y - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
+    if (aabbOverlap(testY, c)) bot.y = prevY
   }
 
   // Clamp position
