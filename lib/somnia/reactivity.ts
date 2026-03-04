@@ -1,14 +1,20 @@
 // ── Somnia Reactivity Integration ───────────────────────────────────────────
 // Connects to Somnia testnet via WebSocket to subscribe to on-chain game events.
-// Uses eth_subscribe for log filtering on the game contract.
 
-import { SOMNIA_TESTNET, GAME_CONTRACT_ADDRESS, EVENT_TOPICS } from './config'
+import { decodeEventLog } from 'viem'
+import { SOMNIA_TESTNET, GAME_CONTRACT_ADDRESS } from './config'
+import { pixelRoyaleAbi } from './contract'
 import {
-  createSupplyDropEvent, createStormChangeEvent, createKillMilestoneEvent,
   createConnectionEvent,
+  createGameEndedEvent,
+  createGameStartedEvent,
+  createQueueJoinedEvent,
+  createQueueLeftEvent,
+  createRewardClaimedEvent,
+  createSessionApprovedEvent,
+  createSessionRevokedEvent,
   type SomniaEvent,
 } from './events'
-import { MAP_WIDTH, MAP_HEIGHT, type Rarity, RARITY_ORDER } from '@/lib/game/constants'
 
 export interface ReactivityConnection {
   connect: () => Promise<void>
@@ -27,6 +33,11 @@ export function createReactivityConnection(
   async function connect() {
     if (connected || ws) return
 
+    if (!GAME_CONTRACT_ADDRESS) {
+      onEvent(createConnectionEvent('Missing contract address configuration', 'chain_error'))
+      return
+    }
+
     const wsUrl = SOMNIA_TESTNET.rpcUrls.default.webSocket[0]
 
     try {
@@ -38,8 +49,6 @@ export function createReactivityConnection(
         connected = true
         onEvent(createConnectionEvent('Connected to Somnia Testnet (Chain ID: 50312)'))
 
-        // Subscribe to game contract events using eth_subscribe
-        // This is the Somnia reactivity pattern - subscribing to log events
         const subscribeMsg = {
           jsonrpc: '2.0',
           id: 1,
@@ -48,34 +57,25 @@ export function createReactivityConnection(
             'logs',
             {
               address: GAME_CONTRACT_ADDRESS,
-              topics: [
-                [
-                  EVENT_TOPICS.SupplyDrop,
-                  EVENT_TOPICS.StormPhaseChanged,
-                  EVENT_TOPICS.PlayerKillMilestone,
-                ],
-              ],
             },
           ],
         }
 
-        ws!.send(JSON.stringify(subscribeMsg))
+        ws?.send(JSON.stringify(subscribeMsg))
       }
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
 
-          // Handle subscription confirmation
           if (data.id === 1 && data.result) {
             subscriptionId = data.result
             onEvent(createConnectionEvent(
-              `Subscribed to game events (sub: ${subscriptionId?.slice(0, 10)}...)`,
+              `Subscribed to contract events (${subscriptionId?.slice(0, 10)}...)`,
             ))
             return
           }
 
-          // Handle subscription notifications (reactive events)
           if (data.method === 'eth_subscription' && data.params?.result) {
             const log = data.params.result
             handleLog(log, onEvent)
@@ -86,9 +86,7 @@ export function createReactivityConnection(
       }
 
       ws.onerror = () => {
-        onEvent(createConnectionEvent(
-          'WebSocket error - falling back to demo mode', 'chain_error',
-        ))
+        onEvent(createConnectionEvent('WebSocket error while listening to chain events', 'chain_error'))
       }
 
       ws.onclose = () => {
@@ -96,7 +94,6 @@ export function createReactivityConnection(
         subscriptionId = null
         ws = null
 
-        // Auto-reconnect after 5 seconds
         if (!reconnectTimer) {
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null
@@ -105,9 +102,7 @@ export function createReactivityConnection(
         }
       }
     } catch {
-      onEvent(createConnectionEvent(
-        'Failed to connect to Somnia Testnet - using demo mode', 'chain_error',
-      ))
+      onEvent(createConnectionEvent('Failed to connect to Somnia Testnet', 'chain_error'))
     }
   }
 
@@ -118,7 +113,6 @@ export function createReactivityConnection(
     }
 
     if (ws) {
-      // Unsubscribe
       if (subscriptionId) {
         ws.send(JSON.stringify({
           jsonrpc: '2.0',
@@ -142,40 +136,88 @@ export function createReactivityConnection(
   }
 }
 
-// ── Parse on-chain log to game event ────────────────────────────────────────
+// ── Parse on-chain log to app event ─────────────────────────────────────────
 
 function handleLog(
   log: { topics: string[]; data: string; transactionHash?: string },
   onEvent: (event: SomniaEvent) => void,
 ) {
-  const topic = log.topics[0]
-  const txHash = log.transactionHash
+  try {
+    const parsed = decodeEventLog({
+      abi: pixelRoyaleAbi,
+      data: log.data as `0x${string}`,
+      topics: log.topics as `0x${string}`[],
+      strict: false,
+    })
 
-  if (topic === EVENT_TOPICS.SupplyDrop) {
-    // Decode supply drop data
-    const x = (parseInt(log.data.slice(2, 66), 16) % MAP_WIDTH) || (Math.random() * MAP_WIDTH * 0.6 + MAP_WIDTH * 0.2)
-    const y = (parseInt(log.data.slice(66, 130), 16) % MAP_HEIGHT) || (Math.random() * MAP_HEIGHT * 0.6 + MAP_HEIGHT * 0.2)
-    const rarityIdx = Math.min(parseInt(log.data.slice(130, 194), 16) || 0, RARITY_ORDER.length - 1)
-    const rarity = RARITY_ORDER[rarityIdx]
+    const txHash = log.transactionHash
 
-    onEvent(createSupplyDropEvent(x, y, rarity, 'testnet', txHash))
-  } else if (topic === EVENT_TOPICS.StormPhaseChanged) {
-    const phase = parseInt(log.data.slice(2, 66), 16) || 0
-    const centerX = parseInt(log.data.slice(66, 130), 16) || MAP_WIDTH / 2
-    const centerY = parseInt(log.data.slice(130, 194), 16) || MAP_HEIGHT / 2
-    const radius = parseInt(log.data.slice(194, 258), 16) || 1000
+    if (parsed.eventName === 'PlayerJoinedQueue') {
+      onEvent(createQueueJoinedEvent(
+        parsed.args.player.toLowerCase(),
+        Number(parsed.args.queueSize),
+        txHash,
+      ))
+      return
+    }
 
-    onEvent(createStormChangeEvent(phase, centerX, centerY, radius, 'testnet', txHash))
-  } else if (topic === EVENT_TOPICS.PlayerKillMilestone) {
-    const player = '0x' + (log.topics[1]?.slice(26) || '0'.repeat(40))
-    const killCount = parseInt(log.data.slice(2, 66), 16) || 0
+    if (parsed.eventName === 'PlayerLeftQueue') {
+      onEvent(createQueueLeftEvent(
+        parsed.args.player.toLowerCase(),
+        Number(parsed.args.queueSize),
+        txHash,
+      ))
+      return
+    }
 
-    onEvent(createKillMilestoneEvent(
-      `${player.slice(0, 6)}...${player.slice(-4)}`,
-      killCount,
-      'Bonus Loot',
-      'testnet',
-      txHash,
-    ))
+    if (parsed.eventName === 'GameStarted') {
+      onEvent(createGameStartedEvent(
+        Number(parsed.args.gameId),
+        parsed.args.players.map((player: string) => player.toLowerCase()),
+        parsed.args.prizePool.toString(),
+        txHash,
+      ))
+      return
+    }
+
+    if (parsed.eventName === 'GameEnded') {
+      onEvent(createGameEndedEvent(
+        Number(parsed.args.gameId),
+        parsed.args.winner.toLowerCase(),
+        parsed.args.placements.map((player: string) => player.toLowerCase()),
+        parsed.args.prizePool.toString(),
+        txHash,
+      ))
+      return
+    }
+
+    if (parsed.eventName === 'RewardClaimed') {
+      onEvent(createRewardClaimedEvent(
+        parsed.args.player.toLowerCase(),
+        parsed.args.amount.toString(),
+        txHash,
+      ))
+      return
+    }
+
+    if (parsed.eventName === 'SessionKeyApproved') {
+      onEvent(createSessionApprovedEvent(
+        parsed.args.player.toLowerCase(),
+        parsed.args.sessionKey.toLowerCase(),
+        Number(parsed.args.expiry),
+        txHash,
+      ))
+      return
+    }
+
+    if (parsed.eventName === 'SessionKeyRevoked') {
+      onEvent(createSessionRevokedEvent(
+        parsed.args.player.toLowerCase(),
+        parsed.args.sessionKey.toLowerCase(),
+        txHash,
+      ))
+    }
+  } catch {
+    // Ignore non-decoding logs
   }
 }

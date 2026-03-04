@@ -5,7 +5,8 @@ import {
   approveSessionKeyArgs,
   revokeSessionKeyArgs,
   getIsValidSessionArgs,
-  SOMNIA_FAUCET_URL,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
 } from '@/lib/somnia/contract'
 import {
   createSessionWallet,
@@ -34,7 +35,7 @@ export default function SessionKeyPanel() {
       address ?? '0x0000000000000000000000000000000000000000',
       session?.account.address ?? '0x0000000000000000000000000000000000000000'
     ),
-    query: { enabled: !!address && !!session, refetchInterval: 10000 },
+    query: { enabled: !!address && !!session && pixelRoyaleConfigured, refetchInterval: 10000 },
   })
 
   // Countdown timer
@@ -104,6 +105,20 @@ export default function SessionKeyPanel() {
         </div>
         <p className="text-xs font-mono text-[rgba(255,255,255,0.3)] text-center py-2">
           Connect wallet to manage sessions
+        </p>
+      </div>
+    )
+  }
+
+  if (!pixelRoyaleConfigured) {
+    return (
+      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Key className="h-4 w-4 text-[rgba(255,255,255,0.5)]" />
+          <h3 className="font-mono font-bold text-white text-sm">Session Key</h3>
+        </div>
+        <p className="text-xs font-mono text-[#ff8c00] text-center py-2">
+          {pixelRoyaleConfigError}
         </p>
       </div>
     )

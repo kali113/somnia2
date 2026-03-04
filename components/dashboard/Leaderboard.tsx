@@ -2,7 +2,12 @@
 
 import { useReadContract } from 'wagmi'
 import { useAccount } from 'wagmi'
-import { getRecentGamesArgs, truncateAddress } from '@/lib/somnia/contract'
+import {
+  getRecentGamesArgs,
+  truncateAddress,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
+} from '@/lib/somnia/contract'
 import { Crown, Medal } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -17,7 +22,7 @@ export default function Leaderboard() {
 
   const { data: recentGames } = useReadContract({
     ...getRecentGamesArgs(50n),
-    query: { refetchInterval: 30000 },
+    query: { enabled: pixelRoyaleConfigured, refetchInterval: 30000 },
   })
 
   // Build leaderboard from game results
@@ -52,7 +57,14 @@ export default function Leaderboard() {
         <h3 className="font-mono font-bold text-white text-sm">Leaderboard</h3>
       </div>
 
-      {leaderboard.length === 0 ? (
+      {!pixelRoyaleConfigured ? (
+        <div className="text-center py-6">
+          <Medal className="h-8 w-8 text-[rgba(255,255,255,0.15)] mx-auto mb-2" />
+          <p className="text-xs font-mono text-[#ff8c00]">
+            {pixelRoyaleConfigError}
+          </p>
+        </div>
+      ) : leaderboard.length === 0 ? (
         <div className="text-center py-6">
           <Medal className="h-8 w-8 text-[rgba(255,255,255,0.15)] mx-auto mb-2" />
           <p className="text-xs font-mono text-[rgba(255,255,255,0.3)]">

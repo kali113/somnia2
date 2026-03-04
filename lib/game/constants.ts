@@ -241,7 +241,7 @@ export const COLORS = {
 
 export const CHEST_SPAWN_COUNT = 80
 export const FLOOR_LOOT_COUNT = 60
-export const SUPPLY_DROP_INTERVAL = 45  // seconds (demo mode)
+export const SUPPLY_DROP_INTERVAL = 45  // seconds
 export const MINIMAP_SIZE = 160
 export const MINIMAP_PADDING = 12
 

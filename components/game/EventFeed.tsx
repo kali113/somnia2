@@ -3,25 +3,33 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SomniaEvent } from '@/lib/somnia/events'
 import { formatEventMessage } from '@/lib/somnia/events'
-import { Zap, Cloud, Award, Link2, AlertTriangle } from 'lucide-react'
+import { Trophy, Users, Link2, AlertTriangle, Coins, KeySquare } from 'lucide-react'
 
 interface EventFeedProps {
   events: SomniaEvent[]
   isLive: boolean
 }
 
-const EVENT_ICONS: Record<string, typeof Zap> = {
-  supply_drop: Zap,
-  storm_change: Cloud,
-  kill_milestone: Award,
+const EVENT_ICONS: Record<string, typeof Users> = {
+  queue_joined: Users,
+  queue_left: Users,
+  game_started: Trophy,
+  game_ended: Trophy,
+  reward_claimed: Coins,
+  session_approved: KeySquare,
+  session_revoked: KeySquare,
   chain_connected: Link2,
   chain_error: AlertTriangle,
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  supply_drop: '#00e5ff',
-  storm_change: '#7b2dff',
-  kill_milestone: '#ffd700',
+  queue_joined: '#4cff4c',
+  queue_left: '#ff8c00',
+  game_started: '#3ae8ff',
+  game_ended: '#ffd700',
+  reward_claimed: '#4cff4c',
+  session_approved: '#7b2dff',
+  session_revoked: '#ff4444',
   chain_connected: '#4cff4c',
   chain_error: '#ff4444',
 }
@@ -45,34 +53,32 @@ export default function EventFeed({ events, isLive }: EventFeedProps) {
 
   return (
     <div className="absolute left-3 top-16 z-10 w-64 pointer-events-none">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <div className="flex items-center gap-1.5 rounded-t-lg bg-[rgba(0,0,0,0.8)] px-3 py-1.5 backdrop-blur-sm">
           <div
             className="h-2 w-2 rounded-full"
             style={{
-              backgroundColor: isLive ? '#4cff4c' : '#ffcc00',
-              boxShadow: `0 0 6px ${isLive ? '#4cff4c' : '#ffcc00'}`,
+              backgroundColor: isLive ? '#4cff4c' : '#ff4444',
+              boxShadow: `0 0 6px ${isLive ? '#4cff4c' : '#ff4444'}`,
             }}
           />
           <span className="text-[10px] font-mono text-[rgba(255,255,255,0.7)]">
-            SOMNIA {isLive ? 'TESTNET' : 'DEMO'}
+            SOMNIA {isLive ? 'LIVE' : 'DISCONNECTED'}
           </span>
         </div>
       </div>
 
-      {/* Events */}
       <div
         ref={scrollRef}
         className="flex flex-col gap-0.5 max-h-48 overflow-hidden rounded-b-lg rounded-tr-lg bg-[rgba(0,0,0,0.6)] p-1.5 backdrop-blur-sm"
       >
         {events.length === 0 ? (
           <div className="px-2 py-3 text-center text-[10px] font-mono text-[rgba(255,255,255,0.3)]">
-            Waiting for reactive events...
+            Waiting for on-chain events...
           </div>
         ) : (
           events.slice(0, 10).map((event) => {
-            const Icon = EVENT_ICONS[event.type] || Zap
+            const Icon = EVENT_ICONS[event.type] || Users
             const color = EVENT_COLORS[event.type] || '#fff'
             const message = formatEventMessage(event)
             const timeAgo = Math.floor((nowMs - event.timestamp) / 1000)
@@ -97,7 +103,7 @@ export default function EventFeed({ events, isLive }: EventFeedProps) {
                       {timeStr} ago
                     </span>
                     <span className="text-[8px] font-mono" style={{ color: color + '80' }}>
-                      {event.source === 'testnet' ? 'on-chain' : 'simulated'}
+                      {event.source === 'testnet' ? 'on-chain' : 'orchestrator'}
                     </span>
                     {event.txHash && (
                       <span className="text-[8px] font-mono text-[rgba(255,255,255,0.25)]">

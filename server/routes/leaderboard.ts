@@ -1,7 +1,7 @@
-import { Router } from 'express'
+import { Router, type Router as ExpressRouter } from 'express'
 import type { GameStore } from '../store.js'
 
-export const leaderboardRouter = Router()
+export const leaderboardRouter: ExpressRouter = Router()
 
 /**
  * GET /api/leaderboard

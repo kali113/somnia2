@@ -2,10 +2,10 @@
 
 import { useAccount, useReadContract } from 'wagmi'
 import {
-  getPlayerGameIdsArgs,
   getRecentGamesArgs,
-  truncateAddress,
   formatSTT,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
 } from '@/lib/somnia/contract'
 import { History, Trophy, Skull } from 'lucide-react'
 
@@ -14,7 +14,7 @@ export default function MatchHistory() {
 
   const { data: recentGames } = useReadContract({
     ...getRecentGamesArgs(20n),
-    query: { refetchInterval: 30000 },
+    query: { enabled: pixelRoyaleConfigured, refetchInterval: 30000 },
   })
 
   const games = (recentGames as any[]) ?? []
@@ -25,6 +25,17 @@ export default function MatchHistory() {
         <h3 className="font-mono font-bold text-white text-sm mb-4">Match History</h3>
         <p className="text-xs font-mono text-[rgba(255,255,255,0.3)] text-center py-4">
           Connect wallet to view history
+        </p>
+      </div>
+    )
+  }
+
+  if (!pixelRoyaleConfigured) {
+    return (
+      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
+        <h3 className="font-mono font-bold text-white text-sm mb-4">Match History</h3>
+        <p className="text-xs font-mono text-[#ff8c00] text-center py-4">
+          {pixelRoyaleConfigError}
         </p>
       </div>
     )

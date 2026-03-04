@@ -81,9 +81,10 @@ export interface GameState {
 
 // ── Initialize ──────────────────────────────────────────────────────────────
 
-export function initGame(canvas: HTMLCanvasElement): GameState {
+export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number }): GameState {
   const input = createInputState()
   const cleanup = setupInput(canvas, input)
+  const botCount = Math.max(1, Math.floor(options?.botCount ?? BOT_COUNT))
 
   const camera = createCamera(canvas.width, canvas.height)
   const map = generateMap(Date.now() % 10000)
@@ -95,7 +96,7 @@ export function initGame(canvas: HTMLCanvasElement): GameState {
 
   // Spawn bots
   const bots: Bot[] = []
-  for (let i = 0; i < BOT_COUNT; i++) {
+  for (let i = 0; i < botCount; i++) {
     const bx = 200 + Math.random() * (MAP_WIDTH - 400)
     const by = 200 + Math.random() * (MAP_HEIGHT - 400)
     bots.push(createBot(i, bx, by))
@@ -116,7 +117,7 @@ export function initGame(canvas: HTMLCanvasElement): GameState {
     projectiles: [],
     supplyDrops: [],
     killFeed: [],
-    aliveCount: BOT_COUNT + 1,
+    aliveCount: botCount + 1,
     time: 0,
     placement: 0,
     lobbyTimer: 10,

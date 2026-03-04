@@ -1,7 +1,7 @@
-import { Router } from 'express'
+import { Router, type Router as ExpressRouter } from 'express'
 import type { GameStore, StoredGameResult } from '../store.js'
 
-export const gameRouter = Router()
+export const gameRouter: ExpressRouter = Router()
 
 /**
  * POST /api/game/result
@@ -36,13 +36,22 @@ gameRouter.post('/result', async (req, res) => {
     prizePool: (BigInt(placements.length) * 1000000000000000n).toString(), // 0.001 ETH * players
     playerCount: placements.length,
   }
-  store.recordGame(result)
+  const inserted = store.recordGame(result)
+
+  // Keep matchmaking state coherent even before GameEnded is indexed back.
+  store.recordMatchEnded({
+    gameId,
+    winner: placements[0],
+    placements,
+    prizePool: result.prizePool,
+    endedAt: result.timestamp,
+    txHash: null,
+  })
 
   // Try to submit on-chain if orchestrator wallet is configured
   let txHash: string | null = null
-  if (orchestratorClient && contractAddress !== '0x0000000000000000000000000000000000000000') {
+  if (orchestratorClient && contractAddress) {
     try {
-      // Import ABI for the submitGameResult function
       const abi = [{
         type: 'function',
         name: 'submitGameResult',
@@ -85,6 +94,7 @@ gameRouter.post('/result', async (req, res) => {
 
   res.json({
     success: true,
+    inserted,
     gameId,
     txHash,
     result,

@@ -27,60 +27,177 @@ export interface QueueState {
   players: string[]
   size: number
   maxSize: number
-  openedAt: number | null
+  minPlayers: number
+  timeoutSec: number
+  openedAt: number | null // unix seconds
+  updatedAt: number // unix seconds
+  source: 'chain'
+}
+
+export type MatchStatus = 'active' | 'ended'
+
+export interface MatchRecord {
+  matchId: number
+  gameId: number
+  status: MatchStatus
+  players: string[]
+  botSlots: number
+  totalSlots: number
+  prizePool: string
+  createdAt: number // unix seconds
+  startedAt: number // unix seconds
+  endedAt: number | null // unix seconds
+  winner: string | null
+  txHash: string | null
 }
 
 export class GameStore {
   private games: Map<number, StoredGameResult> = new Map()
   private players: Map<string, PlayerRecord> = new Map()
-  private queue: string[] = []
+
+  private queuePlayers: string[] = []
   private queueOpenedAt: number | null = null
+  private queueUpdatedAt: number = Math.floor(Date.now() / 1000)
+  private queueMaxSize: number = 20
+  private queueMinPlayers: number = 2
+  private queueTimeoutSec: number = 120
+
+  private matches: Map<number, MatchRecord> = new Map()
+  private playerToMatch: Map<string, number> = new Map()
   private nextGameId: number = 0
 
-  // ── Queue ───────────────────────────────────────────────────────────────
+  // ── Queue (on-chain mirrored) ───────────────────────────────────────────
+
+  setQueueConfig(config: { maxSize: number; minPlayers: number; timeoutSec: number }): void {
+    this.queueMaxSize = config.maxSize
+    this.queueMinPlayers = config.minPlayers
+    this.queueTimeoutSec = config.timeoutSec
+  }
+
+  syncQueueFromChain(players: string[], openedAt: number | null): void {
+    this.queuePlayers = players.map((p) => p.toLowerCase())
+    this.queueOpenedAt = openedAt
+    this.queueUpdatedAt = Math.floor(Date.now() / 1000)
+  }
 
   getQueueState(): QueueState {
     return {
-      players: [...this.queue],
-      size: this.queue.length,
-      maxSize: 20,
+      players: [...this.queuePlayers],
+      size: this.queuePlayers.length,
+      maxSize: this.queueMaxSize,
+      minPlayers: this.queueMinPlayers,
+      timeoutSec: this.queueTimeoutSec,
       openedAt: this.queueOpenedAt,
+      updatedAt: this.queueUpdatedAt,
+      source: 'chain',
     }
-  }
-
-  addToQueue(address: string): boolean {
-    const addr = address.toLowerCase()
-    if (this.queue.includes(addr) || this.queue.length >= 20) return false
-    if (this.queue.length === 0) {
-      this.queueOpenedAt = Date.now()
-    }
-    this.queue.push(addr)
-    return true
-  }
-
-  removeFromQueue(address: string): boolean {
-    const addr = address.toLowerCase()
-    const index = this.queue.indexOf(addr)
-    if (index === -1) return false
-    this.queue.splice(index, 1)
-    if (this.queue.length === 0) this.queueOpenedAt = null
-    return true
   }
 
   isInQueue(address: string): boolean {
-    return this.queue.includes(address.toLowerCase())
+    return this.queuePlayers.includes(address.toLowerCase())
   }
 
-  clearQueue(): string[] {
-    const players = [...this.queue]
-    this.queue = []
-    this.queueOpenedAt = null
-    return players
+  getQueueAgeSec(nowSec: number = Math.floor(Date.now() / 1000)): number {
+    if (!this.queueOpenedAt) return 0
+    return Math.max(0, nowSec - this.queueOpenedAt)
+  }
+
+  canForceStart(nowSec: number = Math.floor(Date.now() / 1000)): boolean {
+    if (this.queuePlayers.length < this.queueMinPlayers) return false
+    if (!this.queueOpenedAt) return false
+    return nowSec >= this.queueOpenedAt + this.queueTimeoutSec
+  }
+
+  // ── Matchmaking lifecycle ────────────────────────────────────────────────
+
+  recordMatchStarted(input: {
+    gameId: number
+    players: string[]
+    prizePool: string
+    startedAt: number
+    txHash: string | null
+  }): MatchRecord {
+    const playerAddresses = input.players.map((p) => p.toLowerCase())
+    const existing = this.matches.get(input.gameId)
+
+    const match: MatchRecord = {
+      matchId: input.gameId,
+      gameId: input.gameId,
+      status: 'active',
+      players: playerAddresses,
+      botSlots: Math.max(0, this.queueMaxSize - playerAddresses.length),
+      totalSlots: this.queueMaxSize,
+      prizePool: input.prizePool,
+      createdAt: existing?.createdAt ?? input.startedAt,
+      startedAt: input.startedAt,
+      endedAt: null,
+      winner: null,
+      txHash: input.txHash,
+    }
+
+    this.matches.set(match.matchId, match)
+    for (const player of playerAddresses) {
+      this.playerToMatch.set(player, match.matchId)
+    }
+
+    return match
+  }
+
+  recordMatchEnded(input: {
+    gameId: number
+    winner: string
+    placements: string[]
+    prizePool: string
+    endedAt: number
+    txHash: string | null
+  }): MatchRecord {
+    const playerAddresses = input.placements.map((p) => p.toLowerCase())
+    const existing = this.matches.get(input.gameId)
+
+    const match: MatchRecord = {
+      matchId: input.gameId,
+      gameId: input.gameId,
+      status: 'ended',
+      players: existing?.players ?? playerAddresses,
+      botSlots: existing?.botSlots ?? Math.max(0, this.queueMaxSize - playerAddresses.length),
+      totalSlots: existing?.totalSlots ?? this.queueMaxSize,
+      prizePool: input.prizePool,
+      createdAt: existing?.createdAt ?? input.endedAt,
+      startedAt: existing?.startedAt ?? input.endedAt,
+      endedAt: input.endedAt,
+      winner: input.winner.toLowerCase(),
+      txHash: input.txHash,
+    }
+
+    this.matches.set(match.matchId, match)
+
+    for (const player of playerAddresses) {
+      const assignedMatchId = this.playerToMatch.get(player)
+      if (assignedMatchId === input.gameId) {
+        this.playerToMatch.delete(player)
+      }
+    }
+
+    return match
+  }
+
+  getMatch(matchId: number): MatchRecord | undefined {
+    return this.matches.get(matchId)
+  }
+
+  getMatchForPlayer(address: string): MatchRecord | undefined {
+    const matchId = this.playerToMatch.get(address.toLowerCase())
+    if (matchId === undefined) return undefined
+    return this.matches.get(matchId)
   }
 
   // ── Games ───────────────────────────────────────────────────────────────
 
-  recordGame(result: StoredGameResult): void {
+  recordGame(result: StoredGameResult): boolean {
+    if (this.games.has(result.gameId)) {
+      return false
+    }
+
     this.games.set(result.gameId, result)
 
     // Update player records
@@ -93,6 +210,8 @@ export class GameStore {
       if (i === 0) player.wins++
       if (i > 0) player.deaths++
     }
+
+    return true
   }
 
   getGame(gameId: number): StoredGameResult | undefined {

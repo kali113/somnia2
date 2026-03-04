@@ -1,99 +1,191 @@
-// ── Somnia Reactive Event Types ─────────────────────────────────────────────
+// ── Somnia Event Types ──────────────────────────────────────────────────────
 
-import type { Rarity } from '@/lib/game/constants'
-
-export type SomniaEventType = 'supply_drop' | 'storm_change' | 'kill_milestone' | 'chain_connected' | 'chain_error'
+export type SomniaEventType =
+  | 'queue_joined'
+  | 'queue_left'
+  | 'game_started'
+  | 'game_ended'
+  | 'reward_claimed'
+  | 'session_approved'
+  | 'session_revoked'
+  | 'chain_connected'
+  | 'chain_error'
 
 export interface SomniaEvent {
   id: string
   type: SomniaEventType
   timestamp: number
-  data: SupplyDropEventData | StormChangeEventData | KillMilestoneEventData | ConnectionEventData
-  source: 'demo' | 'testnet'
+  data:
+    | QueueEventData
+    | GameStartedEventData
+    | GameEndedEventData
+    | RewardClaimedEventData
+    | SessionEventData
+    | ConnectionEventData
+  source: 'testnet' | 'orchestrator'
   txHash?: string
 }
 
-export interface SupplyDropEventData {
-  x: number
-  y: number
-  rarity: Rarity
-  itemCount: number
-}
-
-export interface StormChangeEventData {
-  phase: number
-  centerX: number
-  centerY: number
-  radius: number
-}
-
-export interface KillMilestoneEventData {
+export interface QueueEventData {
   player: string
-  killCount: number
-  reward: string
+  queueSize: number
+}
+
+export interface GameStartedEventData {
+  gameId: number
+  players: string[]
+  prizePool: string
+}
+
+export interface GameEndedEventData {
+  gameId: number
+  winner: string
+  placements: string[]
+  prizePool: string
+}
+
+export interface RewardClaimedEventData {
+  player: string
+  amount: string
+}
+
+export interface SessionEventData {
+  player: string
+  sessionKey: string
+  expiry?: number
 }
 
 export interface ConnectionEventData {
   message: string
-  address?: string
 }
 
 // ── Event constructors ──────────────────────────────────────────────────────
 
 let eventCounter = 0
 
-export function createSupplyDropEvent(
-  x: number, y: number, rarity: Rarity, source: 'demo' | 'testnet',
+function nextId(): string {
+  return `evt-${++eventCounter}`
+}
+
+export function createQueueJoinedEvent(
+  player: string,
+  queueSize: number,
   txHash?: string,
 ): SomniaEvent {
   return {
-    id: `evt-${++eventCounter}`,
-    type: 'supply_drop',
+    id: nextId(),
+    type: 'queue_joined',
     timestamp: Date.now(),
-    data: { x, y, rarity, itemCount: 3 } as SupplyDropEventData,
-    source,
+    data: { player, queueSize } as QueueEventData,
+    source: 'testnet',
     txHash,
   }
 }
 
-export function createStormChangeEvent(
-  phase: number, centerX: number, centerY: number, radius: number,
-  source: 'demo' | 'testnet', txHash?: string,
+export function createQueueLeftEvent(
+  player: string,
+  queueSize: number,
+  txHash?: string,
 ): SomniaEvent {
   return {
-    id: `evt-${++eventCounter}`,
-    type: 'storm_change',
+    id: nextId(),
+    type: 'queue_left',
     timestamp: Date.now(),
-    data: { phase, centerX, centerY, radius } as StormChangeEventData,
-    source,
+    data: { player, queueSize } as QueueEventData,
+    source: 'testnet',
     txHash,
   }
 }
 
-export function createKillMilestoneEvent(
-  player: string, killCount: number, reward: string,
-  source: 'demo' | 'testnet', txHash?: string,
+export function createGameStartedEvent(
+  gameId: number,
+  players: string[],
+  prizePool: string,
+  txHash?: string,
 ): SomniaEvent {
   return {
-    id: `evt-${++eventCounter}`,
-    type: 'kill_milestone',
+    id: nextId(),
+    type: 'game_started',
     timestamp: Date.now(),
-    data: { player, killCount, reward } as KillMilestoneEventData,
-    source,
+    data: { gameId, players, prizePool } as GameStartedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createGameEndedEvent(
+  gameId: number,
+  winner: string,
+  placements: string[],
+  prizePool: string,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'game_ended',
+    timestamp: Date.now(),
+    data: { gameId, winner, placements, prizePool } as GameEndedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createRewardClaimedEvent(
+  player: string,
+  amount: string,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'reward_claimed',
+    timestamp: Date.now(),
+    data: { player, amount } as RewardClaimedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createSessionApprovedEvent(
+  player: string,
+  sessionKey: string,
+  expiry: number,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'session_approved',
+    timestamp: Date.now(),
+    data: { player, sessionKey, expiry } as SessionEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createSessionRevokedEvent(
+  player: string,
+  sessionKey: string,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'session_revoked',
+    timestamp: Date.now(),
+    data: { player, sessionKey } as SessionEventData,
+    source: 'testnet',
     txHash,
   }
 }
 
 export function createConnectionEvent(
-  message: string, type: SomniaEventType = 'chain_connected',
-  address?: string,
+  message: string,
+  type: SomniaEventType = 'chain_connected',
 ): SomniaEvent {
   return {
-    id: `evt-${++eventCounter}`,
+    id: nextId(),
     type,
     timestamp: Date.now(),
-    data: { message, address } as ConnectionEventData,
-    source: 'testnet',
+    data: { message } as ConnectionEventData,
+    source: 'orchestrator',
   }
 }
 
@@ -101,22 +193,35 @@ export function createConnectionEvent(
 
 export function formatEventMessage(event: SomniaEvent): string {
   switch (event.type) {
-    case 'supply_drop': {
-      const d = event.data as SupplyDropEventData
-      return `Supply Drop incoming! [${d.rarity.toUpperCase()}]`
+    case 'queue_joined': {
+      const d = event.data as QueueEventData
+      return `${d.player.slice(0, 6)}... joined queue (${d.queueSize})`
     }
-    case 'storm_change': {
-      const d = event.data as StormChangeEventData
-      return `Storm Phase ${d.phase + 1} - Circle shrinking!`
+    case 'queue_left': {
+      const d = event.data as QueueEventData
+      return `${d.player.slice(0, 6)}... left queue (${d.queueSize})`
     }
-    case 'kill_milestone': {
-      const d = event.data as KillMilestoneEventData
-      return `${d.player} reached ${d.killCount} eliminations! ${d.reward}`
+    case 'game_started': {
+      const d = event.data as GameStartedEventData
+      return `Match #${d.gameId} started with ${d.players.length} players`
     }
-    case 'chain_connected': {
-      const d = event.data as ConnectionEventData
-      return d.message
+    case 'game_ended': {
+      const d = event.data as GameEndedEventData
+      return `Match #${d.gameId} ended. Winner: ${d.winner.slice(0, 6)}...`
     }
+    case 'reward_claimed': {
+      const d = event.data as RewardClaimedEventData
+      return `${d.player.slice(0, 6)}... claimed rewards`
+    }
+    case 'session_approved': {
+      const d = event.data as SessionEventData
+      return `Session key approved for ${d.player.slice(0, 6)}...`
+    }
+    case 'session_revoked': {
+      const d = event.data as SessionEventData
+      return `Session key revoked for ${d.player.slice(0, 6)}...`
+    }
+    case 'chain_connected':
     case 'chain_error': {
       const d = event.data as ConnectionEventData
       return d.message

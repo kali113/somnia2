@@ -29,10 +29,10 @@ Start with one or two docs below, then follow their file pointers:
 ## Git Workflow
 - Always create a feature branch before starting work: `git checkout -b <short-description>`.
 - Commit frequently with descriptive messages as you make progress.
-- Run required verification (`pnpm lint && pnpm build`) before the final commit.
-- Push the branch and open a PR targeting `main`: `git push -u origin <branch>`.
-- Merge only after verification passes; delete the branch after merge.
-- Never commit directly to `main`.
+- Run required verification (`pnpm lint && pnpm build`) before merging into `main`.
+- Merge the feature branch into local `main` after verification passes.
+- Delete the feature branch after it is merged.
+- No PR is required for this local workflow.
 
 ## Guardrails
 - Keep edits minimal and local to the task.

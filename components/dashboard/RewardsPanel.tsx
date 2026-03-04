@@ -6,6 +6,8 @@ import {
   claimRewardsArgs,
   formatSTT,
   getPlayerStatsArgs,
+  pixelRoyaleConfigured,
+  pixelRoyaleConfigError,
 } from '@/lib/somnia/contract'
 import { Gift, Loader2, Coins } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
@@ -15,12 +17,12 @@ export default function RewardsPanel() {
 
   const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
     ...getPendingRewardsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address, refetchInterval: 10000 },
+    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 10000 },
   })
 
   const { data: rawStats } = useReadContract({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address, refetchInterval: 15000 },
+    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 15000 },
   })
 
   const { writeContract: claim, data: claimHash, isPending: isClaiming, error: claimError } = useWriteContract()
@@ -52,6 +54,17 @@ export default function RewardsPanel() {
         <h3 className="font-mono font-bold text-white text-sm mb-4">Rewards</h3>
         <p className="text-xs font-mono text-[rgba(255,255,255,0.3)] text-center py-4">
           Connect wallet to view rewards
+        </p>
+      </div>
+    )
+  }
+
+  if (!pixelRoyaleConfigured) {
+    return (
+      <div className="rounded-xl border border-[rgba(76,255,76,0.15)] bg-[rgba(76,255,76,0.03)] p-6">
+        <h3 className="font-mono font-bold text-white text-sm mb-4">Rewards</h3>
+        <p className="text-xs font-mono text-[#ff8c00] text-center py-4">
+          {pixelRoyaleConfigError}
         </p>
       </div>
     )
