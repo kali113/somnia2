@@ -2,7 +2,7 @@
 
 import {
   TILE_SIZE, MAP_TILES_X, MAP_TILES_Y, MAP_WIDTH, MAP_HEIGHT,
-  POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS,
+  POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS, MINIMAP_SIZE,
   CONSUMABLE_LOOT_RARITY,
   type BuildMaterial, type BuildPieceId,
   type Rarity, type ConsumableId,
@@ -90,6 +90,7 @@ export interface GameMap {
   playerBuilds: PlayerBuild[]
   wallColliders: AABB[]
   poiLabels: { name: string; x: number; y: number }[]
+  minimapCanvas: HTMLCanvasElement | null
 }
 
 // ── Seeded RNG ──────────────────────────────────────────────────────────────
@@ -344,10 +345,81 @@ export function generateMap(seed = 42): GameMap {
     })
   }
 
+  const minimapCanvas = buildMinimapCanvas(tiles, buildings, trees, rocks, cars)
+
   return {
     tiles, trees, rocks, cars, chests, floorLoot,
-    buildings, playerBuilds: [], wallColliders, poiLabels,
+    buildings, playerBuilds: [], wallColliders, poiLabels, minimapCanvas,
   }
+}
+
+// ── Minimap Pre-render ───────────────────────────────────────────────────────
+
+function buildMinimapCanvas(
+  tiles: Uint8Array,
+  buildings: BuildingRect[],
+  trees: TreeObj[],
+  rocks: RockObj[],
+  cars: CarObj[],
+): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null
+  const size = MINIMAP_SIZE
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  const scale = size / MAP_WIDTH
+  const tileW = size / MAP_TILES_X  // 1.6 px per tile
+  const tileH = size / MAP_TILES_Y
+
+  // Terrain tiles
+  for (let ty = 0; ty < MAP_TILES_Y; ty++) {
+    for (let tx = 0; tx < MAP_TILES_X; tx++) {
+      const tile = tiles[ty * MAP_TILES_X + tx]
+      switch (tile) {
+        case TileType.Water:        ctx.fillStyle = '#2d63b0'; break
+        case TileType.Sand:         ctx.fillStyle = '#c4a45a'; break
+        case TileType.Road:         ctx.fillStyle = '#585858'; break
+        case TileType.BuildingFloor:ctx.fillStyle = '#6b5d50'; break
+        default:                    ctx.fillStyle = '#3d6934'; break // Grass
+      }
+      ctx.fillRect(
+        Math.floor(tx * tileW), Math.floor(ty * tileH),
+        Math.ceil(tileW) + 1,   Math.ceil(tileH) + 1,
+      )
+    }
+  }
+
+  // Buildings – slightly lighter roof tone so structures pop
+  ctx.fillStyle = '#9e8e7e'
+  for (const b of buildings) {
+    ctx.fillRect(
+      Math.floor(b.x * scale),  Math.floor(b.y * scale),
+      Math.max(2, Math.ceil(b.w * scale)), Math.max(2, Math.ceil(b.h * scale)),
+    )
+  }
+
+  // Trees – 1 px dark-green dots
+  ctx.fillStyle = '#2a5019'
+  for (const t of trees) {
+    ctx.fillRect(Math.round(t.x * scale), Math.round(t.y * scale), 1, 1)
+  }
+
+  // Rocks – 1 px gray dots
+  ctx.fillStyle = '#888'
+  for (const r of rocks) {
+    ctx.fillRect(Math.round(r.x * scale), Math.round(r.y * scale), 1, 1)
+  }
+
+  // Cars – 1 px slate-blue dots
+  ctx.fillStyle = '#4a4a6a'
+  for (const c of cars) {
+    ctx.fillRect(Math.round(c.x * scale), Math.round(c.y * scale), 1, 1)
+  }
+
+  return canvas
 }
 
 // ── Render Map ──────────────────────────────────────────────────────────────

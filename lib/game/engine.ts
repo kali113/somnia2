@@ -3,6 +3,7 @@
 import {
   MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, BOT_COUNT, COLORS,
   WEAPONS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST, CONSUMABLE_LOOT_RARITY,
+  POI_DEFS, TILE_SIZE,
   type Rarity, type ConsumableId,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
@@ -826,10 +827,10 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
   const cx = mx + radius
   const cy = my + radius
 
-  // Background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+  // Dark border ring
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'
   ctx.beginPath()
-  ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2)
+  ctx.arc(cx, cy, radius + 3, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.save()
@@ -837,8 +838,13 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
   ctx.arc(cx, cy, radius, 0, Math.PI * 2)
   ctx.clip()
 
-  ctx.fillStyle = '#2a5a2a'
-  ctx.fillRect(mx, my, mSize, mSize)
+  // Terrain (pre-rendered canvas or fallback flat green)
+  if (state.map.minimapCanvas) {
+    ctx.drawImage(state.map.minimapCanvas, mx, my, mSize, mSize)
+  } else {
+    ctx.fillStyle = '#2a5a2a'
+    ctx.fillRect(mx, my, mSize, mSize)
+  }
 
   // Storm
   renderStormMinimap(ctx, state.storm, mx, my, mSize)
@@ -849,25 +855,51 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
     drawMinimapDot(ctx, mx + drop.x * scale, my + drop.y * scale, COLORS.supplyDrop, 3)
   }
 
-  // Bots (as small red dots)
+  // Enemies (red dots, slightly larger than before so they read well)
   for (const bot of state.bots) {
     if (!bot.alive) continue
-    drawMinimapDot(ctx, mx + bot.x * scale, my + bot.y * scale, COLORS.bot, 1.5)
+    drawMinimapDot(ctx, mx + bot.x * scale, my + bot.y * scale, COLORS.bot, 2)
   }
 
-  // Player
+  // Player (bright cyan, largest dot)
   if (state.player.alive) {
-    drawMinimapDot(ctx, mx + state.player.x * scale, my + state.player.y * scale, COLORS.player, 3)
+    drawMinimapDot(ctx, mx + state.player.x * scale, my + state.player.y * scale, COLORS.player, 3.5)
   }
 
   ctx.restore()
 
-  // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+  // Outer border ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'
   ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.arc(cx, cy, radius + 1.5, 0, Math.PI * 2)
+  ctx.arc(cx, cy, radius + 1, 0, Math.PI * 2)
   ctx.stroke()
+
+  // ── Location name ────────────────────────────────────────────────────────
+  const px = state.player.x
+  const py = state.player.y
+  let locationName: string | null = null
+  for (const poi of POI_DEFS) {
+    const x1 = poi.tileX * TILE_SIZE
+    const y1 = poi.tileY * TILE_SIZE
+    const x2 = (poi.tileX + poi.width)  * TILE_SIZE
+    const y2 = (poi.tileY + poi.height) * TILE_SIZE
+    if (px >= x1 && px <= x2 && py >= y1 && py <= y2) {
+      locationName = poi.name
+      break
+    }
+  }
+
+  if (locationName) {
+    ctx.font = 'bold 10px monospace'
+    const tw = ctx.measureText(locationName).width
+    const lx = cx - tw / 2
+    const ly = my + mSize + MINIMAP_PADDING - 1
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'
+    ctx.fillRect(lx - 5, ly - 11, tw + 10, 15)
+    ctx.fillStyle = '#e8e8e8'
+    ctx.fillText(locationName, lx, ly)
+  }
 }
 
 // ── Resize ──────────────────────────────────────────────────────────────────

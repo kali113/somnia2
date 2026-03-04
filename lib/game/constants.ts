@@ -263,14 +263,14 @@ export interface POIDef {
 }
 
 export const POI_DEFS: POIDef[] = [
-  { name: 'Tilted Towers', tileX: 25, tileY: 25, width: 18, height: 18 },
-  { name: 'Pleasant Park', tileX: 60, tileY: 15, width: 16, height: 14 },
-  { name: 'Retail Row', tileX: 70, tileY: 65, width: 14, height: 12 },
-  { name: 'Salty Springs', tileX: 45, tileY: 55, width: 12, height: 10 },
-  { name: 'Lonely Lodge', tileX: 85, tileY: 35, width: 10, height: 10 },
-  { name: 'Dusty Depot', tileX: 40, tileY: 40, width: 10, height: 8 },
-  { name: 'Loot Lake', tileX: 15, tileY: 60, width: 14, height: 14 },
-  { name: 'Greasy Grove', tileX: 10, tileY: 80, width: 12, height: 10 },
+  { name: 'Crooked Spires', tileX: 25, tileY: 25, width: 18, height: 18 },
+  { name: 'Mellow Flats',   tileX: 60, tileY: 15, width: 16, height: 14 },
+  { name: 'Vendor Strip',   tileX: 70, tileY: 65, width: 14, height: 12 },
+  { name: 'Bitter Creek',   tileX: 45, tileY: 55, width: 12, height: 10 },
+  { name: 'Hollow Cabin',   tileX: 85, tileY: 35, width: 10, height: 10 },
+  { name: 'Ashen Yards',    tileX: 40, tileY: 40, width: 10, height: 8  },
+  { name: 'Plunder Pond',   tileX: 15, tileY: 60, width: 14, height: 14 },
+  { name: 'Grimy Glen',     tileX: 10, tileY: 80, width: 12, height: 10 },
 ]
 
 // ── Colors ──────────────────────────────────────────────────────────────────
