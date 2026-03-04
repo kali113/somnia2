@@ -3,11 +3,12 @@
 import { useRef, useEffect, useCallback } from 'react'
 import {
   initGame, updateGame, renderGame, resizeGame, cleanupGame,
-  addSupplyDrop, type GameState, type GamePhase, type KillFeedEntry, type SupplyDrop,
+  type GameState, type GamePhase, type KillFeedEntry, type SupplyDrop,
+  type ChestPromptState, type ChestOpenResult,
 } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
-import type { Rarity } from '@/lib/game/constants'
+import { fetchSomniaRandomSeed } from '@/lib/somnia/random'
 
 interface GameCanvasProps {
   onKillFeedUpdate: (feed: KillFeedEntry[]) => void
@@ -16,6 +17,8 @@ interface GameCanvasProps {
   onPlayerUpdate: (player: Player) => void
   onStormUpdate: (storm: StormState) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
+  onChestPromptUpdate?: (prompt: ChestPromptState | null) => void
+  onChestOpened?: (result: ChestOpenResult) => void
   gameStateRef: React.MutableRefObject<GameState | null>
   botCount?: number
 }
@@ -27,6 +30,8 @@ export default function GameCanvas({
   onPlayerUpdate,
   onStormUpdate,
   onSupplyDrop,
+  onChestPromptUpdate,
+  onChestOpened,
   gameStateRef,
   botCount,
 }: GameCanvasProps) {
@@ -47,46 +52,56 @@ export default function GameCanvas({
     const canvas = canvasRef.current
     if (!canvas) return
 
+    let cancelled = false
     canvas.width = window.innerWidth
     canvas.height = window.innerHeight
-
-    const state = initGame(canvas, { botCount })
-    gameStateRef.current = state
-
-    // Wire up callbacks
-    state.onKillFeedUpdate = onKillFeedUpdate
-    state.onAliveCountUpdate = onAliveCountUpdate
-    state.onPhaseChange = onPhaseChange
-    state.onPlayerUpdate = onPlayerUpdate
-    state.onStormUpdate = onStormUpdate
-    state.onSupplyDrop = onSupplyDrop
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let lastTime = -1
+    const boot = async () => {
+      const mapSeed = await fetchSomniaRandomSeed()
+      if (cancelled) return
 
-    const loop = (timestamp: number) => {
-      if (lastTime < 0) lastTime = timestamp
-      const dt = Math.min((timestamp - lastTime) / 1000, 0.05) // Cap at 50ms
-      lastTime = timestamp
+      const state = initGame(canvas, { botCount, mapSeed })
+      gameStateRef.current = state
 
-      updateGame(state, dt)
-      renderGame(ctx, state)
+      // Wire up callbacks
+      state.onKillFeedUpdate = onKillFeedUpdate
+      state.onAliveCountUpdate = onAliveCountUpdate
+      state.onPhaseChange = onPhaseChange
+      state.onPlayerUpdate = onPlayerUpdate
+      state.onStormUpdate = onStormUpdate
+      state.onSupplyDrop = onSupplyDrop
+      state.onChestPromptUpdate = onChestPromptUpdate
+      state.onChestOpened = onChestOpened
+
+      let lastTime = -1
+
+      const loop = (timestamp: number) => {
+        if (lastTime < 0) lastTime = timestamp
+        const dt = Math.min((timestamp - lastTime) / 1000, 0.05) // Cap at 50ms
+        lastTime = timestamp
+
+        updateGame(state, dt)
+        renderGame(ctx, state)
+
+        animFrameRef.current = requestAnimationFrame(loop)
+      }
 
       animFrameRef.current = requestAnimationFrame(loop)
+
+      // Initial state push
+      onPlayerUpdate(state.player)
+      onAliveCountUpdate(state.aliveCount)
+      onPhaseChange(state.phase)
     }
 
-    animFrameRef.current = requestAnimationFrame(loop)
+    boot().catch(() => undefined)
 
     window.addEventListener('resize', handleResize)
 
-    // Initial state push
-    onPlayerUpdate(state.player)
-    onAliveCountUpdate(state.aliveCount)
-    onPhaseChange(state.phase)
-
     return () => {
+      cancelled = true
       cancelAnimationFrame(animFrameRef.current)
       window.removeEventListener('resize', handleResize)
       cleanupGame(canvas)
@@ -94,7 +109,9 @@ export default function GameCanvas({
     }
   }, [
     handleResize, onKillFeedUpdate, onAliveCountUpdate,
-    onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop, gameStateRef, botCount,
+    onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop,
+    onChestPromptUpdate, onChestOpened,
+    gameStateRef, botCount,
   ])
 
   return (

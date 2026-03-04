@@ -1,7 +1,7 @@
 // ── Pixel Art Sprite Drawing ─────────────────────────────────────────────────
 // All sprites drawn procedurally via Canvas 2D API. No image assets needed.
 
-import { COLORS, RARITY_COLORS, type Rarity, type BuildMaterial, type BuildPieceId } from './constants'
+import { COLORS, RARITY_COLORS, type Rarity, type BuildMaterial, type BuildPieceId, type ChestType } from './constants'
 
 // ── Player / Bot ────────────────────────────────────────────────────────────
 
@@ -147,26 +147,53 @@ export function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, hea
 
 // ── Chest ───────────────────────────────────────────────────────────────────
 
-export function drawChest(ctx: CanvasRenderingContext2D, x: number, y: number, opened: boolean) {
+export function drawChest(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  opened: boolean,
+  type: ChestType,
+  highlighted: boolean,
+  time: number,
+) {
   if (opened) {
     ctx.fillStyle = '#8a6a2a'
     ctx.fillRect(x - 8, y - 4, 16, 10)
     return
   }
-  // Glow effect
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.15)'
+
+  const glowPulse = highlighted ? Math.sin(time * 6) * 0.15 + 0.75 : 0.4
+  const glowColor = type === 'rare' ? '80, 180, 255' : '255, 215, 0'
+  ctx.fillStyle = `rgba(${glowColor}, ${0.22 * glowPulse})`
   ctx.beginPath()
-  ctx.arc(x, y, 18, 0, Math.PI * 2)
+  ctx.arc(x, y, highlighted ? 24 : 17, 0, Math.PI * 2)
   ctx.fill()
 
   // Chest body
-  ctx.fillStyle = '#b8860b'
+  ctx.fillStyle = type === 'rare' ? '#2f7db8' : '#b8860b'
   ctx.fillRect(x - 9, y - 5, 18, 12)
-  ctx.fillStyle = COLORS.chest
+  ctx.fillStyle = type === 'rare' ? '#57b4ff' : COLORS.chest
   ctx.fillRect(x - 8, y - 4, 16, 10)
   // Lock
-  ctx.fillStyle = '#8a6a2a'
+  ctx.fillStyle = type === 'rare' ? '#1a5078' : '#8a6a2a'
   ctx.fillRect(x - 2, y - 1, 4, 4)
+}
+
+export function drawAmmoPack(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+  const bob = Math.sin(time * 4) * 1.8
+  ctx.fillStyle = 'rgba(255, 190, 60, 0.2)'
+  ctx.beginPath()
+  ctx.arc(x, y + bob, 12, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = '#ffb74d'
+  ctx.fillRect(x - 8, y - 5 + bob, 16, 10)
+  ctx.fillStyle = '#8c5b1f'
+  ctx.fillRect(x - 8, y - 1 + bob, 16, 2)
+  ctx.fillStyle = '#2b2b2b'
+  ctx.fillRect(x - 5, y - 4 + bob, 3, 8)
+  ctx.fillRect(x - 1, y - 4 + bob, 3, 8)
+  ctx.fillRect(x + 3, y - 4 + bob, 3, 8)
 }
 
 // ── Loot Item on Ground ─────────────────────────────────────────────────────

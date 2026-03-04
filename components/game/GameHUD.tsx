@@ -3,6 +3,7 @@
 import { WEAPONS, ITEMS, RARITY_COLORS, BUILD_PIECE_ORDER, BUILD_PIECES } from '@/lib/game/constants'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
+import type { ChestPromptState } from '@/lib/game/engine'
 import { Shield, Heart, TreePine, Mountain, Wrench } from 'lucide-react'
 
 interface GameHUDProps {
@@ -10,9 +11,10 @@ interface GameHUDProps {
   aliveCount: number
   storm: StormState | null
   gameTime: number
+  chestPrompt: ChestPromptState | null
 }
 
-export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUDProps) {
+export default function GameHUD({ player, aliveCount, storm, gameTime, chestPrompt }: GameHUDProps) {
   if (!player) return null
 
   const activePiece = BUILD_PIECES[player.buildPiece]
@@ -125,7 +127,7 @@ export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUD
                     {/* Ammo */}
                     {!weapon.isMelee && slot && (
                       <span className="text-[10px] font-mono text-white mt-0.5">
-                        {slot.ammo}/{slot.maxAmmo}
+                        {slot.ammo}/{slot.reserveAmmo}
                       </span>
                     )}
                   </>
@@ -185,6 +187,17 @@ export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUD
           </div>
         )}
 
+        {chestPrompt && (
+          <div className="rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono">
+            <div className="text-[11px] text-[#ffd166]">
+              {chestPrompt.chestType === 'rare' ? 'RARE CHEST' : 'CHEST'} NEARBY
+            </div>
+            <div className="text-[10px] text-[rgba(255,255,255,0.8)]">
+              Press <span className="text-[#3ae8ff]">{chestPrompt.key}</span> to open
+            </div>
+          </div>
+        )}
+
         {/* Build mode indicator */}
         {player.buildMode && (
           <div className="rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] px-4 py-2 font-mono text-xs text-[#d7ffe0]">
@@ -219,7 +232,7 @@ export default function GameHUD({ player, aliveCount, storm, gameTime }: GameHUD
       {/* Controls hint */}
       <div className="absolute bottom-3 left-3 text-[10px] font-mono text-[rgba(255,255,255,0.3)] leading-relaxed">
         <div>WASD Move | Mouse Aim & Shoot</div>
-        <div>1-5 Slots | R Reload | F Use/Cancel Heal | B/Q Build Mode</div>
+        <div>1-5 Slots | R Reload (uses reserve ammo) | E Open Chest | F Heal</div>
         <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
       </div>
     </div>

@@ -210,6 +210,52 @@
   },
   {
     "type": "function",
+    "name": "recordChestOpen",
+    "inputs": [
+      { "name": "_gameId", "type": "uint256", "internalType": "uint256" },
+      { "name": "_chestKey", "type": "bytes32", "internalType": "bytes32" },
+      { "name": "_chestType", "type": "uint8", "internalType": "uint8" },
+      { "name": "_roll", "type": "uint16", "internalType": "uint16" },
+      { "name": "_rewardType", "type": "uint8", "internalType": "uint8" },
+      { "name": "_rewardId", "type": "bytes32", "internalType": "bytes32" },
+      { "name": "_rewardAmount", "type": "uint16", "internalType": "uint16" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getChestOpenCount",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getChestOpen",
+    "inputs": [{ "name": "_index", "type": "uint256", "internalType": "uint256" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct PixelRoyale.ChestOpenRecord",
+        "components": [
+          { "name": "gameId", "type": "uint256", "internalType": "uint256" },
+          { "name": "player", "type": "address", "internalType": "address" },
+          { "name": "chestKey", "type": "bytes32", "internalType": "bytes32" },
+          { "name": "chestType", "type": "uint8", "internalType": "uint8" },
+          { "name": "roll", "type": "uint16", "internalType": "uint16" },
+          { "name": "rewardType", "type": "uint8", "internalType": "uint8" },
+          { "name": "rewardId", "type": "bytes32", "internalType": "bytes32" },
+          { "name": "rewardAmount", "type": "uint16", "internalType": "uint16" },
+          { "name": "timestamp", "type": "uint256", "internalType": "uint256" }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
@@ -307,6 +353,22 @@
     "inputs": [
       { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
       { "name": "sessionKey", "type": "address", "indexed": true, "internalType": "address" }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ChestOpened",
+    "inputs": [
+      { "name": "gameId", "type": "uint256", "indexed": true, "internalType": "uint256" },
+      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "chestKey", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+      { "name": "chestType", "type": "uint8", "indexed": false, "internalType": "uint8" },
+      { "name": "roll", "type": "uint16", "indexed": false, "internalType": "uint16" },
+      { "name": "rewardType", "type": "uint8", "indexed": false, "internalType": "uint8" },
+      { "name": "rewardId", "type": "bytes32", "indexed": false, "internalType": "bytes32" },
+      { "name": "rewardAmount", "type": "uint16", "indexed": false, "internalType": "uint16" },
+      { "name": "timestamp", "type": "uint256", "indexed": false, "internalType": "uint256" }
     ],
     "anonymous": false
   },

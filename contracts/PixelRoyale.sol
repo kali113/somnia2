@@ -57,6 +57,21 @@ contract PixelRoyale {
     GameResult[] public gameHistory;
     mapping(address => uint256[]) public playerGames; // player => gameId[]
 
+    // Chest open history (player-submitted gameplay telemetry)
+    struct ChestOpenRecord {
+        uint256 gameId;
+        address player;
+        bytes32 chestKey;
+        uint8 chestType;      // 0 = normal, 1 = rare
+        uint16 roll;          // 0..9999
+        uint8 rewardType;     // 0 = weapon, 1 = consumable, 2 = ammo
+        bytes32 rewardId;     // hashed reward identifier
+        uint16 rewardAmount;  // stack amount / ammo amount
+        uint256 timestamp;
+    }
+    ChestOpenRecord[] public chestOpenHistory;
+    mapping(address => mapping(bytes32 => bool)) public playerChestOpened;
+
     // Per-player aggregate stats
     struct PlayerStats {
         uint256 gamesPlayed;
@@ -75,6 +90,17 @@ contract PixelRoyale {
     event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry);
     event SessionKeyRevoked(address indexed player, address indexed sessionKey);
     event OrchestratorUpdated(address indexed oldOrch, address indexed newOrch);
+    event ChestOpened(
+        uint256 indexed gameId,
+        address indexed player,
+        bytes32 indexed chestKey,
+        uint8 chestType,
+        uint16 roll,
+        uint8 rewardType,
+        bytes32 rewardId,
+        uint16 rewardAmount,
+        uint256 timestamp
+    );
 
     // ──────────────────────────── Modifiers ────────────────────────────
     modifier onlyOwner() {
@@ -215,6 +241,53 @@ contract PixelRoyale {
         emit GameEnded(_gameId, _placements[0], _placements, pool);
     }
 
+    // ──────────────────────────── Chest Logs ────────────────────────────
+
+    /// @notice Record a chest opening result directly on-chain.
+    /// @dev Called by players from the game client when they open a chest.
+    function recordChestOpen(
+        uint256 _gameId,
+        bytes32 _chestKey,
+        uint8 _chestType,
+        uint16 _roll,
+        uint8 _rewardType,
+        bytes32 _rewardId,
+        uint16 _rewardAmount
+    ) external {
+        require(_chestKey != bytes32(0), "INVALID_CHEST_KEY");
+        require(_chestType <= 1, "INVALID_CHEST_TYPE");
+        require(_roll <= 9999, "INVALID_ROLL");
+        require(_rewardType <= 2, "INVALID_REWARD_TYPE");
+        require(!playerChestOpened[msg.sender][_chestKey], "CHEST_ALREADY_OPENED");
+
+        playerChestOpened[msg.sender][_chestKey] = true;
+
+        ChestOpenRecord memory record = ChestOpenRecord({
+            gameId: _gameId,
+            player: msg.sender,
+            chestKey: _chestKey,
+            chestType: _chestType,
+            roll: _roll,
+            rewardType: _rewardType,
+            rewardId: _rewardId,
+            rewardAmount: _rewardAmount,
+            timestamp: block.timestamp
+        });
+        chestOpenHistory.push(record);
+
+        emit ChestOpened(
+            _gameId,
+            msg.sender,
+            _chestKey,
+            _chestType,
+            _roll,
+            _rewardType,
+            _rewardId,
+            _rewardAmount,
+            block.timestamp
+        );
+    }
+
     // ──────────────────────────── Rewards ──────────────────────────────
 
     /// @notice Claim all pending STT rewards.
@@ -253,6 +326,14 @@ contract PixelRoyale {
             results[i] = gameHistory[len - count + i];
         }
         return results;
+    }
+
+    function getChestOpenCount() external view returns (uint256) {
+        return chestOpenHistory.length;
+    }
+
+    function getChestOpen(uint256 _index) external view returns (ChestOpenRecord memory) {
+        return chestOpenHistory[_index];
     }
 
     // ──────────────────────────── Admin ────────────────────────────────

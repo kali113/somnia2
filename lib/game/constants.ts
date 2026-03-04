@@ -26,6 +26,9 @@ export const RARITY_COLORS: Record<string, string> = {
 export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const
 export type Rarity = typeof RARITY_ORDER[number]
 
+export const CHEST_TYPES = ['normal', 'rare'] as const
+export type ChestType = typeof CHEST_TYPES[number]
+
 // ── Weapon Definitions ─────────────────────────────────────────────────────
 
 export interface WeaponDef {
@@ -306,6 +309,10 @@ export const COLORS = {
 
 export const CHEST_SPAWN_COUNT = 80
 export const FLOOR_LOOT_COUNT = 60
+export const NORMAL_CHEST_APPEAR_RATE = 0.93
+export const CHEST_BUILDING_SPAWN_WEIGHT = 0.72
+export const CHEST_INTERACT_RANGE = 52
+export const CHEST_GLOW_RANGE = 120
 export const SUPPLY_DROP_INTERVAL = 45  // seconds
 export const MINIMAP_SIZE = 160
 export const MINIMAP_PADDING = 12

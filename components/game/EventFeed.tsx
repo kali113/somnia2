@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SomniaEvent } from '@/lib/somnia/events'
 import { formatEventMessage } from '@/lib/somnia/events'
-import { Trophy, Users, Link2, AlertTriangle, Coins, KeySquare } from 'lucide-react'
+import { Trophy, Users, Link2, AlertTriangle, Coins, KeySquare, PackageOpen } from 'lucide-react'
 
 interface EventFeedProps {
   events: SomniaEvent[]
@@ -15,6 +15,7 @@ const EVENT_ICONS: Record<string, typeof Users> = {
   queue_left: Users,
   game_started: Trophy,
   game_ended: Trophy,
+  chest_opened: PackageOpen,
   reward_claimed: Coins,
   session_approved: KeySquare,
   session_revoked: KeySquare,
@@ -27,6 +28,7 @@ const EVENT_COLORS: Record<string, string> = {
   queue_left: '#ff8c00',
   game_started: '#3ae8ff',
   game_ended: '#ffd700',
+  chest_opened: '#ffd166',
   reward_claimed: '#4cff4c',
   session_approved: '#7b2dff',
   session_revoked: '#ff4444',

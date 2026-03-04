@@ -18,6 +18,7 @@ export interface InventorySlot {
   rarity: Rarity
   ammo: number
   maxAmmo: number
+  reserveAmmo: number
 }
 
 export interface ActiveConsumableUse {
@@ -76,7 +77,7 @@ export function createPlayer(x: number, y: number, name: string): Player {
     alive: true,
     name,
     slots: [
-      { weaponId: 'pickaxe', rarity: 'common' as Rarity, ammo: Infinity, maxAmmo: Infinity },
+      { weaponId: 'pickaxe', rarity: 'common' as Rarity, ammo: Infinity, maxAmmo: Infinity, reserveAmmo: Infinity },
       null, null, null, null,
     ],
     activeSlot: 0,
@@ -109,6 +110,59 @@ export function getActiveWeapon(player: Player): WeaponDef | null {
   const slot = player.slots[player.activeSlot]
   if (!slot) return null
   return WEAPONS[slot.weaponId] ?? null
+}
+
+function getReserveMultiplier(rarity: Rarity): number {
+  switch (rarity) {
+    case 'common': return 2
+    case 'uncommon': return 2.6
+    case 'rare': return 3.2
+    case 'epic': return 3.8
+    case 'legendary': return 4.5
+  }
+}
+
+function getPickupReserveAmmo(weaponId: string, rarity: Rarity): number {
+  const weapon = WEAPONS[weaponId]
+  if (!weapon || weapon.isMelee || !Number.isFinite(weapon.magSize)) return 0
+  return Math.max(10, Math.round(weapon.magSize * getReserveMultiplier(rarity)))
+}
+
+export function addAmmoToPlayer(player: Player, amount: number, preferredWeaponId?: string): number {
+  if (amount <= 0) return 0
+  const candidateSlots: InventorySlot[] = []
+
+  const pushSlot = (slot: InventorySlot | null) => {
+    if (!slot) return
+    const weapon = WEAPONS[slot.weaponId]
+    if (!weapon || weapon.isMelee || !Number.isFinite(slot.reserveAmmo)) return
+    candidateSlots.push(slot)
+  }
+
+  if (preferredWeaponId) {
+    for (const slot of player.slots) {
+      if (slot?.weaponId === preferredWeaponId) pushSlot(slot)
+    }
+  }
+
+  for (const slot of player.slots) {
+    if (slot && slot.weaponId !== preferredWeaponId) pushSlot(slot)
+  }
+
+  if (candidateSlots.length === 0) return 0
+
+  const split = Math.max(1, Math.floor(amount / candidateSlots.length))
+  let granted = 0
+  for (let i = 0; i < candidateSlots.length; i++) {
+    const slot = candidateSlots[i]
+    const remaining = amount - granted
+    if (remaining <= 0) break
+    const bundle = i === candidateSlots.length - 1 ? remaining : Math.min(remaining, split)
+    slot.reserveAmmo += bundle
+    granted += bundle
+  }
+
+  return granted
 }
 
 function getConsumableCap(itemId: ConsumableId): number {
@@ -429,13 +483,18 @@ export function updatePlayer(
     const weapon = getActiveWeapon(player)
     const slot = player.slots[player.activeSlot]
     if (weapon && slot && !player.reloading) {
-      const interval = 1 / weapon.fireRate
-      if (now - player.lastFireTime >= interval && slot.ammo > 0) {
-        player.lastFireTime = now
-        if (!weapon.isMelee) {
-          slot.ammo--
+      if (!weapon.isMelee && slot.ammo <= 0 && slot.reserveAmmo > 0) {
+        player.reloading = true
+        player.reloadStart = now
+      } else {
+        const interval = 1 / weapon.fireRate
+        if (now - player.lastFireTime >= interval && slot.ammo > 0) {
+          player.lastFireTime = now
+          if (!weapon.isMelee) {
+            slot.ammo--
+          }
+          fired = true
         }
-        fired = true
       }
     }
   }
@@ -444,7 +503,14 @@ export function updatePlayer(
   if (input.justPressed.has('r') && !player.buildMode) {
     const weapon = getActiveWeapon(player)
     const slot = player.slots[player.activeSlot]
-    if (weapon && slot && !weapon.isMelee && slot.ammo < slot.maxAmmo && !player.reloading) {
+    if (
+      weapon
+      && slot
+      && !weapon.isMelee
+      && slot.ammo < slot.maxAmmo
+      && slot.reserveAmmo > 0
+      && !player.reloading
+    ) {
       player.reloading = true
       player.reloadStart = now
     }
@@ -454,7 +520,10 @@ export function updatePlayer(
     const weapon = getActiveWeapon(player)
     const slot = player.slots[player.activeSlot]
     if (weapon && slot && now - player.reloadStart >= weapon.reloadTime) {
-      slot.ammo = slot.maxAmmo
+      const needed = slot.maxAmmo - slot.ammo
+      const loaded = Math.max(0, Math.min(needed, slot.reserveAmmo))
+      slot.ammo += loaded
+      slot.reserveAmmo -= loaded
       player.reloading = false
     }
   }
@@ -479,6 +548,7 @@ export function tryPickupWeapon(
         rarity,
         ammo: wep.magSize,
         maxAmmo: wep.magSize,
+        reserveAmmo: getPickupReserveAmmo(weaponId, rarity),
       }
       player.activeSlot = i
       player.itemsCollected++
@@ -495,6 +565,7 @@ export function tryPickupWeapon(
       rarity,
       ammo: wep.magSize,
       maxAmmo: wep.magSize,
+      reserveAmmo: getPickupReserveAmmo(weaponId, rarity),
     }
     player.itemsCollected++
     return true

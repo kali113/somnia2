@@ -46,8 +46,8 @@ export function createBot(id: number, x: number, y: number): Bot {
     alive: true,
     name,
     slots: [
-      { weaponId: 'pickaxe', rarity: 'common' as Rarity, ammo: Infinity, maxAmmo: Infinity },
-      { weaponId: wepId, rarity, ammo: wep.magSize, maxAmmo: wep.magSize },
+      { weaponId: 'pickaxe', rarity: 'common' as Rarity, ammo: Infinity, maxAmmo: Infinity, reserveAmmo: Infinity },
+      { weaponId: wepId, rarity, ammo: wep.magSize, maxAmmo: wep.magSize, reserveAmmo: Math.round(wep.magSize * 2.5) },
       null, null, null,
     ],
     activeSlot: 1,
@@ -179,6 +179,7 @@ export function updateBot(
                   rarity: loot.rarity,
                   ammo: wep.magSize,
                   maxAmmo: wep.magSize,
+                  reserveAmmo: Math.round(wep.magSize * 3),
                 }
               }
             }
@@ -186,13 +187,6 @@ export function updateBot(
         }
       }
 
-      // Open nearby chests
-      for (const chest of map.chests) {
-        if (chest.opened) continue
-        if (distance(bot.x, bot.y, chest.x, chest.y) < 40) {
-          chest.opened = true
-        }
-      }
       break
     }
 
@@ -226,12 +220,15 @@ export function updateBot(
           const wep = WEAPONS[slot.weaponId]
           if (wep) {
             // Reload if empty
-            if (slot.ammo <= 0 && !bot.reloading) {
+            if (slot.ammo <= 0 && slot.reserveAmmo > 0 && !bot.reloading) {
               bot.reloading = true
               bot.reloadStart = now
             }
             if (bot.reloading && now - bot.reloadStart >= wep.reloadTime) {
-              slot.ammo = slot.maxAmmo
+              const needed = slot.maxAmmo - slot.ammo
+              const loaded = Math.max(0, Math.min(needed, slot.reserveAmmo))
+              slot.ammo += loaded
+              slot.reserveAmmo -= loaded
               bot.reloading = false
             }
 

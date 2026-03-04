@@ -3,21 +3,22 @@
 import {
   MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, BOT_COUNT, COLORS,
   WEAPONS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST, CONSUMABLE_LOOT_RARITY,
+  CHEST_INTERACT_RANGE, CHEST_GLOW_RANGE,
   POI_DEFS, TILE_SIZE,
-  type Rarity, type ConsumableId,
+  type Rarity, type ConsumableId, type ChestType,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
-import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type GameMap } from './map'
+import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type ChestObj, type GameMap } from './map'
 import {
-  createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, tryPickupConsumable,
+  createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, tryPickupConsumable, addAmmoToPlayer,
   takeDamage, getBuildPlacement, canPlaceBuild, selectBestConsumable,
   startConsumableUse, cancelConsumableUse, completeConsumableUseIfReady, type Player,
 } from './player'
 import { createBot, updateBot, processBotHit, type Bot } from './bot'
 import { createStorm, updateStorm, isInStorm, renderStorm, renderStormMinimap, type StormState } from './storm'
 import { createParticleSystem, updateParticles, renderParticles, emitSparks, emitHitMarker, emitElimination, type ParticleSystem } from './particles'
-import { drawPlayer, drawBullet, drawLootItem, drawSupplyDrop, drawMinimapDot, drawBuildPiece as drawBuildPieceSprite } from './sprites'
+import { drawPlayer, drawBullet, drawLootItem, drawAmmoPack, drawSupplyDrop, drawMinimapDot, drawBuildPiece as drawBuildPieceSprite } from './sprites'
 import { distance, angleBetween, circleOverlap, type AABB } from './collision'
 import { playShot, playHit, playElim, playChestOpen, playPickup, playBuild, playVictory, playEliminated, playSupplyDrop } from './audio'
 
@@ -53,6 +54,24 @@ export interface KillFeedEntry {
   time: number
 }
 
+export type ChestRewardKind = 'weapon' | 'consumable' | 'ammo'
+
+export interface ChestPromptState {
+  key: 'E'
+  chestType: ChestType
+  chestId: number
+}
+
+export interface ChestOpenResult {
+  mapSeed: number
+  chestId: number
+  chestType: ChestType
+  roll: number
+  rewardType: ChestRewardKind
+  rewardId: string
+  rewardAmount: number
+}
+
 // ── Game State ──────────────────────────────────────────────────────────────
 
 export type GamePhase = 'lobby' | 'dropping' | 'playing' | 'victory' | 'eliminated'
@@ -74,6 +93,8 @@ export interface GameState {
   placement: number
   lobbyTimer: number
   dropTimer: number
+  activeChestId: number | null
+  promptChestId: number | null
 
   // Callbacks for React UI
   onKillFeedUpdate?: (feed: KillFeedEntry[]) => void
@@ -82,17 +103,20 @@ export interface GameState {
   onPlayerUpdate?: (player: Player) => void
   onStormUpdate?: (storm: StormState) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
+  onChestPromptUpdate?: (prompt: ChestPromptState | null) => void
+  onChestOpened?: (result: ChestOpenResult) => void
 }
 
 // ── Initialize ──────────────────────────────────────────────────────────────
 
-export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number }): GameState {
+export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number; mapSeed?: number }): GameState {
   const input = createInputState()
   const cleanup = setupInput(canvas, input)
   const botCount = Math.max(1, Math.floor(options?.botCount ?? BOT_COUNT))
+  const mapSeed = Math.max(1, Math.floor(options?.mapSeed ?? (Date.now() % 1000000)))
 
   const camera = createCamera(canvas.width, canvas.height)
-  const map = generateMap(Date.now() % 10000)
+  const map = generateMap(mapSeed)
 
   // Spawn player at random land position
   const px = MAP_WIDTH * 0.3 + Math.random() * MAP_WIDTH * 0.4
@@ -127,6 +151,8 @@ export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: numbe
     placement: 0,
     lobbyTimer: 10,
     dropTimer: 0,
+    activeChestId: null,
+    promptChestId: null,
   }
 
   // Store cleanup on canvas for later
@@ -140,18 +166,178 @@ function randomWeaponId(): string {
   return weaponIds[Math.floor(Math.random() * weaponIds.length)]
 }
 
-function randomConsumableId(): ConsumableId {
-  const roll = Math.random()
-  if (roll < 0.45) return 'bandage'
-  if (roll < 0.75) return 'mini_shield'
-  if (roll < 0.90) return 'shield_potion'
-  return 'medkit'
+function weightedPick<T>(options: Array<{ value: T; weight: number }>): T {
+  const total = options.reduce((sum, option) => sum + option.weight, 0)
+  let roll = Math.random() * total
+  for (const option of options) {
+    roll -= option.weight
+    if (roll <= 0) return option.value
+  }
+  return options[options.length - 1].value
+}
+
+function getNearbyChest(state: GameState): ChestObj | null {
+  let nearest: ChestObj | null = null
+  let nearestDist = Infinity
+  for (const chest of state.map.chests) {
+    if (chest.opened) continue
+    const d = distance(state.player.x, state.player.y, chest.x, chest.y)
+    if (d > CHEST_GLOW_RANGE || d >= nearestDist) continue
+    nearest = chest
+    nearestDist = d
+  }
+  return nearest
+}
+
+function resolveChestReward(state: GameState, chest: ChestObj, roll: number): ChestOpenResult {
+  const weaponRarityRoll = () => (
+    chest.type === 'rare'
+      ? weightedPick<Rarity>([
+        { value: 'uncommon', weight: 20 },
+        { value: 'rare', weight: 42 },
+        { value: 'epic', weight: 28 },
+        { value: 'legendary', weight: 10 },
+      ])
+      : weightedPick<Rarity>([
+        { value: 'common', weight: 34 },
+        { value: 'uncommon', weight: 36 },
+        { value: 'rare', weight: 20 },
+        { value: 'epic', weight: 8 },
+        { value: 'legendary', weight: 2 },
+      ])
+  )
+
+  const ammoDropAmount = chest.type === 'rare'
+    ? 70 + Math.floor(Math.random() * 50)
+    : 32 + Math.floor(Math.random() * 36)
+
+  const resultByType = chest.type === 'rare'
+    ? (roll < 7000 ? 'weapon' : roll < 9000 ? 'consumable' : 'ammo')
+    : (roll < 5600 ? 'weapon' : roll < 8600 ? 'consumable' : 'ammo')
+
+  if (resultByType === 'weapon') {
+    const weaponId = weightedPick<string>([
+      { value: 'ar', weight: 30 },
+      { value: 'smg', weight: 28 },
+      { value: 'shotgun', weight: 26 },
+      { value: 'sniper', weight: 16 },
+    ])
+    const rarity = weaponRarityRoll()
+    state.map.floorLoot.push({
+      kind: 'weapon',
+      x: chest.x + (Math.random() - 0.5) * 30,
+      y: chest.y + 18,
+      weaponId,
+      rarity,
+      picked: false,
+    })
+    state.map.floorLoot.push({
+      kind: 'ammo',
+      x: chest.x + (Math.random() - 0.5) * 28,
+      y: chest.y - 14,
+      amount: ammoDropAmount,
+      rarity,
+      weaponId,
+      picked: false,
+    })
+
+    return {
+      mapSeed: state.map.seed,
+      chestId: chest.id,
+      chestType: chest.type,
+      roll,
+      rewardType: 'weapon',
+      rewardId: `${weaponId}:${rarity}`,
+      rewardAmount: 1,
+    }
+  }
+
+  if (resultByType === 'consumable') {
+    const itemId = weightedPick<ConsumableId>([
+      { value: 'bandage', weight: chest.type === 'rare' ? 20 : 42 },
+      { value: 'mini_shield', weight: chest.type === 'rare' ? 28 : 34 },
+      { value: 'shield_potion', weight: chest.type === 'rare' ? 30 : 18 },
+      { value: 'medkit', weight: chest.type === 'rare' ? 22 : 6 },
+    ])
+
+    state.map.floorLoot.push({
+      kind: 'consumable',
+      x: chest.x + (Math.random() - 0.5) * 24,
+      y: chest.y + 12,
+      itemId,
+      rarity: CONSUMABLE_LOOT_RARITY[itemId],
+      picked: false,
+    })
+    if (chest.type === 'rare' && Math.random() < 0.35) {
+      const bonus = weightedPick<ConsumableId>([
+        { value: 'mini_shield', weight: 45 },
+        { value: 'shield_potion', weight: 35 },
+        { value: 'medkit', weight: 20 },
+      ])
+      state.map.floorLoot.push({
+        kind: 'consumable',
+        x: chest.x + (Math.random() - 0.5) * 24,
+        y: chest.y - 10,
+        itemId: bonus,
+        rarity: CONSUMABLE_LOOT_RARITY[bonus],
+        picked: false,
+      })
+    }
+
+    return {
+      mapSeed: state.map.seed,
+      chestId: chest.id,
+      chestType: chest.type,
+      roll,
+      rewardType: 'consumable',
+      rewardId: itemId,
+      rewardAmount: 1,
+    }
+  }
+
+  const preferredWeapon = weightedPick<string>([
+    { value: 'ar', weight: 35 },
+    { value: 'smg', weight: 35 },
+    { value: 'shotgun', weight: 20 },
+    { value: 'sniper', weight: 10 },
+  ])
+  state.map.floorLoot.push({
+    kind: 'ammo',
+    x: chest.x + (Math.random() - 0.5) * 26,
+    y: chest.y + 10,
+    amount: ammoDropAmount,
+    rarity: chest.type === 'rare' ? 'epic' : 'uncommon',
+    weaponId: preferredWeapon,
+    picked: false,
+  })
+
+  return {
+    mapSeed: state.map.seed,
+    chestId: chest.id,
+    chestType: chest.type,
+    roll,
+    rewardType: 'ammo',
+    rewardId: preferredWeapon,
+    rewardAmount: ammoDropAmount,
+  }
+}
+
+function openChest(state: GameState, chest: ChestObj): ChestOpenResult {
+  chest.opened = true
+  playChestOpen()
+
+  const roll = Math.floor(Math.random() * 10000)
+  const result = resolveChestReward(state, chest, roll)
+  state.player.wood += chest.type === 'rare' ? 40 : 22
+  state.player.stone += chest.type === 'rare' ? 28 : 14
+  return result
 }
 
 function actionCancelsConsumableUse(state: GameState): boolean {
   const { input, player } = state
   if (input.mouseDown) return true
   if (input.justPressed.has('r')) return true
+  if (input.justPressed.has('e')) return true
   if (input.scrollDelta !== 0) return true
   for (let i = 1; i <= 5; i++) {
     if (input.justPressed.has(String(i))) return true
@@ -240,7 +426,9 @@ export function updateGame(state: GameState, dt: number) {
     if (distance(state.player.x, state.player.y, loot.x, loot.y) < 30) {
       const picked = loot.kind === 'weapon'
         ? tryPickupWeapon(state.player, loot.weaponId, loot.rarity)
-        : tryPickupConsumable(state.player, loot.itemId)
+        : loot.kind === 'consumable'
+          ? tryPickupConsumable(state.player, loot.itemId)
+          : addAmmoToPlayer(state.player, loot.amount, loot.weaponId) > 0
       if (picked) {
         loot.picked = true
         playPickup()
@@ -248,36 +436,29 @@ export function updateGame(state: GameState, dt: number) {
     }
   }
 
-  for (const chest of state.map.chests) {
-    if (chest.opened) continue
-    if (distance(state.player.x, state.player.y, chest.x, chest.y) < 35) {
-      chest.opened = true
-      playChestOpen()
-      // Spawn loot near chest
-      const rarities: Rarity[] = ['uncommon', 'rare', 'epic']
-      const wId = randomWeaponId()
-      const r = rarities[Math.floor(Math.random() * rarities.length)]
-      state.map.floorLoot.push({
-        kind: 'weapon',
-        x: chest.x + (Math.random() - 0.5) * 30,
-        y: chest.y + 20,
-        weaponId: wId,
-        rarity: r,
-        picked: false,
+  const nearbyChest = getNearbyChest(state)
+  state.activeChestId = nearbyChest?.id ?? null
+
+  const canOpenChest = !!nearbyChest
+    && !state.player.buildMode
+    && distance(state.player.x, state.player.y, nearbyChest.x, nearbyChest.y) <= CHEST_INTERACT_RANGE
+
+  if (nearbyChest && canOpenChest) {
+    if (state.promptChestId !== nearbyChest.id) {
+      state.promptChestId = nearbyChest.id
+      state.onChestPromptUpdate?.({
+        key: 'E',
+        chestType: nearbyChest.type,
+        chestId: nearbyChest.id,
       })
-      const itemId = randomConsumableId()
-      state.map.floorLoot.push({
-        kind: 'consumable',
-        x: chest.x + (Math.random() - 0.5) * 28,
-        y: chest.y - 16,
-        itemId,
-        rarity: CONSUMABLE_LOOT_RARITY[itemId],
-        picked: false,
-      })
-      // Add materials
-      state.player.wood += 30
-      state.player.stone += 20
     }
+    if (state.input.justPressed.has('e')) {
+      const result = openChest(state, nearbyChest)
+      state.onChestOpened?.(result)
+    }
+  } else if (state.promptChestId !== null) {
+    state.promptChestId = null
+    state.onChestPromptUpdate?.(null)
   }
 
   // ── Pickup supply drops ──────────────────────────────────────────────
@@ -711,7 +892,10 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
   ctx.clearRect(0, 0, cam.width, cam.height)
 
   // ── Map ───────────────────────────────────────────────────────────────
-  renderMap(ctx, map, cam)
+  renderMap(ctx, map, cam, {
+    highlightedChestId: state.activeChestId,
+    time: state.time,
+  })
 
   // ── Floor loot ────────────────────────────────────────────────────────
   for (const loot of map.floorLoot) {
@@ -719,6 +903,10 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     const sx = loot.x - cam.x
     const sy = loot.y - cam.y
     if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
+    if (loot.kind === 'ammo') {
+      drawAmmoPack(ctx, sx, sy, state.time)
+      continue
+    }
     drawLootItem(ctx, sx, sy, loot.rarity, loot.kind === 'weapon', state.time)
   }
 

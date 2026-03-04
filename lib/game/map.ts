@@ -4,8 +4,9 @@ import {
   TILE_SIZE, MAP_TILES_X, MAP_TILES_Y, MAP_WIDTH, MAP_HEIGHT,
   POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS, MINIMAP_SIZE,
   CONSUMABLE_LOOT_RARITY,
+  NORMAL_CHEST_APPEAR_RATE, CHEST_BUILDING_SPAWN_WEIGHT,
   type BuildMaterial, type BuildPieceId,
-  type Rarity, type ConsumableId,
+  type Rarity, type ConsumableId, type ChestType,
 } from './constants'
 import { drawTree, drawRock, drawCar, drawChest, drawBuildPiece } from './sprites'
 import type { AABB } from './collision'
@@ -40,8 +41,11 @@ export interface CarObj {
 }
 
 export interface ChestObj {
+  id: number
   x: number; y: number
   opened: boolean
+  type: ChestType
+  spawnArea: 'building' | 'wild'
 }
 
 interface FloorLootBase {
@@ -60,7 +64,13 @@ export interface ConsumableFloorLoot extends FloorLootBase {
   itemId: ConsumableId
 }
 
-export type FloorLoot = WeaponFloorLoot | ConsumableFloorLoot
+export interface AmmoFloorLoot extends FloorLootBase {
+  kind: 'ammo'
+  amount: number
+  weaponId?: string
+}
+
+export type FloorLoot = WeaponFloorLoot | ConsumableFloorLoot | AmmoFloorLoot
 
 export interface BuildingRect extends AABB {
   hasDoor: boolean
@@ -80,6 +90,7 @@ export interface PlayerBuild extends AABB {
 // ── GameMap ─────────────────────────────────────────────────────────────────
 
 export interface GameMap {
+  seed: number
   tiles: Uint8Array
   trees: TreeObj[]
   rocks: RockObj[]
@@ -115,6 +126,20 @@ function islandFalloff(tx: number, ty: number): number {
   return Math.max(0, 1 - dist / maxDist)
 }
 
+function randomChestType(rng: () => number): ChestType {
+  return rng() < NORMAL_CHEST_APPEAR_RATE ? 'normal' : 'rare'
+}
+
+function isChestTooClose(chests: ChestObj[], x: number, y: number, minDistance: number): boolean {
+  const minDistSq = minDistance * minDistance
+  for (const chest of chests) {
+    const dx = chest.x - x
+    const dy = chest.y - y
+    if (dx * dx + dy * dy < minDistSq) return true
+  }
+  return false
+}
+
 // ── Generate ────────────────────────────────────────────────────────────────
 
 export function generateMap(seed = 42): GameMap {
@@ -128,6 +153,8 @@ export function generateMap(seed = 42): GameMap {
   const buildings: BuildingRect[] = []
   const wallColliders: AABB[] = []
   const poiLabels: { name: string; x: number; y: number }[] = []
+  const buildingChestSpots: Array<{ x: number; y: number }> = []
+  let nextChestId = 1
 
   // 1) Base terrain
   for (let ty = 0; ty < MAP_TILES_Y; ty++) {
@@ -240,27 +267,68 @@ export function generateMap(seed = 42): GameMap {
         wallColliders.push({ x: rect.x + rect.w - 4, y: rect.y, w: 4, h: rect.h })
       }
 
-      // Chest inside building
-      chests.push({
+      // Candidate chest spawn inside building
+      buildingChestSpots.push({
         x: rect.x + rect.w / 2 + (rng() - 0.5) * rect.w * 0.4,
         y: rect.y + rect.h / 2 + (rng() - 0.5) * rect.h * 0.4,
-        opened: false,
       })
     }
   }
 
-  // 4) Extra chests in wilderness
-  while (chests.length < CHEST_SPAWN_COUNT) {
+  // 4) Chest pass (weighted toward buildings, with wild fallback)
+  let chestAttempts = 0
+  const maxChestAttempts = CHEST_SPAWN_COUNT * 20
+  while (chests.length < CHEST_SPAWN_COUNT && chestAttempts < maxChestAttempts) {
+    chestAttempts++
+    const shouldUseBuilding = buildingChestSpots.length > 0
+      && (rng() < CHEST_BUILDING_SPAWN_WEIGHT || chestAttempts > maxChestAttempts * 0.75)
+
+    if (shouldUseBuilding) {
+      const idx = Math.floor(rng() * buildingChestSpots.length)
+      const spot = buildingChestSpots.splice(idx, 1)[0]
+      if (!isChestTooClose(chests, spot.x, spot.y, 42)) {
+        chests.push({
+          id: nextChestId++,
+          x: spot.x,
+          y: spot.y,
+          opened: false,
+          type: randomChestType(rng),
+          spawnArea: 'building',
+        })
+      }
+      continue
+    }
+
     const cx = 100 + rng() * (MAP_WIDTH - 200)
     const cy = 100 + rng() * (MAP_HEIGHT - 200)
     const tx = Math.floor(cx / TILE_SIZE)
     const ty = Math.floor(cy / TILE_SIZE)
-    if (tx >= 0 && tx < MAP_TILES_X && ty >= 0 && ty < MAP_TILES_Y) {
-      const t = tiles[ty * MAP_TILES_X + tx]
-      if (t === TileType.Grass || t === TileType.Sand) {
-        chests.push({ x: cx, y: cy, opened: false })
-      }
-    }
+    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) continue
+    const tile = tiles[ty * MAP_TILES_X + tx]
+    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) continue
+    if (isChestTooClose(chests, cx, cy, 42)) continue
+
+    chests.push({
+      id: nextChestId++,
+      x: cx,
+      y: cy,
+      opened: false,
+      type: randomChestType(rng),
+      spawnArea: 'wild',
+    })
+  }
+
+  while (chests.length < CHEST_SPAWN_COUNT) {
+    const cx = 100 + rng() * (MAP_WIDTH - 200)
+    const cy = 100 + rng() * (MAP_HEIGHT - 200)
+    chests.push({
+      id: nextChestId++,
+      x: cx,
+      y: cy,
+      opened: false,
+      type: randomChestType(rng),
+      spawnArea: 'wild',
+    })
   }
 
   // 5) Trees
@@ -348,6 +416,7 @@ export function generateMap(seed = 42): GameMap {
   const minimapCanvas = buildMinimapCanvas(tiles, buildings, trees, rocks, cars)
 
   return {
+    seed,
     tiles, trees, rocks, cars, chests, floorLoot,
     buildings, playerBuilds: [], wallColliders, poiLabels, minimapCanvas,
   }
@@ -424,7 +493,12 @@ function buildMinimapCanvas(
 
 // ── Render Map ──────────────────────────────────────────────────────────────
 
-export function renderMap(ctx: CanvasRenderingContext2D, map: GameMap, cam: Camera) {
+export function renderMap(
+  ctx: CanvasRenderingContext2D,
+  map: GameMap,
+  cam: Camera,
+  options?: { highlightedChestId?: number | null; time?: number },
+) {
   const startTX = Math.max(0, Math.floor(cam.x / TILE_SIZE) - 1)
   const startTY = Math.max(0, Math.floor(cam.y / TILE_SIZE) - 1)
   const endTX = Math.min(MAP_TILES_X, Math.ceil((cam.x + cam.width) / TILE_SIZE) + 1)
@@ -531,7 +605,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, map: GameMap, cam: Came
     const sx = c.x - cam.x
     const sy = c.y - cam.y
     if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
-    drawChest(ctx, sx, sy, c.opened)
+    drawChest(
+      ctx,
+      sx,
+      sy,
+      c.opened,
+      c.type,
+      options?.highlightedChestId === c.id,
+      options?.time ?? 0,
+    )
   }
 
   // POI Labels
