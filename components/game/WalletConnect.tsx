@@ -4,6 +4,24 @@ import { useState, useCallback } from 'react'
 import { SOMNIA_TESTNET } from '@/lib/somnia/config'
 import { Wallet, ExternalLink, Check, X } from 'lucide-react'
 
+function getMetaMaskProvider() {
+  const ethereum = (window as any).ethereum
+  if (!ethereum) return null
+
+  if (Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
+    const strictMetaMask = ethereum.providers.find(
+      (provider: any) => provider?.isMetaMask && !provider?.isTrust && !provider?.isTrustWallet,
+    )
+    if (strictMetaMask) return strictMetaMask
+
+    const fallbackMetaMask = ethereum.providers.find((provider: any) => provider?.isMetaMask)
+    if (fallbackMetaMask) return fallbackMetaMask
+  }
+
+  if (ethereum.isMetaMask) return ethereum
+  return null
+}
+
 interface WalletConnectProps {
   onConnect: (address: string) => void
   onDisconnect: () => void
@@ -22,16 +40,15 @@ export default function WalletConnect({
     setError(null)
 
     try {
-      // Check if MetaMask (or compatible wallet) is available
-      const ethereum = (window as any).ethereum
-      if (!ethereum) {
-        setError('No wallet found. Install MetaMask to connect to Somnia Testnet.')
+      const provider = getMetaMaskProvider()
+      if (!provider) {
+        setError('MetaMask not found. Please install MetaMask and disable Trust Wallet auto-injection.')
         setConnecting(false)
         return
       }
 
       // Request accounts
-      const accounts = await ethereum.request({ method: 'eth_requestAccounts' })
+      const accounts = await provider.request({ method: 'eth_requestAccounts' })
       if (!accounts || accounts.length === 0) {
         setError('No accounts available')
         setConnecting(false)
@@ -40,14 +57,14 @@ export default function WalletConnect({
 
       // Try to switch to Somnia Testnet
       try {
-        await ethereum.request({
+        await provider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: `0x${SOMNIA_TESTNET.id.toString(16)}` }],
         })
       } catch (switchErr: any) {
         // Chain not added, try to add it
         if (switchErr.code === 4902) {
-          await ethereum.request({
+          await provider.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: `0x${SOMNIA_TESTNET.id.toString(16)}`,

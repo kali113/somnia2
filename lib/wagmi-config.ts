@@ -33,7 +33,7 @@ export const somniaTestnet = defineChain({
 export const wagmiConfig = createConfig({
   chains: [somniaTestnet],
   connectors: [
-    injected(), // MetaMask, Rabby, etc.
+    injected({ target: 'metaMask' }),
   ],
   transports: {
     [somniaTestnet.id]: http(SOMNIA_TESTNET.rpcUrls.default.http[0]),

@@ -42,6 +42,10 @@ export default function WalletPanel() {
 
   const [copied, setCopied] = useState(false)
 
+  const metaMaskConnector =
+    connectors.find((connector) => connector.id === 'metaMask') ||
+    connectors.find((connector) => /meta\s?mask/i.test(connector.name))
+
   const copyAddress = useCallback(() => {
     if (!address) return
     navigator.clipboard.writeText(address)
@@ -63,14 +67,14 @@ export default function WalletPanel() {
         </div>
         <button
           onClick={() => {
-            if (connectors[0]) {
-              connect({ connector: connectors[0] })
+            if (metaMaskConnector) {
+              connect({ connector: metaMaskConnector, chainId: somniaTestnet.id })
             }
           }}
-          disabled={!connectors[0]}
+          disabled={!metaMaskConnector}
           className="w-full rounded-lg bg-[#3ae8ff] px-4 py-3 font-mono font-bold text-sm text-[#050508] transition-all hover:scale-[1.02] active:scale-95"
         >
-          {connectors[0] ? 'Connect MetaMask' : 'No Wallet Found'}
+          {metaMaskConnector ? 'Connect MetaMask' : 'MetaMask Not Found'}
         </button>
       </div>
     )
