@@ -3,6 +3,17 @@
  * For a production app, replace with a database (Postgres, SQLite, etc.)
  */
 
+export type GameMode = 'solo' | 'duo' | 'squad'
+const TEAM_SIZES: Record<GameMode, number> = { solo: 1, duo: 2, squad: 4 }
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size))
+  }
+  return chunks
+}
+
 export interface StoredGameResult {
   gameId: number
   timestamp: number
@@ -49,11 +60,14 @@ export interface MatchRecord {
   endedAt: number | null // unix seconds
   winner: string | null
   txHash: string | null
+  mode?: GameMode
+  teams?: string[][]
 }
 
 export class GameStore {
   private games: Map<number, StoredGameResult> = new Map()
   private players: Map<string, PlayerRecord> = new Map()
+  private playerModes: Map<string, GameMode> = new Map()
 
   private queuePlayers: string[] = []
   private queueOpenedAt: number | null = null
@@ -108,6 +122,23 @@ export class GameStore {
     return nowSec >= this.queueOpenedAt + this.queueTimeoutSec
   }
 
+  // ── Mode preferences ─────────────────────────────────────────────────────
+
+  setPlayerMode(address: string, mode: GameMode): void {
+    this.playerModes.set(address.toLowerCase(), mode)
+  }
+
+  getMatchMode(players: string[]): GameMode {
+    const votes: Record<GameMode, number> = { solo: 0, duo: 0, squad: 0 }
+    for (const p of players) {
+      const mode = this.playerModes.get(p.toLowerCase())
+      if (mode) votes[mode]++
+    }
+    if (votes.squad >= votes.duo && votes.squad >= votes.solo) return 'squad'
+    if (votes.duo >= votes.solo) return 'duo'
+    return 'solo'
+  }
+
   // ── Matchmaking lifecycle ────────────────────────────────────────────────
 
   recordMatchStarted(input: {
@@ -116,9 +147,13 @@ export class GameStore {
     prizePool: string
     startedAt: number
     txHash: string | null
+    mode?: GameMode
   }): MatchRecord {
     const playerAddresses = input.players.map((p) => p.toLowerCase())
     const existing = this.matches.get(input.gameId)
+    const mode: GameMode = input.mode ?? this.getMatchMode(playerAddresses)
+    const teamSize = TEAM_SIZES[mode]
+    const teams = chunkArray(playerAddresses, teamSize)
 
     const match: MatchRecord = {
       matchId: input.gameId,
@@ -133,6 +168,8 @@ export class GameStore {
       endedAt: null,
       winner: null,
       txHash: input.txHash,
+      mode,
+      teams,
     }
 
     this.matches.set(match.matchId, match)

@@ -1,5 +1,8 @@
 // ── Game Constants ──────────────────────────────────────────────────────────
 
+export type GameMode = 'solo' | 'duo' | 'squad'
+export const TEAM_SIZES: Record<GameMode, number> = { solo: 1, duo: 2, squad: 4 }
+
 export const TILE_SIZE = 32
 export const MAP_TILES_X = 100
 export const MAP_TILES_Y = 100

@@ -2,6 +2,7 @@
 
 import type { GamePhase } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
+import type { GameMode } from '@/lib/game/constants'
 import { Swords, Timer, Target } from 'lucide-react'
 
 interface VictoryScreenProps {
@@ -9,12 +10,13 @@ interface VictoryScreenProps {
   player: Player | null
   placement: number
   gameTime: number
+  mode?: GameMode
   onPlayAgain: () => void
   onBackToMenu: () => void
 }
 
 export default function VictoryScreen({
-  phase, player, placement, gameTime, onPlayAgain, onBackToMenu,
+  phase, player, placement, gameTime, mode, onPlayAgain, onBackToMenu,
 }: VictoryScreenProps) {
   if (phase !== 'victory' && phase !== 'eliminated') return null
   const isVictory = phase === 'victory'
@@ -39,7 +41,7 @@ export default function VictoryScreen({
                   WebkitBackgroundClip: 'text',
                 }}
               >
-                VICTORY ROYALE
+                {mode === 'duo' ? 'DUO VICTORY' : mode === 'squad' ? 'SQUAD VICTORY' : 'VICTORY ROYALE'}
               </h1>
               <p className="mt-2 text-lg font-mono text-[#ffd700]">#1</p>
             </>

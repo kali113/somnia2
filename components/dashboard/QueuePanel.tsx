@@ -29,12 +29,26 @@ import { restoreSessionWallet, SESSION_UPDATED_EVENT } from '@/lib/somnia/sessio
 import { Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
 import { useEffect, useCallback, useState } from 'react'
 import { formatEther, type Address } from 'viem'
+import type { GameMode } from '@/lib/game/constants'
 
 export default function QueuePanel() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const isOnSomnia = chainId === somniaTestnet.id
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
+  const [selectedMode, setSelectedMode] = useState<GameMode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('preferredGameMode') as GameMode) ?? 'solo'
+    }
+    return 'solo'
+  })
+
+  const handleModeSelect = useCallback((mode: GameMode) => {
+    setSelectedMode(mode)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('preferredGameMode', mode)
+    }
+  }, [])
 
   const {
     data: balance,
@@ -170,6 +184,29 @@ export default function QueuePanel() {
             Entry: {formatEther(ENTRY_FEE)} STT • Min balance: {formatEther(MIN_QUEUE_BALANCE)} STT
           </p>
         </div>
+      </div>
+
+      {/* Mode Selector */}
+      <div className="mb-4">
+        <span className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] uppercase mb-2 block">Game Mode</span>
+        <div className="flex gap-2">
+          {(['solo', 'duo', 'squad'] as GameMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => handleModeSelect(mode)}
+              className={`flex-1 rounded-lg px-3 py-2 font-mono font-bold text-xs transition-all ${
+                selectedMode === mode
+                  ? 'bg-[rgba(255,215,0,0.2)] border border-[rgba(255,215,0,0.5)] text-[#ffd700]'
+                  : 'bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)] hover:border-[rgba(255,215,0,0.2)] hover:text-[rgba(255,255,255,0.7)]'
+              }`}
+            >
+              {mode.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] mt-1">
+          {selectedMode === 'solo' ? '1 player per team' : selectedMode === 'duo' ? '2 players per team' : '4 players per team'}
+        </p>
       </div>
 
       {/* Queue Progress */}

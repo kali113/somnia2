@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { GameState, GamePhase, KillFeedEntry, ChestPromptState, ChestOpenResult } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
+import type { GameMode } from '@/lib/game/constants'
 import type { StormState } from '@/lib/game/storm'
 import { createConnectionEvent, type SomniaEvent } from '@/lib/somnia/events'
 import { createReactivityConnection } from '@/lib/somnia/reactivity'
@@ -40,6 +41,16 @@ function GamePageInner() {
   const matchIdParam = searchParams.get('matchId')
   const parsedMatchId = matchIdParam ? Number(matchIdParam) : NaN
   const isMatchMode = Number.isFinite(parsedMatchId)
+
+  const gameMode: GameMode = (() => {
+    const modeParam = searchParams.get('mode') as GameMode | null
+    if (modeParam === 'duo' || modeParam === 'squad') return modeParam
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('preferredGameMode') as GameMode | null
+      if (stored === 'duo' || stored === 'squad') return stored
+    }
+    return 'solo'
+  })()
 
   const [match, setMatch] = useState<MatchRecord | null>(null)
   const [matchError, setMatchError] = useState<string | null>(null)
@@ -218,6 +229,7 @@ function GamePageInner() {
         onChestOpened={handleChestOpened}
         gameStateRef={gameStateRef}
         botCount={botCount}
+        mode={gameMode}
       />
 
       <GameHUD
@@ -236,6 +248,7 @@ function GamePageInner() {
         player={player}
         placement={placement}
         gameTime={gameTime}
+        mode={gameMode}
         onPlayAgain={handlePlayAgain}
         onBackToMenu={handleBackToMenu}
       />

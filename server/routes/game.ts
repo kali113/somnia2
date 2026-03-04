@@ -62,13 +62,13 @@ gameRouter.post('/result', async (req, res) => {
         args: [BigInt(gameId), placements, kills.map((k: number) => BigInt(k))],
       })
 
-      console.log(`[game] Submitted result for game #${gameId} on-chain: ${txHash}`)
+      console.log(`[game] Submitted result for game #${Number(gameId)} on-chain: ${txHash}`)
     } catch (e: any) {
       console.error(`[game] Failed to submit on-chain: ${e.message}`)
       // Still record locally even if on-chain submission fails
     }
   } else {
-    console.log(`[game] Recorded game #${gameId} locally (no orchestrator configured)`)
+    console.log(`[game] Recorded game #${Number(gameId)} locally (no orchestrator configured)`)
   }
 
   // Broadcast via WebSocket

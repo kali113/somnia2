@@ -62,6 +62,9 @@ export interface Player {
   consumables: Record<ConsumableId, number>
   activeConsumableUse: ActiveConsumableUse | null
 
+  // Team
+  teamId: number
+
   // Stats
   kills: number
   damageDealt: number
@@ -98,6 +101,7 @@ export function createPlayer(x: number, y: number, name: string): Player {
       mini_shield: 0,
     },
     activeConsumableUse: null,
+    teamId: 0,
     kills: 0,
     damageDealt: 0,
     itemsCollected: 0,

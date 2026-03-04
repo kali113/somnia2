@@ -3,7 +3,7 @@
 import { createWalletClient, custom, encodePacked, keccak256, type Address } from 'viem'
 import type { ChestOpenResult } from '@/lib/game/engine'
 import { SOMNIA_TESTNET } from './config'
-import { PIXEL_ROYALE_ADDRESS, pixelRoyaleAbi, pixelRoyaleConfigured } from './contract'
+import { PIXEL_ROYALE_ADDRESS, pixelRoyaleAbi, IS_PIXEL_ROYALE_CONFIGURED } from './contract'
 
 const CHEST_TYPE_CODE: Record<ChestOpenResult['chestType'], number> = {
   normal: 0,
@@ -26,7 +26,7 @@ function toBytes32FromString(value: string): `0x${string}` {
 }
 
 export async function logChestOpenOnChain(result: ChestOpenResult): Promise<ChestLogResponse> {
-  if (!pixelRoyaleConfigured) {
+  if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return { txHash: null, reason: 'contract_not_configured' }
   }
 

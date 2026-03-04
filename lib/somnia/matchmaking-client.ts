@@ -32,6 +32,8 @@ export interface MatchRecord {
   endedAt: number | null
   winner: string | null
   txHash: string | null
+  mode?: 'solo' | 'duo' | 'squad'
+  teams?: string[][]
 }
 
 export interface MatchmakingMeResponse {

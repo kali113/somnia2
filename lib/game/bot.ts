@@ -30,7 +30,7 @@ export interface Bot extends Player {
   targetEntityId: number
 }
 
-export function createBot(id: number, x: number, y: number): Bot {
+export function createBot(id: number, x: number, y: number, teamId: number = 0): Bot {
   const name = BOT_NAMES[id % BOT_NAMES.length]
   const rarities: Rarity[] = ['common', 'uncommon', 'rare']
   const weaponIds = ['ar', 'shotgun', 'smg', 'sniper']
@@ -68,6 +68,7 @@ export function createBot(id: number, x: number, y: number): Bot {
       mini_shield: 0,
     },
     activeConsumableUse: null,
+    teamId,
     kills: 0,
     damageDealt: 0,
     itemsCollected: 0,
@@ -104,7 +105,7 @@ export function updateBot(
   let nearestThreat: Player | null = null
   let nearestDist = Infinity
 
-  if (player.alive) {
+  if (player.alive && player.teamId !== bot.teamId) {
     const d = distance(bot.x, bot.y, player.x, player.y)
     if (d < bot.sightRange) {
       nearestThreat = player
@@ -114,6 +115,7 @@ export function updateBot(
 
   for (const other of allBots) {
     if (other === bot || !other.alive) continue
+    if (other.teamId === bot.teamId) continue  // skip teammates
     const d = distance(bot.x, bot.y, other.x, other.y)
     if (d < bot.sightRange && d < nearestDist) {
       nearestThreat = other

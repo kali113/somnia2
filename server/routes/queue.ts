@@ -31,3 +31,24 @@ queueRouter.post('/leave', (_req, res) => {
     error: 'Queue mutations moved on-chain. Use contract leaveQueue() from the frontend.',
   })
 })
+
+/**
+ * POST /api/queue/mode
+ * Set a player's preferred game mode (solo | duo | squad).
+ * Body: { address: string, mode: 'solo' | 'duo' | 'squad' }
+ */
+queueRouter.post('/mode', (req, res) => {
+  const store = (req as any).store as GameStore
+  const { address, mode } = req.body as { address?: string; mode?: string }
+
+  if (!address || typeof address !== 'string') {
+    return res.status(400).json({ error: 'address is required' })
+  }
+
+  if (mode !== 'solo' && mode !== 'duo' && mode !== 'squad') {
+    return res.status(400).json({ error: 'mode must be solo, duo, or squad' })
+  }
+
+  store.setPlayerMode(address, mode)
+  return res.json({ ok: true, address: address.toLowerCase(), mode })
+})

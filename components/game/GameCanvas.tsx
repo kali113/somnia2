@@ -8,6 +8,7 @@ import {
 } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
+import type { GameMode } from '@/lib/game/constants'
 import { fetchSomniaRandomSeed } from '@/lib/somnia/random'
 
 interface GameCanvasProps {
@@ -21,6 +22,7 @@ interface GameCanvasProps {
   onChestOpened?: (result: ChestOpenResult) => void
   gameStateRef: React.MutableRefObject<GameState | null>
   botCount?: number
+  mode?: GameMode
 }
 
 export default function GameCanvas({
@@ -34,6 +36,7 @@ export default function GameCanvas({
   onChestOpened,
   gameStateRef,
   botCount,
+  mode,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
@@ -62,7 +65,7 @@ export default function GameCanvas({
       const mapSeed = await fetchSomniaRandomSeed()
       if (cancelled) return
 
-      const state = initGame(canvas, { botCount, mapSeed })
+      const state = initGame(canvas, { botCount, mapSeed, mode })
       gameStateRef.current = state
 
       // Wire up callbacks
@@ -111,7 +114,7 @@ export default function GameCanvas({
     handleResize, onKillFeedUpdate, onAliveCountUpdate,
     onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop,
     onChestPromptUpdate, onChestOpened,
-    gameStateRef, botCount,
+    gameStateRef, botCount, mode,
   ])
 
   return (

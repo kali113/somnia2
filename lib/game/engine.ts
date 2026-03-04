@@ -5,7 +5,8 @@ import {
   WEAPONS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST, CONSUMABLE_LOOT_RARITY,
   CHEST_INTERACT_RANGE, CHEST_GLOW_RANGE,
   POI_DEFS, TILE_SIZE,
-  type Rarity, type ConsumableId, type ChestType,
+  TEAM_SIZES,
+  type Rarity, type ConsumableId, type ChestType, type GameMode,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
@@ -88,7 +89,9 @@ export interface GameState {
   projectiles: Projectile[]
   supplyDrops: SupplyDrop[]
   killFeed: KillFeedEntry[]
+  mode: GameMode
   aliveCount: number
+  aliveTeams: number
   time: number
   placement: number
   lobbyTimer: number
@@ -109,33 +112,53 @@ export interface GameState {
 
 // ── Initialize ──────────────────────────────────────────────────────────────
 
-export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number; mapSeed?: number }): GameState {
+export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number; mapSeed?: number; mode?: GameMode }): GameState {
   const input = createInputState()
   const cleanup = setupInput(canvas, input)
   const botCount = Math.max(1, Math.floor(options?.botCount ?? BOT_COUNT))
   const mapSeed = Math.max(1, Math.floor(options?.mapSeed ?? (Date.now() % 1000000)))
+  const mode: GameMode = options?.mode ?? 'solo'
+  const teamSize = TEAM_SIZES[mode]
 
   const camera = createCamera(canvas.width, canvas.height)
   const map = generateMap(mapSeed)
 
-  // Spawn player at random land position
+  // Spawn player at random land position — always on team 0
   const px = MAP_WIDTH * 0.3 + Math.random() * MAP_WIDTH * 0.4
   const py = MAP_HEIGHT * 0.3 + Math.random() * MAP_HEIGHT * 0.4
   const player = createPlayer(px, py, 'You')
+  player.teamId = 0
 
-  // Spawn bots
+  // Spawn bots and assign teams
+  // Team 0 fills first: bots 0..(teamSize-2) are teammates (teamId=0)
+  // Remaining bots form their own teams
   const bots: Bot[] = []
+  const teammateSlots = teamSize - 1  // how many bot teammates on team 0
   for (let i = 0; i < botCount; i++) {
     const bx = 200 + Math.random() * (MAP_WIDTH - 400)
     const by = 200 + Math.random() * (MAP_HEIGHT - 400)
-    bots.push(createBot(i, bx, by))
+    let botTeamId: number
+    if (i < teammateSlots) {
+      botTeamId = 0
+    } else {
+      // i - teammateSlots is the index among enemy bots
+      const enemyIdx = i - teammateSlots
+      botTeamId = Math.floor(enemyIdx / teamSize) + 1
+    }
+    bots.push(createBot(i, bx, by, botTeamId))
   }
+
+  // Count total teams
+  const totalTeams = mode === 'solo'
+    ? botCount + 1
+    : Math.ceil((botCount + 1) / teamSize)
 
   camera.x = player.x - camera.width / 2
   camera.y = player.y - camera.height / 2
 
   const state: GameState = {
     phase: 'playing',
+    mode,
     player,
     bots,
     map,
@@ -147,6 +170,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: numbe
     supplyDrops: [],
     killFeed: [],
     aliveCount: botCount + 1,
+    aliveTeams: totalTeams,
     time: 0,
     placement: 0,
     lobbyTimer: 10,
@@ -350,6 +374,13 @@ function actionCancelsConsumableUse(state: GameState): boolean {
   return false
 }
 
+// ── Team helpers ─────────────────────────────────────────────────────────────
+
+/** Returns true if at least one enemy bot still on that team is alive. */
+function isBotTeamAlive(state: GameState, teamId: number): boolean {
+  return state.bots.some(b => b.teamId === teamId && b.alive)
+}
+
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
@@ -526,9 +557,10 @@ export function updateGame(state: GameState, dt: number) {
       continue
     }
 
-    // Hit player
+    // Hit player (skip if shooter is a teammate)
     if (p.ownerId >= 0 && state.player.alive) {
-      if (circleOverlap(p.x, p.y, 4, state.player.x, state.player.y, PLAYER_SIZE / 2)) {
+      const shooterBot = state.bots[p.ownerId]
+      if (shooterBot && shooterBot.teamId !== state.player.teamId && circleOverlap(p.x, p.y, 4, state.player.x, state.player.y, PLAYER_SIZE / 2)) {
         const { shieldDmg, healthDmg } = takeDamage(state.player, p.damage)
         if (shieldDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, shieldDmg, true)
         if (healthDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, healthDmg, false)
@@ -541,12 +573,10 @@ export function updateGame(state: GameState, dt: number) {
         if (!state.player.alive) {
           emitElimination(state.particles, state.player.x, state.player.y)
           playEliminated()
-          const killer = state.bots[p.ownerId]
-          if (killer) {
-            killer.kills++
-            addKillFeed(state, killer.name, state.player.name, p.weaponId)
-          }
+          shooterBot.kills++
+          addKillFeed(state, shooterBot.name, state.player.name, p.weaponId)
           state.aliveCount--
+          state.aliveTeams--
           state.placement = state.aliveCount
           state.phase = 'eliminated'
           state.onPhaseChange?.('eliminated')
@@ -555,11 +585,13 @@ export function updateGame(state: GameState, dt: number) {
       }
     }
 
-    // Hit bots
+    // Hit bots (skip friendly fire)
+    const shooterTeamId = p.ownerId === -1 ? state.player.teamId : (state.bots[p.ownerId]?.teamId ?? -1)
     let projectileRemoved = false
     for (let j = 0; j < state.bots.length; j++) {
       const bot = state.bots[j]
       if (!bot.alive || j === p.ownerId) continue
+      if (bot.teamId === shooterTeamId) continue  // no friendly fire
       if (circleOverlap(p.x, p.y, 4, bot.x, bot.y, PLAYER_SIZE / 2)) {
         playHit()
         const eliminated = processBotHit(bot, p.damage, state.particles)
@@ -584,8 +616,13 @@ export function updateGame(state: GameState, dt: number) {
 
           addKillFeed(state, killerName, bot.name, p.weaponId)
 
+          // Decrement aliveTeams if bot's entire team is gone (team 0 decremented on player death)
+          if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
+            state.aliveTeams--
+          }
+
           // Check victory
-          if (state.aliveCount <= 1 && state.player.alive) {
+          if (state.aliveTeams <= 1 && state.player.alive) {
             state.placement = 1
             state.phase = 'victory'
             state.onPhaseChange?.('victory')
@@ -647,6 +684,7 @@ export function updateGame(state: GameState, dt: number) {
       emitElimination(state.particles, state.player.x, state.player.y)
       playEliminated()
       state.aliveCount--
+      state.aliveTeams--
       state.placement = state.aliveCount
       state.phase = 'eliminated'
       state.onPhaseChange?.('eliminated')
@@ -674,7 +712,11 @@ export function updateGame(state: GameState, dt: number) {
       state.aliveCount--
       addKillFeed(state, 'The Storm', bot.name, 'storm')
 
-      if (state.aliveCount <= 1 && state.player.alive) {
+      if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
+        state.aliveTeams--
+      }
+
+      if (state.aliveTeams <= 1 && state.player.alive) {
         state.placement = 1
         state.phase = 'victory'
         state.onPhaseChange?.('victory')
@@ -698,9 +740,11 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
   if (!weapon) return
 
   // Check bots in melee range
+  const attackerTeamId = attackerId === -1 ? state.player.teamId : (state.bots[attackerId]?.teamId ?? -1)
   for (let i = 0; i < state.bots.length; i++) {
     const bot = state.bots[i]
     if (!bot.alive) continue
+    if (bot.teamId === attackerTeamId) continue  // no friendly fire
     const d = distance(attacker.x, attacker.y, bot.x, bot.y)
     const angle = angleBetween(attacker.x, attacker.y, bot.x, bot.y)
     const angleDiff = Math.abs(angle - attacker.angle)
@@ -722,7 +766,11 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
         }
         addKillFeed(state, attacker.name, bot.name, 'pickaxe')
 
-        if (state.aliveCount <= 1 && state.player.alive) {
+        if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
+          state.aliveTeams--
+        }
+
+        if (state.aliveTeams <= 1 && state.player.alive) {
           state.placement = 1
           state.phase = 'victory'
           state.onPhaseChange?.('victory')
