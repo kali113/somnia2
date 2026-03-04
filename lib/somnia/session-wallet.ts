@@ -1,8 +1,10 @@
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { createWalletClient, http, formatEther, parseEther, type WalletClient } from 'viem'
 import { somniaTestnet } from '@/lib/wagmi-config'
+import { SOMNIA_RPC_URL } from '@/lib/somnia/config'
 
 const SESSION_KEY = 'pixel_royale_session'
+export const SESSION_UPDATED_EVENT = 'pixel-royale-session-updated'
 
 export interface SessionWallet {
   account: PrivateKeyAccount
@@ -14,6 +16,12 @@ export interface SessionWallet {
 interface StoredSession {
   privateKey: string
   expiry: number
+}
+
+function notifySessionUpdated(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT))
+  }
 }
 
 /**
@@ -29,13 +37,14 @@ export function createSessionWallet(durationMs: number = 3600_000): SessionWalle
   const client = createWalletClient({
     account,
     chain: somniaTestnet,
-    transport: http('https://dream-rpc.somnia.network'),
+    transport: http(SOMNIA_RPC_URL),
   })
 
   // Store in sessionStorage (cleared when tab closes)
   if (typeof window !== 'undefined') {
     const stored: StoredSession = { privateKey, expiry }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored))
+    notifySessionUpdated()
   }
 
   return { account, client, privateKey, expiry }
@@ -63,7 +72,7 @@ export function restoreSessionWallet(): SessionWallet | null {
     const client = createWalletClient({
       account,
       chain: somniaTestnet,
-      transport: http('https://dream-rpc.somnia.network'),
+      transport: http(SOMNIA_RPC_URL),
     })
 
     return { account, client, privateKey, expiry: stored.expiry }
@@ -79,6 +88,7 @@ export function restoreSessionWallet(): SessionWallet | null {
 export function destroySessionWallet(): void {
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem(SESSION_KEY)
+    notifySessionUpdated()
   }
 }
 

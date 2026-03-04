@@ -9,7 +9,7 @@
     "rootDir": ".",
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "declaration": true
+    "declaration": false
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]

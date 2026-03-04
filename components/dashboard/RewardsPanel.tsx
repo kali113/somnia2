@@ -2,14 +2,15 @@
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import {
+  CONTRACT_CONFIG_ERROR_MESSAGE,
   getPendingRewardsArgs,
   claimRewardsArgs,
   formatSTT,
   getPlayerStatsArgs,
-  pixelRoyaleConfigured,
-  pixelRoyaleConfigError,
+  IS_PIXEL_ROYALE_CONFIGURED,
+  PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
-import { Gift, Loader2, Coins } from 'lucide-react'
+import { Gift, Loader2, Coins, AlertTriangle } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
 
 export default function RewardsPanel() {
@@ -17,12 +18,12 @@ export default function RewardsPanel() {
 
   const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
     ...getPendingRewardsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 10000 },
+    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 10000 },
   })
 
   const { data: rawStats } = useReadContract({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 15000 },
+    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 15000 },
   })
 
   const { writeContract: claim, data: claimHash, isPending: isClaiming, error: claimError } = useWriteContract()
@@ -59,12 +60,18 @@ export default function RewardsPanel() {
     )
   }
 
-  if (!pixelRoyaleConfigured) {
+  if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return (
-      <div className="rounded-xl border border-[rgba(76,255,76,0.15)] bg-[rgba(76,255,76,0.03)] p-6">
-        <h3 className="font-mono font-bold text-white text-sm mb-4">Rewards</h3>
-        <p className="text-xs font-mono text-[#ff8c00] text-center py-4">
-          {pixelRoyaleConfigError}
+      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
+          <h3 className="font-mono font-bold text-white text-sm">Rewards Disabled</h3>
+        </div>
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
+          {CONTRACT_CONFIG_ERROR_MESSAGE}
+        </p>
+        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
+          Current address: {PIXEL_ROYALE_ADDRESS}
         </p>
       </div>
     )

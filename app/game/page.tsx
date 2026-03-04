@@ -1,15 +1,20 @@
 'use client'
 
-import { Suspense, useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { useSearchParams, useRouter } from 'next/navigation'
-import type { GameState, GamePhase, KillFeedEntry } from '@/lib/game/engine'
+import type { GameState, GamePhase, KillFeedEntry, SupplyDrop } from '@/lib/game/engine'
+import { addSupplyDrop } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
-import type { SomniaEvent } from '@/lib/somnia/events'
+import type { Rarity } from '@/lib/game/constants'
+import {
+  type SomniaEvent,
+  type SupplyDropEventData,
+  createConnectionEvent,
+} from '@/lib/somnia/events'
+import { createDemoEventEmitter } from '@/lib/somnia/demo-events'
 import { createReactivityConnection } from '@/lib/somnia/reactivity'
-import { fetchMatchById, type MatchRecord } from '@/lib/somnia/matchmaking-client'
-import { isBackendConfigured, backendConfigError } from '@/lib/somnia/runtime-config'
+import { IS_GAME_CONTRACT_CONFIGURED } from '@/lib/somnia/config'
 import GameHUD from '@/components/game/GameHUD'
 import KillFeed from '@/components/game/KillFeed'
 import VictoryScreen from '@/components/game/VictoryScreen'
@@ -18,30 +23,23 @@ import WalletConnect from '@/components/game/WalletConnect'
 import { Volume2, VolumeX } from 'lucide-react'
 import { setMuted, isMuted } from '@/lib/game/audio'
 
+// Dynamic import for GameCanvas to avoid SSR issues with canvas
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
   ssr: false,
   loading: () => (
     <div className="flex h-screen w-screen items-center justify-center bg-[#0a0a0a]">
       <div className="text-center">
         <div className="text-2xl font-black font-mono text-[#3ae8ff] mb-2">LOADING...</div>
-        <div className="text-sm font-mono text-[rgba(255,255,255,0.4)]">Preparing match...</div>
+        <div className="text-sm font-mono text-[rgba(255,255,255,0.4)]">Generating map...</div>
       </div>
     </div>
   ),
 })
 
-function GamePageInner() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
+export default function GamePage() {
   const gameStateRef = useRef<GameState | null>(null)
+  const demoEmitterRef = useRef<ReturnType<typeof createDemoEventEmitter> | null>(null)
   const reactivityRef = useRef<ReturnType<typeof createReactivityConnection> | null>(null)
-
-  const matchIdParam = searchParams.get('matchId')
-  const parsedMatchId = matchIdParam ? Number(matchIdParam) : NaN
-  const isMatchMode = Number.isFinite(parsedMatchId)
-
-  const [match, setMatch] = useState<MatchRecord | null>(null)
-  const [matchError, setMatchError] = useState<string | null>(null)
 
   // UI state
   const [player, setPlayer] = useState<Player | null>(null)
@@ -50,7 +48,6 @@ function GamePageInner() {
   const [storm, setStorm] = useState<StormState | null>(null)
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([])
   const [gameTime, setGameTime] = useState(0)
-  const [placement, setPlacement] = useState(0)
 
   // Somnia state
   const [somniaEvents, setSomniaEvents] = useState<SomniaEvent[]>([])
@@ -59,80 +56,67 @@ function GamePageInner() {
   const [isLiveMode, setIsLiveMode] = useState(false)
 
   // Audio
-  const [muted, setMutedState] = useState(() => isMuted())
-
-  const botCount = useMemo(() => {
-    if (isMatchMode) {
-      return Math.max(1, (match?.totalSlots ?? 20) - 1)
-    }
-    return 24
-  }, [isMatchMode, match?.totalSlots])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadMatch() {
-      if (!isMatchMode) {
-        setMatch(null)
-        setMatchError(null)
-        return
-      }
-
-      if (!isBackendConfigured) {
-        setMatchError(backendConfigError)
-        return
-      }
-
-      try {
-        const nextMatch = await fetchMatchById(parsedMatchId)
-        if (cancelled) return
-        setMatch(nextMatch)
-        setMatchError(null)
-      } catch (error) {
-        if (cancelled) return
-        const message = error instanceof Error ? error.message : String(error)
-        setMatchError(message)
-      }
-    }
-
-    loadMatch().catch(() => undefined)
-
-    return () => {
-      cancelled = true
-    }
-  }, [isMatchMode, parsedMatchId])
+  const [muted, setMutedState] = useState(false)
 
   // Game time ticker
   useEffect(() => {
     const interval = setInterval(() => {
-      const state = gameStateRef.current
-      if (!state) return
-
-      setPlacement((prev) => (prev === state.placement ? prev : state.placement))
-      if (state.phase === 'playing') {
-        setGameTime(state.time)
+      if (gameStateRef.current && gameStateRef.current.phase === 'playing') {
+        setGameTime(gameStateRef.current.time)
       }
     }, 500)
     return () => clearInterval(interval)
   }, [])
 
-  // Somnia event handler
+  // ── Somnia event handler ────────────────────────────────────────────────
   const handleSomniaEvent = useCallback((event: SomniaEvent) => {
     setSomniaEvents(prev => [event, ...prev].slice(0, 20))
+
+    // React to events in-game
+    if (gameStateRef.current && gameStateRef.current.phase === 'playing') {
+      if (event.type === 'supply_drop') {
+        const data = event.data as SupplyDropEventData
+        addSupplyDrop(gameStateRef.current, data.x, data.y, data.rarity)
+      }
+    }
   }, [])
 
-  // Wallet handlers
+  // ── Start demo events ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isLiveMode) {
+      const emitter = createDemoEventEmitter(handleSomniaEvent)
+      demoEmitterRef.current = emitter
+      emitter.start()
+      return () => {
+        emitter.stop()
+        demoEmitterRef.current = null
+      }
+    }
+  }, [isLiveMode, handleSomniaEvent])
+
+  // ── Wallet handlers ──────────────────────────────────────────────────
   const handleWalletConnect = useCallback((address: string) => {
     setWalletConnected(true)
     setWalletAddress(address)
+    setIsLiveMode(IS_GAME_CONTRACT_CONFIGURED)
 
+    if (!IS_GAME_CONTRACT_CONFIGURED) {
+      setSomniaEvents(prev => [
+        createConnectionEvent(
+          'Wallet connected, but no game contract is configured. Staying in demo mode.',
+          'chain_error',
+        ),
+        ...prev,
+      ].slice(0, 20))
+      return
+    }
+
+    demoEmitterRef.current?.stop()
+
+    // Start live reactivity
     const conn = createReactivityConnection(handleSomniaEvent)
     reactivityRef.current = conn
-    conn.connect().then(() => {
-      setIsLiveMode(true)
-    }).catch(() => {
-      setIsLiveMode(false)
-    })
+    conn.connect()
   }, [handleSomniaEvent])
 
   const handleWalletDisconnect = useCallback(() => {
@@ -140,24 +124,32 @@ function GamePageInner() {
     setWalletAddress(null)
     setIsLiveMode(false)
 
+    // Stop live reactivity
     reactivityRef.current?.disconnect()
     reactivityRef.current = null
-  }, [])
 
+    // Restart demo events
+    const emitter = createDemoEventEmitter(handleSomniaEvent)
+    demoEmitterRef.current = emitter
+    emitter.start()
+  }, [handleSomniaEvent])
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
+      demoEmitterRef.current?.stop()
       reactivityRef.current?.disconnect()
     }
   }, [])
 
-  // Game callbacks
+  // ── Game callbacks ───────────────────────────────────────────────────
   const handlePlayAgain = useCallback(() => {
     window.location.reload()
   }, [])
 
   const handleBackToMenu = useCallback(() => {
-    router.push('/')
-  }, [router])
+    window.location.href = '/play'
+  }, [])
 
   const toggleMute = useCallback(() => {
     const newMuted = !muted
@@ -167,29 +159,18 @@ function GamePageInner() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#0a0a0a]">
-      {isMatchMode && (
-        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center backdrop-blur-sm border border-[rgba(58,232,255,0.2)]">
-          <p className="text-[10px] font-mono text-[rgba(255,255,255,0.5)] uppercase">Matchmaking</p>
-          {matchError ? (
-            <p className="text-xs font-mono text-[#ff4444]">{matchError}</p>
-          ) : (
-            <p className="text-xs font-mono text-[#3ae8ff]">
-              Match #{parsedMatchId} • {match?.players.length ?? '?'} human • {botCount} bots
-            </p>
-          )}
-        </div>
-      )}
-
+      {/* Game Canvas */}
       <GameCanvas
         onKillFeedUpdate={setKillFeed}
         onAliveCountUpdate={setAliveCount}
         onPhaseChange={setPhase}
         onPlayerUpdate={setPlayer}
         onStormUpdate={setStorm}
+        onSupplyDrop={() => {}}
         gameStateRef={gameStateRef}
-        botCount={botCount}
       />
 
+      {/* HUD Overlay */}
       <GameHUD
         player={player}
         aliveCount={aliveCount}
@@ -197,18 +178,23 @@ function GamePageInner() {
         gameTime={gameTime}
       />
 
+      {/* Kill Feed */}
       <KillFeed entries={killFeed} gameTime={gameTime} />
+
+      {/* Somnia Event Feed */}
       <EventFeed events={somniaEvents} isLive={isLiveMode} />
 
+      {/* Victory/Elimination Screen */}
       <VictoryScreen
         phase={phase}
         player={player}
-        placement={placement}
+        placement={gameStateRef.current?.placement ?? 0}
         gameTime={gameTime}
         onPlayAgain={handlePlayAgain}
         onBackToMenu={handleBackToMenu}
       />
 
+      {/* Top-right controls */}
       <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
         <WalletConnect
           onConnect={handleWalletConnect}
@@ -225,22 +211,5 @@ function GamePageInner() {
         </button>
       </div>
     </div>
-  )
-}
-
-export default function GamePage() {
-  return (
-    <Suspense
-      fallback={(
-        <div className="flex h-screen w-screen items-center justify-center bg-[#0a0a0a]">
-          <div className="text-center">
-            <div className="text-2xl font-black font-mono text-[#3ae8ff] mb-2">LOADING...</div>
-            <div className="text-sm font-mono text-[rgba(255,255,255,0.4)]">Preparing match...</div>
-          </div>
-        </div>
-      )}
-    >
-      <GamePageInner />
-    </Suspense>
   )
 }

@@ -1,55 +1,100 @@
 'use client'
 
-import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import {
+  useAccount,
+  useBalance,
+  useChainId,
+  useReadContract,
+  useSwitchChain,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from 'wagmi'
 import { somniaTestnet } from '@/lib/wagmi-config'
 import {
+  CONTRACT_CONFIG_ERROR_MESSAGE,
+  getIsValidSessionArgs,
   getQueueSizeArgs,
   getQueuePlayersArgs,
   getInQueueArgs,
   joinQueueArgs,
   leaveQueueArgs,
   ENTRY_FEE,
+  MIN_QUEUE_BALANCE,
+  IS_PIXEL_ROYALE_CONFIGURED,
+  PIXEL_ROYALE_ADDRESS,
   truncateAddress,
   SOMNIA_FAUCET_URL,
-  pixelRoyaleConfigured,
-  pixelRoyaleConfigError,
 } from '@/lib/somnia/contract'
+import { restoreSessionWallet, SESSION_UPDATED_EVENT } from '@/lib/somnia/session-wallet'
 import { Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
-import { useEffect, useCallback } from 'react'
-import { formatEther } from 'viem'
-import type { QueueSnapshot } from '@/lib/somnia/matchmaking-client'
+import { useEffect, useCallback, useState } from 'react'
+import { formatEther, type Address } from 'viem'
 
-interface QueuePanelProps {
-  queueSnapshot?: QueueSnapshot | null
-  backendConfigured?: boolean
-  backendError?: string | null
-}
-
-export default function QueuePanel({
-  queueSnapshot = null,
-  backendConfigured = false,
-  backendError = null,
-}: QueuePanelProps) {
+export default function QueuePanel() {
   const { address, isConnected } = useAccount()
-  const { data: balance } = useBalance({
+  const chainId = useChainId()
+  const isOnSomnia = chainId === somniaTestnet.id
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
+
+  const {
+    data: balance,
+    isPending: isBalancePending,
+    isError: isBalanceError,
+  } = useBalance({
     address,
     chainId: somniaTestnet.id,
+    query: {
+      enabled: !!address,
+      refetchInterval: 8_000,
+      retry: 2,
+    },
   })
+
+  const [sessionAddress, setSessionAddress] = useState<Address | null>(null)
+
+  const syncSessionWallet = useCallback(() => {
+    const session = restoreSessionWallet()
+    setSessionAddress(session?.account.address ?? null)
+  }, [])
+
+  useEffect(() => {
+    syncSessionWallet()
+
+    const handleSessionChanged = () => {
+      syncSessionWallet()
+    }
+
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)
+    return () => {
+      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)
+    }
+  }, [syncSessionWallet])
 
   // ── Read contract state ───────────────────────────────────────────────
   const { data: queueSize, refetch: refetchQueueSize } = useReadContract({
     ...getQueueSizeArgs(),
-    query: { enabled: pixelRoyaleConfigured, refetchInterval: 5000 },
+    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
   })
 
   const { data: queuePlayers, refetch: refetchQueuePlayers } = useReadContract({
     ...getQueuePlayersArgs(),
-    query: { enabled: pixelRoyaleConfigured, refetchInterval: 5000 },
+    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
   })
 
   const { data: isInQueue, refetch: refetchInQueue } = useReadContract({
     ...getInQueueArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 5000 },
+    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
+  })
+
+  const { data: isValidSession } = useReadContract({
+    ...getIsValidSessionArgs(
+      address ?? '0x0000000000000000000000000000000000000000',
+      sessionAddress ?? '0x0000000000000000000000000000000000000000'
+    ),
+    query: {
+      enabled: !!address && !!sessionAddress && IS_PIXEL_ROYALE_CONFIGURED,
+      refetchInterval: 5_000,
+    },
   })
 
   // ── Write contract ────────────────────────────────────────────────────
@@ -76,28 +121,46 @@ export default function QueuePanel({
     }
   }, [joinHash, leaveHash, refetchQueueSize, refetchQueuePlayers, refetchInQueue])
 
-  // ── Handlers ──────────────────────────────────────────────────────────
-  const handleJoinQueue = useCallback(() => {
-    if (!pixelRoyaleConfigured) return
-    joinQueue(joinQueueArgs())
-  }, [joinQueue])
-
-  const handleLeaveQueue = useCallback(() => {
-    if (!pixelRoyaleConfigured) return
-    leaveQueue(leaveQueueArgs())
-  }, [leaveQueue])
-
-  const fallbackQueuePlayers = (queuePlayers as string[]) ?? []
-  const effectiveQueuePlayers = queueSnapshot?.players ?? fallbackQueuePlayers
-  const currentQueueSize = queueSnapshot?.size ?? (queueSize ? Number(queueSize) : 0)
-  const hasEnoughBalance = balance ? balance.value >= ENTRY_FEE : false
-  const playerInQueue = queueSnapshot
-    ? !!address && effectiveQueuePlayers.includes(address.toLowerCase())
-    : isInQueue === true
+  const currentQueueSize = queueSize ? Number(queueSize) : 0
+  const hasEnoughBalance = balance ? balance.value >= MIN_QUEUE_BALANCE : false
+  const hasSessionWallet = !!sessionAddress
+  const hasSessionConfigured = hasSessionWallet && isValidSession === true
+  const playerInQueue = isInQueue === true
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
 
   // Queue progress percentage
   const queueProgress = (currentQueueSize / 20) * 100
+
+  // ── Handlers ──────────────────────────────────────────────────────────
+  const handleJoinQueue = useCallback(() => {
+    if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    if (!isOnSomnia) return
+    if (!hasSessionConfigured) return
+    if (!hasEnoughBalance) return
+    joinQueue(joinQueueArgs())
+  }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance])
+
+  const handleLeaveQueue = useCallback(() => {
+    if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    leaveQueue(leaveQueueArgs())
+  }, [leaveQueue])
+
+  if (!IS_PIXEL_ROYALE_CONFIGURED) {
+    return (
+      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
+          <h3 className="font-mono font-bold text-white text-sm">Queue Disabled</h3>
+        </div>
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
+          {CONTRACT_CONFIG_ERROR_MESSAGE}
+        </p>
+        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
+          Current address: {PIXEL_ROYALE_ADDRESS}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-xl border border-[rgba(255,215,0,0.15)] bg-[rgba(255,215,0,0.03)] p-6">
@@ -108,7 +171,7 @@ export default function QueuePanel({
         <div>
           <h3 className="font-mono font-bold text-white text-sm">Battle Queue</h3>
           <p className="text-xs font-mono text-[rgba(255,255,255,0.4)]">
-            Entry fee: {formatEther(ENTRY_FEE)} STT
+            Entry: {formatEther(ENTRY_FEE)} STT • Min balance: {formatEther(MIN_QUEUE_BALANCE)} STT
           </p>
         </div>
       </div>
@@ -135,13 +198,13 @@ export default function QueuePanel({
       </div>
 
       {/* Queued Players List */}
-      {effectiveQueuePlayers.length > 0 && (
+      {queuePlayers && (queuePlayers as string[]).length > 0 && (
         <div className="mb-4 max-h-32 overflow-y-auto rounded-lg bg-[rgba(0,0,0,0.3)] p-3">
           <span className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] uppercase mb-2 block">
             Queued Players
           </span>
           <div className="space-y-1">
-            {effectiveQueuePlayers.map((player, i) => (
+            {(queuePlayers as string[]).map((player, i) => (
               <div
                 key={player}
                 className={`flex items-center gap-2 text-xs font-mono ${
@@ -161,31 +224,6 @@ export default function QueuePanel({
         </div>
       )}
 
-      {!backendConfigured && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.1)] border border-[rgba(255,140,0,0.2)] p-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff8c00] flex-shrink-0" />
-          <p className="text-xs font-mono text-[#ff8c00]">
-            Matchmaking backend is not configured. Live queue sync is unavailable.
-          </p>
-        </div>
-      )}
-
-      {backendError && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
-          <p className="text-xs font-mono text-[#ff4444]">{backendError}</p>
-        </div>
-      )}
-
-      {!pixelRoyaleConfigured && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
-          <p className="text-xs font-mono text-[#ff4444]">
-            {pixelRoyaleConfigError || 'Contract configuration is missing.'}
-          </p>
-        </div>
-      )}
-
       {/* Action Buttons */}
       {!isConnected ? (
         <div className="rounded-lg bg-[rgba(255,255,255,0.05)] p-3 text-center">
@@ -193,12 +231,87 @@ export default function QueuePanel({
             Connect wallet to join the queue
           </p>
         </div>
+      ) : !isOnSomnia ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.12)] border border-[rgba(255,140,0,0.25)] p-3">
+            <AlertTriangle className="h-4 w-4 text-[#ffb347] flex-shrink-0" />
+            <p className="text-xs font-mono text-[#ffb347]">
+              Wrong network. Switch to Somnia Testnet (50312) to queue.
+            </p>
+          </div>
+          <button
+            onClick={() => switchChain({ chainId: somniaTestnet.id })}
+            disabled={isSwitchingChain}
+            className="w-full rounded-lg bg-[rgba(58,232,255,0.16)] border border-[rgba(58,232,255,0.3)] px-4 py-3 font-mono font-bold text-sm text-[#3ae8ff] hover:bg-[rgba(58,232,255,0.22)] transition-colors disabled:opacity-50"
+          >
+            {isSwitchingChain ? 'Switching...' : 'Switch to Somnia'}
+          </button>
+        </div>
+      ) : playerInQueue ? (
+        <button
+          onClick={handleLeaveQueue}
+          disabled={isBusy}
+          className="w-full rounded-lg bg-[rgba(255,68,68,0.15)] border border-[rgba(255,68,68,0.3)] px-4 py-3 font-mono font-bold text-sm text-[#ff4444] hover:bg-[rgba(255,68,68,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLeaving || leaveConfirming ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Leaving...
+            </span>
+          ) : (
+            'Leave Queue'
+          )}
+        </button>
+      ) : !hasSessionWallet ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.12)] border border-[rgba(255,140,0,0.25)] p-3">
+            <AlertTriangle className="h-4 w-4 text-[#ffb347] flex-shrink-0" />
+            <p className="text-xs font-mono text-[#ffb347]">
+              Session key required. Create it in the Session Key panel before joining queue.
+            </p>
+          </div>
+          <button
+            disabled
+            className="w-full rounded-lg bg-[rgba(255,255,255,0.05)] px-4 py-3 font-mono font-bold text-sm text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+          >
+            Queue Locked: Session Key Required
+          </button>
+        </div>
+      ) : !hasSessionConfigured ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.12)] border border-[rgba(255,140,0,0.25)] p-3">
+            <AlertTriangle className="h-4 w-4 text-[#ffb347] flex-shrink-0" />
+            <p className="text-xs font-mono text-[#ffb347]">
+              Session key found, but on-chain approval is still pending. Wait a moment, then try again.
+            </p>
+          </div>
+          <button
+            disabled
+            className="w-full rounded-lg bg-[rgba(255,255,255,0.05)] px-4 py-3 font-mono font-bold text-sm text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+          >
+            Waiting for Session Approval
+          </button>
+        </div>
+      ) : isBalancePending ? (
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-[rgba(255,255,255,0.05)] p-3">
+          <Loader2 className="h-4 w-4 animate-spin text-[rgba(255,255,255,0.5)]" />
+          <p className="text-xs font-mono text-[rgba(255,255,255,0.45)]">Loading STT balance...</p>
+        </div>
+      ) : isBalanceError ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
+            <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
+            <p className="text-xs font-mono text-[#ff4444]">
+              Could not load STT balance from RPC. Please refresh and try again.
+            </p>
+          </div>
+        </div>
       ) : !hasEnoughBalance ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
             <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
             <p className="text-xs font-mono text-[#ff4444]">
-              Insufficient STT balance. You need at least {formatEther(ENTRY_FEE)} STT.
+              Insufficient STT balance. You need at least {formatEther(MIN_QUEUE_BALANCE)} STT (entry + gas reserve).
             </p>
           </div>
           <a
@@ -211,25 +324,10 @@ export default function QueuePanel({
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
-      ) : playerInQueue ? (
-        <button
-          onClick={handleLeaveQueue}
-          disabled={isBusy || !pixelRoyaleConfigured}
-          className="w-full rounded-lg bg-[rgba(255,68,68,0.15)] border border-[rgba(255,68,68,0.3)] px-4 py-3 font-mono font-bold text-sm text-[#ff4444] hover:bg-[rgba(255,68,68,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLeaving || leaveConfirming ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Leaving...
-            </span>
-          ) : (
-            'Leave Queue'
-          )}
-        </button>
       ) : (
         <button
           onClick={handleJoinQueue}
-          disabled={isBusy || currentQueueSize >= 20 || !pixelRoyaleConfigured}
+          disabled={isBusy || currentQueueSize >= 20 || !isOnSomnia || !hasSessionConfigured || !hasEnoughBalance}
           className="group relative w-full"
         >
           <div className="absolute -inset-0.5 rounded-xl bg-[#ffd700] opacity-20 blur group-hover:opacity-40 transition-opacity" />
@@ -242,7 +340,7 @@ export default function QueuePanel({
             ) : currentQueueSize >= 20 ? (
               'Queue Full'
             ) : (
-              `QUEUE FOR BATTLE (${formatEther(ENTRY_FEE)} STT)`
+              `QUEUE FOR BATTLE (${formatEther(ENTRY_FEE)} STT entry)`
             )}
           </div>
         </button>

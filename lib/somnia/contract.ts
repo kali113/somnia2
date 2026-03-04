@@ -1,21 +1,31 @@
 import { formatEther, parseEther, type Address } from 'viem'
 import PIXEL_ROYALE_ABI from '@/contracts/abi.json'
 import {
-  contractAddressOrFallback,
-  isContractConfigured,
-  contractConfigError,
-} from './runtime-config'
+  GAME_CONTRACT_ADDRESS,
+  IS_GAME_CONTRACT_CONFIGURED,
+  SOMNIA_FAUCET_URL,
+  ZERO_ADDRESS,
+} from '@/lib/somnia/config'
 
-// ── Contract Configuration ─────────────────────────────────────────────────
-export const PIXEL_ROYALE_ADDRESS: Address = contractAddressOrFallback
-export const pixelRoyaleConfigured = isContractConfigured
-export const pixelRoyaleConfigError = contractConfigError
+export { SOMNIA_FAUCET_URL }
+
+// ── Contract Address ────────────────────────────────────────────────────────
+export const PIXEL_ROYALE_ADDRESS = GAME_CONTRACT_ADDRESS as Address
+export const IS_PIXEL_ROYALE_CONFIGURED = IS_GAME_CONTRACT_CONFIGURED
+
+export const CONTRACT_CONFIG_ERROR_MESSAGE =
+  'PixelRoyale contract address is not configured. Set NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS to your deployed Somnia contract address.'
 
 // ── Entry fee (must match contract) ─────────────────────────────────────────
 export const ENTRY_FEE = parseEther('0.001') // 0.001 STT
+export const GAS_RESERVE = parseEther('0.01') // recommended tx buffer
+export const MIN_QUEUE_BALANCE = ENTRY_FEE + GAS_RESERVE
 
-// ── Faucet URL ──────────────────────────────────────────────────────────────
-export const SOMNIA_FAUCET_URL = 'https://testnet.somnia.network/'
+function assertContractConfigured(): void {
+  if (!IS_PIXEL_ROYALE_CONFIGURED || PIXEL_ROYALE_ADDRESS.toLowerCase() === ZERO_ADDRESS) {
+    throw new Error(CONTRACT_CONFIG_ERROR_MESSAGE)
+  }
+}
 
 // ── ABI Export ──────────────────────────────────────────────────────────────
 export const pixelRoyaleAbi = PIXEL_ROYALE_ABI as any
@@ -121,6 +131,7 @@ export function getIsValidSessionArgs(player: Address, sessionKey: Address) {
 // ── Write helpers (args for wagmi's useWriteContract) ───────────────────────
 
 export function joinQueueArgs() {
+  assertContractConfigured()
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,
@@ -130,6 +141,7 @@ export function joinQueueArgs() {
 }
 
 export function leaveQueueArgs() {
+  assertContractConfigured()
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,
@@ -138,6 +150,7 @@ export function leaveQueueArgs() {
 }
 
 export function approveSessionKeyArgs(sessionKey: Address, expiry: bigint) {
+  assertContractConfigured()
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,
@@ -147,6 +160,7 @@ export function approveSessionKeyArgs(sessionKey: Address, expiry: bigint) {
 }
 
 export function revokeSessionKeyArgs(sessionKey: Address) {
+  assertContractConfigured()
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,
@@ -156,6 +170,7 @@ export function revokeSessionKeyArgs(sessionKey: Address) {
 }
 
 export function claimRewardsArgs() {
+  assertContractConfigured()
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,

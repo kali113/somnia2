@@ -4,17 +4,18 @@ import { useAccount, useReadContract } from 'wagmi'
 import {
   getPlayerStatsArgs,
   formatSTT,
-  pixelRoyaleConfigured,
-  pixelRoyaleConfigError,
+  IS_PIXEL_ROYALE_CONFIGURED,
+  CONTRACT_CONFIG_ERROR_MESSAGE,
+  PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
-import { Trophy, Crosshair, Gamepad2, TrendingUp } from 'lucide-react'
+import { Trophy, Crosshair, Gamepad2, TrendingUp, AlertTriangle } from 'lucide-react'
 
 export default function StatsPanel() {
   const { address } = useAccount()
 
   const { data: rawStats } = useReadContract({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address && pixelRoyaleConfigured, refetchInterval: 15000 },
+    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 15000 },
   })
 
   const stats = rawStats as any
@@ -76,12 +77,18 @@ export default function StatsPanel() {
     )
   }
 
-  if (!pixelRoyaleConfigured) {
+  if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return (
-      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
-        <h3 className="font-mono font-bold text-white text-sm mb-4">Player Stats</h3>
-        <p className="text-xs font-mono text-[#ff8c00] text-center py-4">
-          {pixelRoyaleConfigError}
+      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
+          <h3 className="font-mono font-bold text-white text-sm">Stats Disabled</h3>
+        </div>
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
+          {CONTRACT_CONFIG_ERROR_MESSAGE}
+        </p>
+        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
+          Current address: {PIXEL_ROYALE_ADDRESS}
         </p>
       </div>
     )

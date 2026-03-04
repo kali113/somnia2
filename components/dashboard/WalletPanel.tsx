@@ -1,18 +1,43 @@
 'use client'
 
-import { useAccount, useBalance, useDisconnect, useConnect } from 'wagmi'
+import {
+  useAccount,
+  useBalance,
+  useChainId,
+  useConnect,
+  useDisconnect,
+  useSwitchChain,
+} from 'wagmi'
 import { somniaTestnet } from '@/lib/wagmi-config'
-import { truncateAddress, SOMNIA_FAUCET_URL } from '@/lib/somnia/contract'
-import { Copy, ExternalLink, Wallet, LogOut, Check } from 'lucide-react'
+import {
+  truncateAddress,
+  SOMNIA_FAUCET_URL,
+  IS_PIXEL_ROYALE_CONFIGURED,
+  PIXEL_ROYALE_ADDRESS,
+} from '@/lib/somnia/contract'
+import { SOMNIA_EXPLORER_URL } from '@/lib/somnia/config'
+import { Copy, ExternalLink, Wallet, LogOut, Check, AlertTriangle, Loader2 } from 'lucide-react'
 import { useState, useCallback } from 'react'
 
 export default function WalletPanel() {
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const isOnSomnia = chainId === somniaTestnet.id
   const { connect, connectors } = useConnect()
   const { disconnect } = useDisconnect()
-  const { data: balance } = useBalance({
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
+  const {
+    data: balance,
+    isPending: isBalancePending,
+    isError: isBalanceError,
+  } = useBalance({
     address,
     chainId: somniaTestnet.id,
+    query: {
+      enabled: !!address,
+      refetchInterval: 8_000,
+      retry: 2,
+    },
   })
 
   const [copied, setCopied] = useState(false)
@@ -37,10 +62,15 @@ export default function WalletPanel() {
           </div>
         </div>
         <button
-          onClick={() => connect({ connector: connectors[0] })}
+          onClick={() => {
+            if (connectors[0]) {
+              connect({ connector: connectors[0] })
+            }
+          }}
+          disabled={!connectors[0]}
           className="w-full rounded-lg bg-[#3ae8ff] px-4 py-3 font-mono font-bold text-sm text-[#050508] transition-all hover:scale-[1.02] active:scale-95"
         >
-          Connect MetaMask
+          {connectors[0] ? 'Connect MetaMask' : 'No Wallet Found'}
         </button>
       </div>
     )
@@ -70,6 +100,21 @@ export default function WalletPanel() {
         </button>
       </div>
 
+      {!isOnSomnia && (
+        <div className="rounded-lg bg-[rgba(255,140,0,0.12)] border border-[rgba(255,140,0,0.25)] px-4 py-3 mb-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-mono text-[#ffb347]">Wrong network. Switch to Somnia Testnet (50312).</p>
+            <button
+              onClick={() => switchChain({ chainId: somniaTestnet.id })}
+              disabled={isSwitchingChain}
+              className="rounded-md bg-[rgba(58,232,255,0.15)] px-2.5 py-1 text-[10px] font-mono font-bold text-[#3ae8ff] disabled:opacity-50"
+            >
+              {isSwitchingChain ? 'Switching...' : 'Switch'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Address */}
       <div className="rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3 mb-3">
         <div className="flex items-center justify-between">
@@ -88,8 +133,15 @@ export default function WalletPanel() {
       <div className="rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3 mb-3">
         <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Balance</span>
         <p className="text-lg font-mono font-bold text-[#3ae8ff] mt-0.5">
-          {balance && !isNaN(Number(balance.formatted)) ? `${Number(balance.formatted).toFixed(4)} STT` : '-- STT'}
+          {isBalancePending
+            ? 'Loading...'
+            : balance
+            ? `${Number(balance.formatted).toFixed(4)} STT`
+            : isBalanceError
+            ? 'RPC Unavailable'
+            : '-- STT'}
         </p>
+        {isBalancePending && <Loader2 className="h-3.5 w-3.5 mt-1 animate-spin text-[rgba(255,255,255,0.35)]" />}
       </div>
 
       {/* Faucet Link */}
@@ -102,6 +154,28 @@ export default function WalletPanel() {
         Need STT? Get from Faucet
         <ExternalLink className="h-3.5 w-3.5" />
       </a>
+
+      <div className="mt-3 rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Game Contract</span>
+          {IS_PIXEL_ROYALE_CONFIGURED ? (
+            <a
+              href={`${SOMNIA_EXPLORER_URL.replace(/\/$/, '')}/address/${PIXEL_ROYALE_ADDRESS}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[rgba(58,232,255,0.7)] hover:text-[#3ae8ff] transition-colors"
+              title="View contract on explorer"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <AlertTriangle className="h-3.5 w-3.5 text-[#ff4444]" />
+          )}
+        </div>
+        <p className={`text-xs font-mono ${IS_PIXEL_ROYALE_CONFIGURED ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}`}>
+          {truncateAddress(PIXEL_ROYALE_ADDRESS, 6)}
+        </p>
+      </div>
     </div>
   )
 }

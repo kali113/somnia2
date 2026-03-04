@@ -3,10 +3,11 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
 import {
   approveSessionKeyArgs,
+  CONTRACT_CONFIG_ERROR_MESSAGE,
   revokeSessionKeyArgs,
   getIsValidSessionArgs,
-  pixelRoyaleConfigured,
-  pixelRoyaleConfigError,
+  IS_PIXEL_ROYALE_CONFIGURED,
+  PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
 import {
   createSessionWallet,
@@ -15,13 +16,13 @@ import {
   getSessionExpirySolidity,
   type SessionWallet,
 } from '@/lib/somnia/session-wallet'
-import { Key, Loader2, Shield, ShieldOff, ExternalLink } from 'lucide-react'
+import { Key, Loader2, Shield, ShieldOff, AlertTriangle } from 'lucide-react'
 import { useState, useCallback, useEffect } from 'react'
 
 export default function SessionKeyPanel() {
   const { address } = useAccount()
-  const [session, setSession] = useState<SessionWallet | null>(() => restoreSessionWallet())
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [session, setSession] = useState<SessionWallet | null>(null)
+  const [timeLeft, setTimeLeft] = useState<string>('')
 
   const { writeContract: approveKey, data: approveHash, isPending: isApproving } = useWriteContract()
   const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking } = useWriteContract()
@@ -35,23 +36,37 @@ export default function SessionKeyPanel() {
       address ?? '0x0000000000000000000000000000000000000000',
       session?.account.address ?? '0x0000000000000000000000000000000000000000'
     ),
-    query: { enabled: !!address && !!session && pixelRoyaleConfigured, refetchInterval: 10000 },
+    query: { enabled: !!address && !!session && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 10000 },
   })
+
+  // Restore session on mount
+  useEffect(() => {
+    const restored = restoreSessionWallet()
+    if (restored) setSession(restored)
+  }, [])
 
   // Countdown timer
   useEffect(() => {
-    if (!session) return
+    if (!session) {
+      setTimeLeft('')
+      return
+    }
 
-    const interval = setInterval(() => {
-      const now = Date.now()
-      if (session.expiry <= now) {
+    const update = () => {
+      const remaining = session.expiry - Date.now()
+      if (remaining <= 0) {
+        setTimeLeft('Expired')
         destroySessionWallet()
         setSession(null)
         return
       }
-      setNowMs(now)
-    }, 1000)
+      const mins = Math.floor(remaining / 60000)
+      const secs = Math.floor((remaining % 60000) / 1000)
+      setTimeLeft(`${mins}m ${secs}s`)
+    }
 
+    update()
+    const interval = setInterval(update, 1000)
     return () => clearInterval(interval)
   }, [session])
 
@@ -64,6 +79,8 @@ export default function SessionKeyPanel() {
   }, [approveHash, revokeHash, refetchSession])
 
   const handleCreateSession = useCallback(() => {
+    if (!IS_PIXEL_ROYALE_CONFIGURED) return
+
     const newSession = createSessionWallet(3600_000) // 1 hour
     setSession(newSession)
 
@@ -86,15 +103,6 @@ export default function SessionKeyPanel() {
   }, [session, address, revokeKey])
 
   const isBusy = isApproving || isRevoking || approveConfirming || revokeConfirming
-  const timeLeft = session
-    ? (() => {
-      const remaining = session.expiry - nowMs
-      if (remaining <= 0) return 'Expired'
-      const mins = Math.floor(remaining / 60000)
-      const secs = Math.floor((remaining % 60000) / 1000)
-      return `${mins}m ${secs}s`
-    })()
-    : ''
 
   if (!address) {
     return (
@@ -110,15 +118,18 @@ export default function SessionKeyPanel() {
     )
   }
 
-  if (!pixelRoyaleConfigured) {
+  if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return (
-      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
+      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
         <div className="flex items-center gap-2 mb-3">
-          <Key className="h-4 w-4 text-[rgba(255,255,255,0.5)]" />
-          <h3 className="font-mono font-bold text-white text-sm">Session Key</h3>
+          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
+          <h3 className="font-mono font-bold text-white text-sm">Session Key Disabled</h3>
         </div>
-        <p className="text-xs font-mono text-[#ff8c00] text-center py-2">
-          {pixelRoyaleConfigError}
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
+          {CONTRACT_CONFIG_ERROR_MESSAGE}
+        </p>
+        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
+          Current address: {PIXEL_ROYALE_ADDRESS}
         </p>
       </div>
     )
