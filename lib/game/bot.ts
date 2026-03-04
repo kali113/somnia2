@@ -135,10 +135,17 @@ export function updateBot(
   switch (bot.mode) {
     case 'move_to_zone':
     case 'loot': {
-      const angle = angleBetween(bot.x, bot.y, bot.targetX, bot.targetY)
-      bot.x += Math.cos(angle) * speed * dt
-      bot.y += Math.sin(angle) * speed * dt
-      bot.angle = angle
+      const distToTarget = distance(bot.x, bot.y, bot.targetX, bot.targetY)
+      if (distToTarget > 20) {
+        const angle = angleBetween(bot.x, bot.y, bot.targetX, bot.targetY)
+        bot.x += Math.cos(angle) * speed * dt
+        bot.y += Math.sin(angle) * speed * dt
+        bot.angle = angle
+      } else if (bot.mode === 'loot') {
+        // Reached waypoint — pick a new one immediately instead of oscillating
+        bot.targetX = bot.x + (Math.random() - 0.5) * 300
+        bot.targetY = bot.y + (Math.random() - 0.5) * 300
+      }
 
       // Pick up nearby floor loot
       for (const loot of map.floorLoot) {

@@ -137,6 +137,9 @@ export function updateGame(state: GameState, dt: number) {
   state.time += dt
   const now = state.time
 
+  // Update camera first so mouse-to-world conversion matches this frame's render
+  updateCamera(state.camera, state.player.x, state.player.y, dt)
+
   // Update mouse world coords
   updateMouseWorld(state.input, state.camera.x, state.camera.y)
 
@@ -399,9 +402,6 @@ export function updateGame(state: GameState, dt: number) {
 
   // ── Update particles ─────────────────────────────────────────────────
   updateParticles(state.particles, dt)
-
-  // ── Update camera ────────────────────────────────────────────────────
-  updateCamera(state.camera, state.player.x, state.player.y, dt)
 
   // ── Bot-on-bot kills (storm deaths etc.) ─────────────────────────────
   for (const bot of state.bots) {
