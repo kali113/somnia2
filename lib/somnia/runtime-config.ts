@@ -22,7 +22,7 @@ const contractIsZero = contractEnv.toLowerCase() === ZERO_ADDRESS
 export const isContractConfigured = contractIsAddress && !contractIsZero
 export const contractConfigError = isContractConfigured
   ? null
-  : 'Missing NEXT_PUBLIC_GAME_CONTRACT_ADDRESS (must be a non-zero EVM address).'
+  : 'Contract not deployed — on-chain features unavailable.'
 
 export const configuredContractAddress: Address | null = isContractConfigured
   ? (contractEnv as Address)

@@ -89,7 +89,6 @@ export function useMatchmaking(address?: string) {
 
   const refresh = useCallback(async () => {
     if (!isBackendConfigured) {
-      setError(backendConfigError)
       return
     }
 
