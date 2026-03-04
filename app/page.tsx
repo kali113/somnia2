@@ -177,7 +177,7 @@ export default function HomePage() {
 
           {/* Play Button */}
           <Link
-            href="/game"
+            href="/play"
             className="group relative mb-16"
           >
             <div className="absolute -inset-1 rounded-2xl bg-[#3ae8ff] opacity-20 blur-lg group-hover:opacity-40 transition-opacity" />

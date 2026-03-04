@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { Providers } from '@/lib/providers'
 import './globals.css'
 
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -44,7 +45,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="font-mono antialiased bg-[#050508] text-white overflow-x-hidden">
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <Analytics />
       </body>
     </html>

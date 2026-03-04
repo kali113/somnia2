@@ -133,7 +133,7 @@ export default function GamePage() {
   }, [])
 
   const handleBackToMenu = useCallback(() => {
-    window.location.href = '/'
+    window.location.href = '/play'
   }, [])
 
   const toggleMute = useCallback(() => {
