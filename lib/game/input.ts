@@ -1,0 +1,104 @@
+// ── Input Manager ───────────────────────────────────────────────────────────
+
+export interface InputState {
+  keys: Set<string>
+  mouseX: number
+  mouseY: number
+  mouseDown: boolean
+  mouseWorldX: number
+  mouseWorldY: number
+  justPressed: Set<string>
+  justClicked: boolean
+  scrollDelta: number
+}
+
+export function createInputState(): InputState {
+  return {
+    keys: new Set(),
+    mouseX: 0,
+    mouseY: 0,
+    mouseDown: false,
+    mouseWorldX: 0,
+    mouseWorldY: 0,
+    justPressed: new Set(),
+    justClicked: false,
+    scrollDelta: 0,
+  }
+}
+
+export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
+  const onKeyDown = (e: KeyboardEvent) => {
+    const key = e.key.toLowerCase()
+    if (!state.keys.has(key)) {
+      state.justPressed.add(key)
+    }
+    state.keys.add(key)
+    // Prevent default for game keys
+    if (['w', 'a', 's', 'd', 'e', 'q', 'r', 'b', 'tab', ' '].includes(key)) {
+      e.preventDefault()
+    }
+  }
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    state.keys.delete(e.key.toLowerCase())
+  }
+
+  const onMouseMove = (e: MouseEvent) => {
+    const rect = canvas.getBoundingClientRect()
+    state.mouseX = e.clientX - rect.left
+    state.mouseY = e.clientY - rect.top
+  }
+
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 0) {
+      state.mouseDown = true
+      state.justClicked = true
+    }
+  }
+
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 0) {
+      state.mouseDown = false
+    }
+  }
+
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault()
+    state.scrollDelta += Math.sign(e.deltaY)
+  }
+
+  const onContextMenu = (e: Event) => e.preventDefault()
+
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
+  canvas.addEventListener('mousemove', onMouseMove)
+  canvas.addEventListener('mousedown', onMouseDown)
+  canvas.addEventListener('mouseup', onMouseUp)
+  canvas.addEventListener('wheel', onWheel, { passive: false })
+  canvas.addEventListener('contextmenu', onContextMenu)
+
+  return () => {
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
+    canvas.removeEventListener('mousemove', onMouseMove)
+    canvas.removeEventListener('mousedown', onMouseDown)
+    canvas.removeEventListener('mouseup', onMouseUp)
+    canvas.removeEventListener('wheel', onWheel)
+    canvas.removeEventListener('contextmenu', onContextMenu)
+  }
+}
+
+export function clearFrameInput(state: InputState) {
+  state.justPressed.clear()
+  state.justClicked = false
+  state.scrollDelta = 0
+}
+
+export function updateMouseWorld(
+  state: InputState,
+  cameraX: number,
+  cameraY: number,
+) {
+  state.mouseWorldX = state.mouseX + cameraX
+  state.mouseWorldY = state.mouseY + cameraY
+}
