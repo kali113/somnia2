@@ -5,6 +5,20 @@ Original prompt: there is not a victory screen when killing everyone
 - Located an existing `VictoryScreen` component and confirmed the engine already emits `phase = 'victory'` in several elimination paths.
 - Next: reproduce the end-of-match flow in-browser and compare engine state with the rendered UI.
 
+- Follow-up branch for this turn: `shared-storm-rng`.
+- Replaced local storm-circle phase rolls with a request/apply flow for verified matches.
+- Added `commitStormCircle(gameId, phase)` and `StormCircleCommitted` to `contracts/PixelRoyale.sol`, then regenerated `contracts/abi.json`.
+- Added backend route `POST /api/game/storm` to read an existing phase commit or submit one through the orchestrator wallet and decode the emitted commit.
+- Updated the frontend/game engine to pause verified-match storm transitions until a commit arrives, then apply the committed target; if the backend/contract path fails, the client falls back to deterministic local storm targeting and emits a chain error event.
+- Updated Somnia event parsing/UI so storm commits show in the event feed.
+- Verification so far:
+- `pnpm lint`
+- `pnpm build`
+- `cd server && pnpm build`
+- Smoke checked `/`, `/play`, `/game`, and `http://localhost:3001/api/health`.
+- Browser smoke note: `/favicon.ico` is still a 404 on the static export server; no gameplay/runtime errors were observed from the storm changes.
+- Important deploy note: the checked-in code now expects a redeployed `PixelRoyale` contract with the new storm commit function/event before verified on-chain storm commits can succeed on testnet. Until redeployed, verified matches fall back to local deterministic storm commits after the backend request fails.
+
 - Current prompt: bots are running into the storm.
 - Created branch `fix-bots-avoid-storm` from the current dirty worktree without touching unrelated edits.
 - Read the bot AI, storm state, `/game` page, and the existing browser-test hooks.
