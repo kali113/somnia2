@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Somnia2 Deploy Status</title>
+    <link rel="stylesheet" href="/status/assets/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Somnia2</p>
+        <h1>Deploy Status</h1>
+        <p class="subtitle">VM-side deployment state, build log, and recent release history.</p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Current State</h2>
+          <dl id="summary" class="summary"></dl>
+        </article>
+        <article class="card">
+          <h2>Recent Deployments</h2>
+          <div id="history" class="history"></div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Build Log</h2>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+        <pre id="log" class="log">Loading...</pre>
+      </section>
+    </main>
+
+    <script src="/status/assets/app.js"></script>
+  </body>
+</html>
