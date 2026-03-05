@@ -49,9 +49,10 @@ export interface GameEndedEventData {
 export interface ChestOpenedEventData {
   gameId: number
   player: string
-  chestType: 'normal' | 'rare'
-  rewardType: 'weapon' | 'consumable' | 'ammo'
-  rewardAmount: number
+  containerType: 'chest' | 'rare_chest' | 'ammo_box'
+  weaponId: string | null
+  consumableId: string | null
+  ammoAmount: number
 }
 
 export interface RewardClaimedEventData {
@@ -143,16 +144,17 @@ export function createGameEndedEvent(
 export function createChestOpenedEvent(
   gameId: number,
   player: string,
-  chestType: 'normal' | 'rare',
-  rewardType: 'weapon' | 'consumable' | 'ammo',
-  rewardAmount: number,
+  containerType: 'chest' | 'rare_chest' | 'ammo_box',
+  weaponId: string | null,
+  consumableId: string | null,
+  ammoAmount: number,
   txHash?: string,
 ): SomniaEvent {
   return {
     id: nextId(),
     type: 'chest_opened',
     timestamp: Date.now(),
-    data: { gameId, player, chestType, rewardType, rewardAmount } as ChestOpenedEventData,
+    data: { gameId, player, containerType, weaponId, consumableId, ammoAmount } as ChestOpenedEventData,
     source: 'testnet',
     txHash,
   }
@@ -239,8 +241,14 @@ export function formatEventMessage(event: SomniaEvent): string {
     }
     case 'chest_opened': {
       const d = event.data as ChestOpenedEventData
-      const chestLabel = d.chestType === 'rare' ? 'rare chest' : 'chest'
-      return `${d.player.slice(0, 6)}... opened ${chestLabel} (${d.rewardType} +${d.rewardAmount})`
+      const label = d.containerType === 'rare_chest'
+        ? 'rare chest'
+        : d.containerType === 'ammo_box'
+          ? 'ammo box'
+          : 'chest'
+      const weapon = d.weaponId ? `weapon:${d.weaponId}` : 'no-weapon'
+      const utility = d.consumableId ? `, utility:${d.consumableId}` : ''
+      return `${d.player.slice(0, 6)}... opened ${label} (${weapon}, ammo:+${d.ammoAmount}${utility})`
     }
     case 'reward_claimed': {
       const d = event.data as RewardClaimedEventData

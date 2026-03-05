@@ -57,20 +57,20 @@ contract PixelRoyale {
     GameResult[] public gameHistory;
     mapping(address => uint256[]) public playerGames; // player => gameId[]
 
-    // Chest open history (player-submitted gameplay telemetry)
-    struct ChestOpenRecord {
-        uint256 gameId;
-        address player;
-        bytes32 chestKey;
-        uint8 chestType;      // 0 = normal, 1 = rare
-        uint16 roll;          // 0..9999
-        uint8 rewardType;     // 0 = weapon, 1 = consumable, 2 = ammo
-        bytes32 rewardId;     // hashed reward identifier
-        uint16 rewardAmount;  // stack amount / ammo amount
-        uint256 timestamp;
+    // Verified container open history
+    mapping(address => mapping(bytes32 => bool)) public playerContainerOpened;
+
+    struct ContainerReward {
+        uint8 weaponCode;
+        uint8 weaponRarity;
+        uint16 ammoAmount;
+        uint8 ammoWeaponCode;
+        uint8 consumableCode;
+        uint8 consumableAmount;
+        uint16 woodAmount;
+        uint16 stoneAmount;
+        uint16 metalAmount;
     }
-    ChestOpenRecord[] public chestOpenHistory;
-    mapping(address => mapping(bytes32 => bool)) public playerChestOpened;
 
     // Per-player aggregate stats
     struct PlayerStats {
@@ -90,15 +90,22 @@ contract PixelRoyale {
     event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry);
     event SessionKeyRevoked(address indexed player, address indexed sessionKey);
     event OrchestratorUpdated(address indexed oldOrch, address indexed newOrch);
-    event ChestOpened(
+    event ContainerOpened(
         uint256 indexed gameId,
+        uint256 containerId,
         address indexed player,
-        bytes32 indexed chestKey,
-        uint8 chestType,
+        bytes32 indexed containerKey,
+        uint8 containerType,
         uint16 roll,
-        uint8 rewardType,
-        bytes32 rewardId,
-        uint16 rewardAmount,
+        uint8 weaponCode,
+        uint8 weaponRarity,
+        uint16 ammoAmount,
+        uint8 ammoWeaponCode,
+        uint8 consumableCode,
+        uint8 consumableAmount,
+        uint16 woodAmount,
+        uint16 stoneAmount,
+        uint16 metalAmount,
         uint256 timestamp
     );
 
@@ -241,51 +248,178 @@ contract PixelRoyale {
         emit GameEnded(_gameId, _placements[0], _placements, pool);
     }
 
-    // ──────────────────────────── Chest Logs ────────────────────────────
+    // ──────────────────────────── Verified Containers ───────────────────
 
-    /// @notice Record a chest opening result directly on-chain.
-    /// @dev Called by players from the game client when they open a chest.
-    function recordChestOpen(
+    /// @notice Open a loot container with deterministic on-chain reward derivation.
+    function openContainerVerified(
         uint256 _gameId,
-        bytes32 _chestKey,
-        uint8 _chestType,
-        uint16 _roll,
-        uint8 _rewardType,
-        bytes32 _rewardId,
-        uint16 _rewardAmount
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
     ) external {
-        require(_chestKey != bytes32(0), "INVALID_CHEST_KEY");
-        require(_chestType <= 1, "INVALID_CHEST_TYPE");
-        require(_roll <= 9999, "INVALID_ROLL");
-        require(_rewardType <= 2, "INVALID_REWARD_TYPE");
-        require(!playerChestOpened[msg.sender][_chestKey], "CHEST_ALREADY_OPENED");
+        require(_containerKey != bytes32(0), "INVALID_CONTAINER_KEY");
+        require(_containerType <= 2, "INVALID_CONTAINER_TYPE");
+        require(!playerContainerOpened[msg.sender][_containerKey], "CONTAINER_ALREADY_OPENED");
 
-        playerChestOpened[msg.sender][_chestKey] = true;
+        uint16 roll = _deriveRoll(_gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+        ContainerReward memory reward = _deriveContainerReward(_containerType, roll, _playerNonce);
 
-        ChestOpenRecord memory record = ChestOpenRecord({
-            gameId: _gameId,
-            player: msg.sender,
-            chestKey: _chestKey,
-            chestType: _chestType,
-            roll: _roll,
-            rewardType: _rewardType,
-            rewardId: _rewardId,
-            rewardAmount: _rewardAmount,
-            timestamp: block.timestamp
-        });
-        chestOpenHistory.push(record);
+        playerContainerOpened[msg.sender][_containerKey] = true;
 
-        emit ChestOpened(
+        emit ContainerOpened(
             _gameId,
+            _containerId,
             msg.sender,
-            _chestKey,
-            _chestType,
-            _roll,
-            _rewardType,
-            _rewardId,
-            _rewardAmount,
+            _containerKey,
+            _containerType,
+            roll,
+            reward.weaponCode,
+            reward.weaponRarity,
+            reward.ammoAmount,
+            reward.ammoWeaponCode,
+            reward.consumableCode,
+            reward.consumableAmount,
+            reward.woodAmount,
+            reward.stoneAmount,
+            reward.metalAmount,
             block.timestamp
         );
+    }
+
+    function _deriveRoll(
+        uint256 _gameId,
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
+    ) internal view returns (uint16) {
+        uint256 entropy = uint256(keccak256(abi.encodePacked(
+            _gameId,
+            _containerId,
+            msg.sender,
+            _containerKey,
+            _containerType,
+            _seed,
+            _playerNonce,
+            block.prevrandao,
+            blockhash(block.number - 1),
+            address(this)
+        )));
+        return uint16(entropy % 10000);
+    }
+
+    function _deriveContainerReward(
+        uint8 _containerType,
+        uint16 _roll,
+        uint32 _playerNonce
+    ) internal pure returns (ContainerReward memory reward) {
+        uint256 entropy = uint256(keccak256(abi.encodePacked(_containerType, _roll, _playerNonce)));
+
+        if (_containerType == 2) {
+            reward.weaponCode = 0;
+            reward.weaponRarity = 0;
+            reward.ammoWeaponCode = _pickAmmoWeaponCode(_slice(entropy, 11, 10000));
+            reward.ammoAmount = uint16(48 + _slice(entropy, 12, 68));
+
+            uint256 utilityRoll = _slice(entropy, 13, 10000);
+            if (utilityRoll < 4200) {
+                reward.consumableCode = _pickAmmoBoxConsumable(_slice(entropy, 14, 10000));
+                if (reward.consumableCode == 1) {
+                    reward.consumableAmount = uint8(2 + _slice(entropy, 15, 2));
+                } else if (reward.consumableCode == 2) {
+                    reward.consumableAmount = uint8(1 + _slice(entropy, 16, 2));
+                } else {
+                    reward.consumableAmount = 1;
+                }
+            }
+
+            reward.woodAmount = uint16(6 + _slice(entropy, 17, 8));
+            reward.stoneAmount = 0;
+            reward.metalAmount = 0;
+            return reward;
+        }
+
+        reward.weaponCode = _pickWeaponCode(_slice(entropy, 21, 10000));
+        reward.weaponRarity = _pickWeaponRarity(_containerType, _slice(entropy, 22, 10000));
+        reward.ammoWeaponCode = reward.weaponCode;
+        reward.ammoAmount = _containerType == 1
+            ? uint16(64 + _slice(entropy, 23, 56))
+            : uint16(34 + _slice(entropy, 23, 42));
+
+        reward.consumableCode = _pickChestConsumable(_containerType, _slice(entropy, 24, 10000));
+        if (reward.consumableCode == 1) {
+            reward.consumableAmount = uint8(2 + _slice(entropy, 25, 2));
+        } else if (reward.consumableCode == 2) {
+            reward.consumableAmount = uint8(1 + _slice(entropy, 26, 2));
+        } else {
+            reward.consumableAmount = 1;
+        }
+
+        if (_containerType == 1) {
+            reward.woodAmount = 40;
+            reward.stoneAmount = 24;
+            reward.metalAmount = 8;
+        } else {
+            reward.woodAmount = 22;
+            reward.stoneAmount = 14;
+            reward.metalAmount = 0;
+        }
+    }
+
+    function _slice(uint256 entropy, uint256 salt, uint256 modValue) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(entropy, salt))) % modValue;
+    }
+
+    function _pickWeaponCode(uint256 roll) internal pure returns (uint8) {
+        if (roll < 3100) return 1; // ar
+        if (roll < 5600) return 3; // smg
+        if (roll < 8100) return 2; // shotgun
+        return 4;                  // sniper
+    }
+
+    function _pickAmmoWeaponCode(uint256 roll) internal pure returns (uint8) {
+        if (roll < 3400) return 1; // ar
+        if (roll < 6800) return 3; // smg
+        if (roll < 8800) return 2; // shotgun
+        return 4;                  // sniper
+    }
+
+    function _pickWeaponRarity(uint8 containerType, uint256 roll) internal pure returns (uint8) {
+        if (containerType == 1) {
+            if (roll < 2000) return 2; // uncommon
+            if (roll < 6000) return 3; // rare
+            if (roll < 8800) return 4; // epic
+            return 5;                  // legendary
+        }
+
+        if (roll < 3200) return 1; // common
+        if (roll < 7000) return 2; // uncommon
+        if (roll < 9000) return 3; // rare
+        if (roll < 9800) return 4; // epic
+        return 5;                  // legendary
+    }
+
+    function _pickChestConsumable(uint8 containerType, uint256 roll) internal pure returns (uint8) {
+        if (containerType == 1) {
+            if (roll < 1800) return 1; // bandage
+            if (roll < 5200) return 2; // mini
+            if (roll < 8300) return 3; // shield potion
+            return 4;                  // medkit
+        }
+
+        if (roll < 3400) return 1; // bandage
+        if (roll < 7000) return 2; // mini
+        if (roll < 9200) return 3; // shield potion
+        return 4;                  // medkit
+    }
+
+    function _pickAmmoBoxConsumable(uint256 roll) internal pure returns (uint8) {
+        if (roll < 5400) return 1; // bandage
+        if (roll < 9000) return 2; // mini
+        return 3;                  // shield potion
     }
 
     // ──────────────────────────── Rewards ──────────────────────────────
@@ -326,14 +460,6 @@ contract PixelRoyale {
             results[i] = gameHistory[len - count + i];
         }
         return results;
-    }
-
-    function getChestOpenCount() external view returns (uint256) {
-        return chestOpenHistory.length;
-    }
-
-    function getChestOpen(uint256 _index) external view returns (ChestOpenRecord memory) {
-        return chestOpenHistory[_index];
     }
 
     // ──────────────────────────── Admin ────────────────────────────────

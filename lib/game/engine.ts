@@ -3,14 +3,14 @@
 import {
   MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, BOT_COUNT, COLORS,
   WEAPONS, MINIMAP_SIZE, MINIMAP_PADDING, MATERIAL_HARVEST, CONSUMABLE_LOOT_RARITY,
-  CHEST_INTERACT_RANGE, CHEST_GLOW_RANGE,
+  CONTAINER_INTERACT_RANGE, CONTAINER_GLOW_RANGE, CONTAINER_SEARCH_TIME,
   POI_DEFS, TILE_SIZE,
   TEAM_SIZES,
-  type Rarity, type ConsumableId, type ChestType, type GameMode,
+  type Rarity, type ConsumableId, type ContainerType, type GameMode,
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
-import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type ChestObj, type GameMap } from './map'
+import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type ContainerObj, type GameMap } from './map'
 import {
   createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, tryPickupConsumable, addAmmoToPlayer,
   takeDamage, getBuildPlacement, canPlaceBuild, selectBestConsumable,
@@ -60,22 +60,39 @@ export interface KillFeedEntry {
   time: number
 }
 
-export type ChestRewardKind = 'weapon' | 'consumable' | 'ammo'
+export type ContainerPromptStatus = 'ready' | 'searching' | 'verifying'
 
-export interface ChestPromptState {
+export interface ContainerPromptState {
   key: 'E'
-  chestType: ChestType
-  chestId: number
+  containerType: ContainerType
+  containerId: number
+  status: ContainerPromptStatus
+  progress: number
+  searchTime: number
 }
 
-export interface ChestOpenResult {
+export interface ContainerVerificationRequest {
+  gameId: number
   mapSeed: number
-  chestId: number
-  chestType: ChestType
+  containerId: number
+  containerType: ContainerType
+  seed: number
+  playerNonce: number
+}
+
+export interface ContainerRewardBundle {
+  mapSeed: number
+  containerId: number
+  containerType: ContainerType
   roll: number
-  rewardType: ChestRewardKind
-  rewardId: string
-  rewardAmount: number
+  weaponId: string | null
+  weaponRarity: Rarity | null
+  ammoAmount: number
+  ammoWeaponId: string | null
+  consumableId: ConsumableId | null
+  consumableAmount: number
+  materials: { wood: number; stone: number; metal: number }
+  verified: boolean
 }
 
 // ── Game State ──────────────────────────────────────────────────────────────
@@ -101,8 +118,14 @@ export interface GameState {
   placement: number
   lobbyTimer: number
   dropTimer: number
-  activeChestId: number | null
-  promptChestId: number | null
+  gameId: number
+  verifiedContainers: boolean
+  activeContainerId: number | null
+  promptContainerId: number | null
+  pendingContainerId: number | null
+  searchContainerId: number | null
+  searchContainerProgress: number
+  searchNonce: number
   aimAssistBotIdx: number   // index into bots[], -1 if no target
 
   // Callbacks for React UI
@@ -112,13 +135,20 @@ export interface GameState {
   onPlayerUpdate?: (player: Player) => void
   onStormUpdate?: (storm: StormState) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
-  onChestPromptUpdate?: (prompt: ChestPromptState | null) => void
-  onChestOpened?: (result: ChestOpenResult) => void
+  onContainerPromptUpdate?: (prompt: ContainerPromptState | null) => void
+  onContainerVerificationRequested?: (request: ContainerVerificationRequest) => void
+  onContainerOpened?: (result: ContainerRewardBundle) => void
 }
 
 // ── Initialize ──────────────────────────────────────────────────────────────
 
-export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: number; mapSeed?: number; mode?: GameMode }): GameState {
+export function initGame(canvas: HTMLCanvasElement, options?: {
+  botCount?: number
+  mapSeed?: number
+  mode?: GameMode
+  gameId?: number
+  verifiedContainers?: boolean
+}): GameState {
   const input = createInputState()
   const cleanup = setupInput(canvas, input)
   const botCount = Math.max(1, Math.floor(options?.botCount ?? BOT_COUNT))
@@ -181,8 +211,14 @@ export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: numbe
     placement: 0,
     lobbyTimer: 10,
     dropTimer: 0,
-    activeChestId: null,
-    promptChestId: null,
+    gameId: Math.max(0, Math.floor(options?.gameId ?? 0)),
+    verifiedContainers: options?.verifiedContainers ?? false,
+    activeContainerId: null,
+    promptContainerId: null,
+    pendingContainerId: null,
+    searchContainerId: null,
+    searchContainerProgress: 0,
+    searchNonce: 0,
     aimAssistBotIdx: -1,
   }
 
@@ -207,161 +243,201 @@ function weightedPick<T>(options: Array<{ value: T; weight: number }>): T {
   return options[options.length - 1].value
 }
 
-function getNearbyChest(state: GameState): ChestObj | null {
-  let nearest: ChestObj | null = null
+function getNearbyContainer(state: GameState): ContainerObj | null {
+  let nearest: ContainerObj | null = null
   let nearestDist = Infinity
-  for (const chest of state.map.chests) {
-    if (chest.opened) continue
-    const d = distance(state.player.x, state.player.y, chest.x, chest.y)
-    if (d > CHEST_GLOW_RANGE || d >= nearestDist) continue
-    nearest = chest
+  for (const container of state.map.containers) {
+    if (container.opened || container.pendingVerification) continue
+    const d = distance(state.player.x, state.player.y, container.x, container.y)
+    if (d > CONTAINER_GLOW_RANGE || d >= nearestDist) continue
+    nearest = container
     nearestDist = d
   }
   return nearest
 }
 
-function resolveChestReward(state: GameState, chest: ChestObj, roll: number): ChestOpenResult {
-  const weaponRarityRoll = () => (
-    chest.type === 'rare'
-      ? weightedPick<Rarity>([
-        { value: 'uncommon', weight: 20 },
-        { value: 'rare', weight: 42 },
-        { value: 'epic', weight: 28 },
-        { value: 'legendary', weight: 10 },
-      ])
-      : weightedPick<Rarity>([
-        { value: 'common', weight: 34 },
-        { value: 'uncommon', weight: 36 },
-        { value: 'rare', weight: 20 },
-        { value: 'epic', weight: 8 },
-        { value: 'legendary', weight: 2 },
-      ])
-  )
+function findContainerById(state: GameState, containerId: number): ContainerObj | null {
+  return state.map.containers.find((container) => container.id === containerId) ?? null
+}
 
-  const ammoDropAmount = chest.type === 'rare'
-    ? 70 + Math.floor(Math.random() * 50)
-    : 32 + Math.floor(Math.random() * 36)
+function resetContainerSearch(state: GameState) {
+  state.searchContainerId = null
+  state.searchContainerProgress = 0
+}
 
-  const resultByType = chest.type === 'rare'
-    ? (roll < 7000 ? 'weapon' : roll < 9000 ? 'consumable' : 'ammo')
-    : (roll < 5600 ? 'weapon' : roll < 8600 ? 'consumable' : 'ammo')
-
-  if (resultByType === 'weapon') {
-    const weaponId = weightedPick<string>([
-      { value: 'ar', weight: 30 },
-      { value: 'smg', weight: 28 },
-      { value: 'shotgun', weight: 26 },
-      { value: 'sniper', weight: 16 },
+function rollWeaponRarity(type: ContainerType): Rarity {
+  if (type === 'rare_chest') {
+    return weightedPick<Rarity>([
+      { value: 'uncommon', weight: 20 },
+      { value: 'rare', weight: 40 },
+      { value: 'epic', weight: 28 },
+      { value: 'legendary', weight: 12 },
     ])
-    const rarity = weaponRarityRoll()
-    state.map.floorLoot.push({
-      kind: 'weapon',
-      x: chest.x + (Math.random() - 0.5) * 30,
-      y: chest.y + 18,
-      weaponId,
-      rarity,
-      picked: false,
-    })
-    state.map.floorLoot.push({
-      kind: 'ammo',
-      x: chest.x + (Math.random() - 0.5) * 28,
-      y: chest.y - 14,
-      amount: ammoDropAmount,
-      rarity,
-      weaponId,
-      picked: false,
-    })
-
-    return {
-      mapSeed: state.map.seed,
-      chestId: chest.id,
-      chestType: chest.type,
-      roll,
-      rewardType: 'weapon',
-      rewardId: `${weaponId}:${rarity}`,
-      rewardAmount: 1,
-    }
   }
-
-  if (resultByType === 'consumable') {
-    const itemId = weightedPick<ConsumableId>([
-      { value: 'bandage', weight: chest.type === 'rare' ? 20 : 42 },
-      { value: 'mini_shield', weight: chest.type === 'rare' ? 28 : 34 },
-      { value: 'shield_potion', weight: chest.type === 'rare' ? 30 : 18 },
-      { value: 'medkit', weight: chest.type === 'rare' ? 22 : 6 },
-    ])
-
-    state.map.floorLoot.push({
-      kind: 'consumable',
-      x: chest.x + (Math.random() - 0.5) * 24,
-      y: chest.y + 12,
-      itemId,
-      rarity: CONSUMABLE_LOOT_RARITY[itemId],
-      picked: false,
-    })
-    if (chest.type === 'rare' && Math.random() < 0.35) {
-      const bonus = weightedPick<ConsumableId>([
-        { value: 'mini_shield', weight: 45 },
-        { value: 'shield_potion', weight: 35 },
-        { value: 'medkit', weight: 20 },
-      ])
-      state.map.floorLoot.push({
-        kind: 'consumable',
-        x: chest.x + (Math.random() - 0.5) * 24,
-        y: chest.y - 10,
-        itemId: bonus,
-        rarity: CONSUMABLE_LOOT_RARITY[bonus],
-        picked: false,
-      })
-    }
-
-    return {
-      mapSeed: state.map.seed,
-      chestId: chest.id,
-      chestType: chest.type,
-      roll,
-      rewardType: 'consumable',
-      rewardId: itemId,
-      rewardAmount: 1,
-    }
-  }
-
-  const preferredWeapon = weightedPick<string>([
-    { value: 'ar', weight: 35 },
-    { value: 'smg', weight: 35 },
-    { value: 'shotgun', weight: 20 },
-    { value: 'sniper', weight: 10 },
+  return weightedPick<Rarity>([
+    { value: 'common', weight: 32 },
+    { value: 'uncommon', weight: 38 },
+    { value: 'rare', weight: 20 },
+    { value: 'epic', weight: 8 },
+    { value: 'legendary', weight: 2 },
   ])
-  state.map.floorLoot.push({
-    kind: 'ammo',
-    x: chest.x + (Math.random() - 0.5) * 26,
-    y: chest.y + 10,
-    amount: ammoDropAmount,
-    rarity: chest.type === 'rare' ? 'epic' : 'uncommon',
-    weaponId: preferredWeapon,
-    picked: false,
-  })
+}
+
+function rollLocalContainerReward(state: GameState, container: ContainerObj): ContainerRewardBundle {
+  const roll = Math.floor(Math.random() * 10000)
+  const ammoWeaponId = weightedPick<string>([
+    { value: 'ar', weight: 34 },
+    { value: 'smg', weight: 34 },
+    { value: 'shotgun', weight: 20 },
+    { value: 'sniper', weight: 12 },
+  ])
+
+  if (container.type === 'ammo_box') {
+    const hasConsumable = roll < 4200
+    const consumableId = hasConsumable
+      ? weightedPick<ConsumableId>([
+        { value: 'bandage', weight: 54 },
+        { value: 'mini_shield', weight: 36 },
+        { value: 'shield_potion', weight: 10 },
+      ])
+      : null
+    const consumableAmount = consumableId === 'bandage'
+      ? 2 + Math.floor(Math.random() * 2)
+      : consumableId === 'mini_shield'
+        ? 1 + Math.floor(Math.random() * 2)
+        : consumableId
+          ? 1
+          : 0
+
+    return {
+      mapSeed: state.map.seed,
+      containerId: container.id,
+      containerType: container.type,
+      roll,
+      weaponId: null,
+      weaponRarity: null,
+      ammoAmount: 48 + Math.floor(Math.random() * 68),
+      ammoWeaponId,
+      consumableId,
+      consumableAmount,
+      materials: {
+        wood: 6 + Math.floor(Math.random() * 8),
+        stone: 0,
+        metal: 0,
+      },
+      verified: false,
+    }
+  }
+
+  const weaponId = weightedPick<string>([
+    { value: 'ar', weight: 31 },
+    { value: 'smg', weight: 28 },
+    { value: 'shotgun', weight: 25 },
+    { value: 'sniper', weight: 16 },
+  ])
+  const weaponRarity = rollWeaponRarity(container.type)
+  const consumableId = weightedPick<ConsumableId>([
+    { value: 'bandage', weight: container.type === 'rare_chest' ? 18 : 34 },
+    { value: 'mini_shield', weight: container.type === 'rare_chest' ? 34 : 36 },
+    { value: 'shield_potion', weight: container.type === 'rare_chest' ? 31 : 22 },
+    { value: 'medkit', weight: container.type === 'rare_chest' ? 17 : 8 },
+  ])
+  const consumableAmount = consumableId === 'bandage'
+    ? 2 + Math.floor(Math.random() * 2)
+    : consumableId === 'mini_shield'
+      ? 1 + Math.floor(Math.random() * 2)
+      : 1
 
   return {
     mapSeed: state.map.seed,
-    chestId: chest.id,
-    chestType: chest.type,
+    containerId: container.id,
+    containerType: container.type,
     roll,
-    rewardType: 'ammo',
-    rewardId: preferredWeapon,
-    rewardAmount: ammoDropAmount,
+    weaponId,
+    weaponRarity,
+    ammoAmount: container.type === 'rare_chest'
+      ? 64 + Math.floor(Math.random() * 56)
+      : 34 + Math.floor(Math.random() * 42),
+    ammoWeaponId: weaponId,
+    consumableId,
+    consumableAmount,
+    materials: container.type === 'rare_chest'
+      ? { wood: 40, stone: 24, metal: 8 }
+      : { wood: 22, stone: 14, metal: 0 },
+    verified: false,
   }
 }
 
-function openChest(state: GameState, chest: ChestObj): ChestOpenResult {
-  chest.opened = true
-  playChestOpen()
+function spawnContainerReward(state: GameState, container: ContainerObj, result: ContainerRewardBundle) {
+  if (result.weaponId && result.weaponRarity) {
+    state.map.floorLoot.push({
+      kind: 'weapon',
+      x: container.x + (Math.random() - 0.5) * 30,
+      y: container.y + 18,
+      weaponId: result.weaponId,
+      rarity: result.weaponRarity,
+      picked: false,
+    })
+  }
 
-  const roll = Math.floor(Math.random() * 10000)
-  const result = resolveChestReward(state, chest, roll)
-  state.player.wood += chest.type === 'rare' ? 40 : 22
-  state.player.stone += chest.type === 'rare' ? 28 : 14
-  return result
+  if (result.ammoAmount > 0) {
+    state.map.floorLoot.push({
+      kind: 'ammo',
+      x: container.x + (Math.random() - 0.5) * 30,
+      y: container.y - 12,
+      amount: result.ammoAmount,
+      rarity: result.weaponRarity ?? 'uncommon',
+      weaponId: result.ammoWeaponId ?? undefined,
+      picked: false,
+    })
+  }
+
+  if (result.consumableId && result.consumableAmount > 0) {
+    for (let i = 0; i < result.consumableAmount; i++) {
+      state.map.floorLoot.push({
+        kind: 'consumable',
+        x: container.x + (Math.random() - 0.5) * 26,
+        y: container.y + (Math.random() - 0.5) * 18,
+        itemId: result.consumableId,
+        rarity: CONSUMABLE_LOOT_RARITY[result.consumableId],
+        picked: false,
+      })
+    }
+  }
+
+  grantMaterials(state.player, result.materials)
+}
+
+function applyContainerOpenResult(state: GameState, container: ContainerObj, result: ContainerRewardBundle) {
+  container.pendingVerification = false
+  container.opened = true
+  state.pendingContainerId = null
+  state.promptContainerId = null
+  resetContainerSearch(state)
+  playChestOpen()
+  spawnContainerReward(state, container, result)
+  state.onContainerPromptUpdate?.(null)
+  state.onContainerOpened?.(result)
+}
+
+function requestContainerVerification(state: GameState, container: ContainerObj) {
+  container.pendingVerification = true
+  state.pendingContainerId = container.id
+  state.searchNonce++
+  resetContainerSearch(state)
+  state.onContainerVerificationRequested?.({
+    gameId: state.gameId,
+    mapSeed: state.map.seed,
+    containerId: container.id,
+    containerType: container.type,
+    seed: state.map.seed,
+    playerNonce: state.searchNonce,
+  })
+}
+
+function openContainerLocally(state: GameState, container: ContainerObj) {
+  const result = rollLocalContainerReward(state, container)
+  applyContainerOpenResult(state, container, result)
 }
 
 function actionCancelsConsumableUse(state: GameState): boolean {
@@ -518,29 +594,77 @@ export function updateGame(state: GameState, dt: number) {
     }
   }
 
-  const nearbyChest = getNearbyChest(state)
-  state.activeChestId = nearbyChest?.id ?? null
+  const pendingContainer = state.pendingContainerId !== null
+    ? findContainerById(state, state.pendingContainerId)
+    : null
+  const nearbyContainer = getNearbyContainer(state)
+  state.activeContainerId = pendingContainer?.id ?? nearbyContainer?.id ?? null
 
-  const canOpenChest = !!nearbyChest
-    && !state.player.buildMode
-    && distance(state.player.x, state.player.y, nearbyChest.x, nearbyChest.y) <= CHEST_INTERACT_RANGE
+  if (pendingContainer && pendingContainer.pendingVerification && !pendingContainer.opened) {
+    state.promptContainerId = pendingContainer.id
+    state.onContainerPromptUpdate?.({
+      key: 'E',
+      containerType: pendingContainer.type,
+      containerId: pendingContainer.id,
+      status: 'verifying',
+      progress: 1,
+      searchTime: CONTAINER_SEARCH_TIME[pendingContainer.type],
+    })
+  } else {
+    if (state.pendingContainerId !== null && !pendingContainer) {
+      state.pendingContainerId = null
+    }
 
-  if (nearbyChest && canOpenChest) {
-    if (state.promptChestId !== nearbyChest.id) {
-      state.promptChestId = nearbyChest.id
-      state.onChestPromptUpdate?.({
-        key: 'E',
-        chestType: nearbyChest.type,
-        chestId: nearbyChest.id,
-      })
+    const canOpenContainer = !!nearbyContainer
+      && !state.player.buildMode
+      && distance(state.player.x, state.player.y, nearbyContainer.x, nearbyContainer.y) <= CONTAINER_INTERACT_RANGE
+
+    if (nearbyContainer && canOpenContainer) {
+      const searchTime = CONTAINER_SEARCH_TIME[nearbyContainer.type]
+      const holdingInteract = state.input.keys.has('e')
+
+      if (!holdingInteract) {
+        if (state.searchContainerId === nearbyContainer.id) {
+          resetContainerSearch(state)
+        }
+        state.promptContainerId = nearbyContainer.id
+        state.onContainerPromptUpdate?.({
+          key: 'E',
+          containerType: nearbyContainer.type,
+          containerId: nearbyContainer.id,
+          status: 'ready',
+          progress: 0,
+          searchTime,
+        })
+      } else {
+        if (state.searchContainerId !== nearbyContainer.id) {
+          state.searchContainerId = nearbyContainer.id
+          state.searchContainerProgress = 0
+        }
+        state.searchContainerProgress = Math.min(searchTime, state.searchContainerProgress + dt)
+        const progress = Math.min(1, state.searchContainerProgress / searchTime)
+        state.promptContainerId = nearbyContainer.id
+        state.onContainerPromptUpdate?.({
+          key: 'E',
+          containerType: nearbyContainer.type,
+          containerId: nearbyContainer.id,
+          status: 'searching',
+          progress,
+          searchTime,
+        })
+        if (progress >= 1) {
+          if (state.verifiedContainers) {
+            requestContainerVerification(state, nearbyContainer)
+          } else {
+            openContainerLocally(state, nearbyContainer)
+          }
+        }
+      }
+    } else if (state.promptContainerId !== null) {
+      state.promptContainerId = null
+      resetContainerSearch(state)
+      state.onContainerPromptUpdate?.(null)
     }
-    if (state.input.justPressed.has('e')) {
-      const result = openChest(state, nearbyChest)
-      state.onChestOpened?.(result)
-    }
-  } else if (state.promptChestId !== null) {
-    state.promptChestId = null
-    state.onChestPromptUpdate?.(null)
   }
 
   // ── Pickup supply drops ──────────────────────────────────────────────
@@ -1014,6 +1138,30 @@ export function addSupplyDrop(state: GameState, x: number, y: number, rarity: Ra
   state.onSupplyDrop?.(drop)
 }
 
+export function confirmVerifiedContainerOpen(state: GameState, result: ContainerRewardBundle): boolean {
+  const container = findContainerById(state, result.containerId)
+  if (!container || !container.pendingVerification || container.opened) {
+    return false
+  }
+  applyContainerOpenResult(state, container, { ...result, verified: true })
+  return true
+}
+
+export function rejectVerifiedContainerOpen(state: GameState, containerId: number): boolean {
+  const container = findContainerById(state, containerId)
+  if (!container || !container.pendingVerification || container.opened) {
+    return false
+  }
+  container.pendingVerification = false
+  state.pendingContainerId = null
+  if (state.promptContainerId === containerId) {
+    state.promptContainerId = null
+    state.onContainerPromptUpdate?.(null)
+  }
+  resetContainerSearch(state)
+  return true
+}
+
 // ── Render ──────────────────────────────────────────────────────────────────
 
 export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
@@ -1023,7 +1171,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // ── Map ───────────────────────────────────────────────────────────────
   renderMap(ctx, map, cam, {
-    highlightedChestId: state.activeChestId,
+    highlightedContainerId: state.activeContainerId,
     time: state.time,
   })
 

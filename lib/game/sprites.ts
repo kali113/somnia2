@@ -1,7 +1,7 @@
 // ── Pixel Art Sprite Drawing ─────────────────────────────────────────────────
 // All sprites drawn procedurally via Canvas 2D API. No image assets needed.
 
-import { COLORS, RARITY_COLORS, type Rarity, type BuildMaterial, type BuildPieceId, type ChestType } from './constants'
+import { COLORS, RARITY_COLORS, type Rarity, type BuildMaterial, type BuildPieceId, type ContainerType } from './constants'
 
 // ── Player / Bot ────────────────────────────────────────────────────────────
 
@@ -145,37 +145,67 @@ export function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, hea
   ctx.fillRect(x + 8, y + 4, 6, 3)
 }
 
-// ── Chest ───────────────────────────────────────────────────────────────────
+// ── Containers ──────────────────────────────────────────────────────────────
 
-export function drawChest(
+export function drawContainer(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   opened: boolean,
-  type: ChestType,
+  pendingVerification: boolean,
+  type: ContainerType,
   highlighted: boolean,
   time: number,
 ) {
   if (opened) {
-    ctx.fillStyle = '#8a6a2a'
+    if (type === 'ammo_box') {
+      ctx.fillStyle = '#6a4a26'
+      ctx.fillRect(x - 8, y - 6, 16, 12)
+      ctx.fillStyle = '#2a2a2a'
+      ctx.fillRect(x - 4, y - 2, 8, 3)
+      return
+    }
+    ctx.fillStyle = type === 'rare_chest' ? '#376f96' : '#8a6a2a'
     ctx.fillRect(x - 8, y - 4, 16, 10)
     return
   }
 
+  if (type === 'ammo_box') {
+    const glowPulse = highlighted ? Math.sin(time * 8) * 0.16 + 0.76 : 0.35
+    const glowColor = pendingVerification ? '80, 232, 255' : '255, 179, 71'
+    ctx.fillStyle = `rgba(${glowColor}, ${0.18 * glowPulse})`
+    ctx.beginPath()
+    ctx.arc(x, y, highlighted ? 19 : 14, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = '#8b5a2b'
+    ctx.fillRect(x - 9, y - 7, 18, 14)
+    ctx.fillStyle = COLORS.ammoBox
+    ctx.fillRect(x - 8, y - 6, 16, 12)
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(x - 5, y - 2, 10, 3)
+    ctx.fillRect(x - 1, y - 5, 2, 9)
+    return
+  }
+
   const glowPulse = highlighted ? Math.sin(time * 6) * 0.15 + 0.75 : 0.4
-  const glowColor = type === 'rare' ? '80, 180, 255' : '255, 215, 0'
+  const glowColor = pendingVerification
+    ? '80, 232, 255'
+    : type === 'rare_chest'
+      ? '80, 180, 255'
+      : '255, 215, 0'
   ctx.fillStyle = `rgba(${glowColor}, ${0.22 * glowPulse})`
   ctx.beginPath()
   ctx.arc(x, y, highlighted ? 24 : 17, 0, Math.PI * 2)
   ctx.fill()
 
-  // Chest body
-  ctx.fillStyle = type === 'rare' ? '#2f7db8' : '#b8860b'
+  // Container body
+  ctx.fillStyle = type === 'rare_chest' ? '#2f7db8' : '#b8860b'
   ctx.fillRect(x - 9, y - 5, 18, 12)
-  ctx.fillStyle = type === 'rare' ? '#57b4ff' : COLORS.chest
+  ctx.fillStyle = type === 'rare_chest' ? '#57b4ff' : COLORS.chest
   ctx.fillRect(x - 8, y - 4, 16, 10)
   // Lock
-  ctx.fillStyle = type === 'rare' ? '#1a5078' : '#8a6a2a'
+  ctx.fillStyle = type === 'rare_chest' ? '#1a5078' : '#8a6a2a'
   ctx.fillRect(x - 2, y - 1, 4, 4)
 }
 

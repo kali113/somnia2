@@ -220,21 +220,43 @@ function handleLog(
       return
     }
 
-    if (parsed.eventName === 'ChestOpened') {
-      const chestType = Number(parsed.args.chestType) === 1 ? 'rare' : 'normal'
-      const rewardTypeCode = Number(parsed.args.rewardType)
-      const rewardType = rewardTypeCode === 0
-        ? 'weapon'
-        : rewardTypeCode === 1
-          ? 'consumable'
-          : 'ammo'
+    if (parsed.eventName === 'ContainerOpened') {
+      const containerTypeCode = Number(parsed.args.containerType)
+      const containerType = containerTypeCode === 1
+        ? 'rare_chest'
+        : containerTypeCode === 2
+          ? 'ammo_box'
+          : 'chest'
+
+      const weaponCode = Number(parsed.args.weaponCode ?? 0)
+      const weaponId = weaponCode === 1
+        ? 'ar'
+        : weaponCode === 2
+          ? 'shotgun'
+          : weaponCode === 3
+            ? 'smg'
+            : weaponCode === 4
+              ? 'sniper'
+              : null
+
+      const consumableCode = Number(parsed.args.consumableCode ?? 0)
+      const consumableId = consumableCode === 1
+        ? 'bandage'
+        : consumableCode === 2
+          ? 'mini_shield'
+          : consumableCode === 3
+            ? 'shield_potion'
+            : consumableCode === 4
+              ? 'medkit'
+              : null
 
       onEvent(createChestOpenedEvent(
         Number(parsed.args.gameId),
         parsed.args.player.toLowerCase(),
-        chestType,
-        rewardType,
-        Number(parsed.args.rewardAmount),
+        containerType,
+        weaponId,
+        consumableId,
+        Number(parsed.args.ammoAmount ?? 0),
         txHash,
       ))
     }

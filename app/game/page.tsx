@@ -3,7 +3,11 @@
 import { Suspense, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams, useRouter } from 'next/navigation'
-import type { GameState, GamePhase, KillFeedEntry, ChestPromptState, ChestOpenResult } from '@/lib/game/engine'
+import {
+  confirmVerifiedContainerOpen,
+  rejectVerifiedContainerOpen,
+  type GameState, type GamePhase, type KillFeedEntry, type ContainerPromptState, type ContainerVerificationRequest,
+} from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { GameMode } from '@/lib/game/constants'
 import type { StormState } from '@/lib/game/storm'
@@ -11,7 +15,7 @@ import { createConnectionEvent, type SomniaEvent } from '@/lib/somnia/events'
 import { createReactivityConnection } from '@/lib/somnia/reactivity'
 import { fetchMatchById, type MatchRecord } from '@/lib/somnia/matchmaking-client'
 import { isBackendConfigured, backendConfigError } from '@/lib/somnia/runtime-config'
-import { logChestOpenOnChain } from '@/lib/somnia/chest-log'
+import { openContainerVerifiedOnChain } from '@/lib/somnia/chest-log'
 import GameHUD from '@/components/game/GameHUD'
 import KillFeed from '@/components/game/KillFeed'
 import VictoryScreen from '@/components/game/VictoryScreen'
@@ -31,6 +35,11 @@ const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
     </div>
   ),
 })
+
+type ContainerTxToast = {
+  kind: 'pending' | 'success' | 'error'
+  message: string
+}
 
 function GamePageInner() {
   const searchParams = useSearchParams()
@@ -63,13 +72,14 @@ function GamePageInner() {
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([])
   const [gameTime, setGameTime] = useState(0)
   const [placement, setPlacement] = useState(0)
-  const [chestPrompt, setChestPrompt] = useState<ChestPromptState | null>(null)
+  const [containerPrompt, setContainerPrompt] = useState<ContainerPromptState | null>(null)
 
   // Somnia state
   const [somniaEvents, setSomniaEvents] = useState<SomniaEvent[]>([])
   const [walletConnected, setWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [isLiveMode, setIsLiveMode] = useState(false)
+  const [containerTxToast, setContainerTxToast] = useState<ContainerTxToast | null>(null)
 
   // Audio
   const [muted, setMutedState] = useState(() => isMuted())
@@ -152,7 +162,7 @@ function GamePageInner() {
     setWalletConnected(false)
     setWalletAddress(null)
     setIsLiveMode(false)
-    setChestPrompt(null)
+    setContainerPrompt(null)
 
     reactivityRef.current?.disconnect()
     reactivityRef.current = null
@@ -162,26 +172,65 @@ function GamePageInner() {
     setSomniaEvents((prev) => [event, ...prev].slice(0, 20))
   }, [])
 
-  const handleChestOpened = useCallback((result: ChestOpenResult) => {
+  const handleContainerVerificationRequested = useCallback((request: ContainerVerificationRequest) => {
     if (!walletConnected || !walletAddress) {
-      pushSystemEvent(createConnectionEvent('Chest opened locally. Connect wallet to log on-chain.', 'chain_error'))
+      pushSystemEvent(createConnectionEvent('Wallet required for verified match container opens.', 'chain_error'))
+      if (gameStateRef.current) {
+        rejectVerifiedContainerOpen(gameStateRef.current, request.containerId)
+      }
+      setContainerTxToast({
+        kind: 'error',
+        message: 'Wallet required for verified container open.',
+      })
       return
     }
 
-    logChestOpenOnChain(result).then(({ txHash, reason }) => {
-      if (txHash) {
-        pushSystemEvent(createConnectionEvent(`Chest logged on-chain (${txHash.slice(0, 10)}...)`))
+    setContainerTxToast({
+      kind: 'pending',
+      message: 'Submitting container verification transaction...',
+    })
+
+    openContainerVerifiedOnChain(request).then(({ txHash, reason, reward }) => {
+      if (!gameStateRef.current) return
+
+      if (txHash && reward) {
+        const applied = confirmVerifiedContainerOpen(gameStateRef.current, reward)
+        if (applied) {
+          pushSystemEvent(createConnectionEvent(`Container verified on-chain (${txHash.slice(0, 10)}...)`))
+          setContainerTxToast({
+            kind: 'success',
+            message: `Container verified (${txHash.slice(0, 10)}...)`,
+          })
+        }
         return
       }
 
+      rejectVerifiedContainerOpen(gameStateRef.current, request.containerId)
       pushSystemEvent(createConnectionEvent(
-        `Chest opened, but on-chain logging failed (${reason ?? 'unknown_error'})`,
+        `Container verification failed (${reason ?? 'unknown_error'})`,
         'chain_error',
       ))
+      setContainerTxToast({
+        kind: 'error',
+        message: `Container verification failed (${reason ?? 'unknown_error'})`,
+      })
     }).catch(() => {
-      pushSystemEvent(createConnectionEvent('Chest opened, but on-chain logging failed', 'chain_error'))
+      if (gameStateRef.current) {
+        rejectVerifiedContainerOpen(gameStateRef.current, request.containerId)
+      }
+      pushSystemEvent(createConnectionEvent('Container verification failed', 'chain_error'))
+      setContainerTxToast({
+        kind: 'error',
+        message: 'Container verification failed.',
+      })
     })
   }, [pushSystemEvent, walletConnected, walletAddress])
+
+  useEffect(() => {
+    if (!containerTxToast || containerTxToast.kind === 'pending') return
+    const timer = setTimeout(() => setContainerTxToast(null), 4200)
+    return () => clearTimeout(timer)
+  }, [containerTxToast])
 
   useEffect(() => {
     return () => {
@@ -204,6 +253,8 @@ function GamePageInner() {
     setMuted(newMuted)
   }, [muted])
 
+  const canStartGame = !isMatchMode || walletConnected
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#0a0a0a]">
       {isMatchMode && (
@@ -219,39 +270,55 @@ function GamePageInner() {
         </div>
       )}
 
-      <GameCanvas
-        onKillFeedUpdate={setKillFeed}
-        onAliveCountUpdate={setAliveCount}
-        onPhaseChange={setPhase}
-        onPlayerUpdate={setPlayer}
-        onStormUpdate={setStorm}
-        onChestPromptUpdate={setChestPrompt}
-        onChestOpened={handleChestOpened}
-        gameStateRef={gameStateRef}
-        botCount={botCount}
-        mode={gameMode}
-      />
+      {canStartGame ? (
+        <>
+          <GameCanvas
+            onKillFeedUpdate={setKillFeed}
+            onAliveCountUpdate={setAliveCount}
+            onPhaseChange={setPhase}
+            onPlayerUpdate={setPlayer}
+            onStormUpdate={setStorm}
+            onContainerPromptUpdate={setContainerPrompt}
+            onContainerVerificationRequested={handleContainerVerificationRequested}
+            gameStateRef={gameStateRef}
+            botCount={botCount}
+            mode={gameMode}
+            gameId={isMatchMode ? parsedMatchId : 0}
+            verifiedContainers={isMatchMode}
+          />
 
-      <GameHUD
-        player={player}
-        aliveCount={aliveCount}
-        storm={storm}
-        gameTime={gameTime}
-        chestPrompt={chestPrompt}
-      />
+          <GameHUD
+            player={player}
+            aliveCount={aliveCount}
+            storm={storm}
+            gameTime={gameTime}
+            containerPrompt={containerPrompt}
+          />
 
-      <KillFeed entries={killFeed} gameTime={gameTime} />
-      <EventFeed events={somniaEvents} isLive={isLiveMode} />
+          <KillFeed entries={killFeed} gameTime={gameTime} />
+          <EventFeed events={somniaEvents} isLive={isLiveMode} />
 
-      <VictoryScreen
-        phase={phase}
-        player={player}
-        placement={placement}
-        gameTime={gameTime}
-        mode={gameMode}
-        onPlayAgain={handlePlayAgain}
-        onBackToMenu={handleBackToMenu}
-      />
+          <VictoryScreen
+            phase={phase}
+            player={player}
+            placement={placement}
+            gameTime={gameTime}
+            mode={gameMode}
+            onPlayAgain={handlePlayAgain}
+            onBackToMenu={handleBackToMenu}
+          />
+        </>
+      ) : (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(0,0,0,0.78)]">
+          <div className="rounded-xl border border-[rgba(255,215,0,0.3)] bg-[rgba(20,20,20,0.92)] px-6 py-5 text-center font-mono">
+            <div className="text-xs uppercase text-[#ffd166]">Verified Match</div>
+            <div className="mt-2 text-sm text-white">Connect your wallet to enter this match.</div>
+            <div className="mt-1 text-[11px] text-[rgba(255,255,255,0.65)]">
+              Match mode enforces on-chain container verification.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
         <WalletConnect
@@ -268,6 +335,33 @@ function GamePageInner() {
           {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </button>
       </div>
+
+      {containerTxToast && (
+        <div className="pointer-events-none absolute right-3 top-14 z-20">
+          <div
+            className="rounded-lg border px-3 py-2 font-mono text-[11px] backdrop-blur-sm"
+            style={{
+              backgroundColor: containerTxToast.kind === 'pending'
+                ? 'rgba(20, 20, 20, 0.88)'
+                : containerTxToast.kind === 'success'
+                  ? 'rgba(15, 40, 20, 0.9)'
+                  : 'rgba(45, 15, 15, 0.9)',
+              borderColor: containerTxToast.kind === 'pending'
+                ? 'rgba(58,232,255,0.38)'
+                : containerTxToast.kind === 'success'
+                  ? 'rgba(76,255,76,0.45)'
+                  : 'rgba(255,90,90,0.45)',
+              color: containerTxToast.kind === 'pending'
+                ? '#9fe8ff'
+                : containerTxToast.kind === 'success'
+                  ? '#9bff9b'
+                  : '#ff9f9f',
+            }}
+          >
+            {containerTxToast.message}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

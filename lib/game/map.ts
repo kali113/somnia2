@@ -2,13 +2,13 @@
 
 import {
   TILE_SIZE, MAP_TILES_X, MAP_TILES_Y, MAP_WIDTH, MAP_HEIGHT,
-  POI_DEFS, CHEST_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS, MINIMAP_SIZE,
+  POI_DEFS, CHEST_SPAWN_COUNT, AMMO_BOX_SPAWN_COUNT, FLOOR_LOOT_COUNT, COLORS, MINIMAP_SIZE,
   CONSUMABLE_LOOT_RARITY,
-  NORMAL_CHEST_APPEAR_RATE, CHEST_BUILDING_SPAWN_WEIGHT,
+  RARE_CHEST_APPEAR_RATE, CHEST_BUILDING_SPAWN_WEIGHT, AMMO_BOX_BUILDING_SPAWN_WEIGHT,
   type BuildMaterial, type BuildPieceId,
-  type Rarity, type ConsumableId, type ChestType,
+  type Rarity, type ConsumableId, type ContainerType,
 } from './constants'
-import { drawTree, drawRock, drawCar, drawChest, drawBuildPiece } from './sprites'
+import { drawTree, drawRock, drawCar, drawContainer, drawBuildPiece } from './sprites'
 import type { AABB } from './collision'
 import type { Camera } from './camera'
 
@@ -40,11 +40,12 @@ export interface CarObj {
   health: number
 }
 
-export interface ChestObj {
+export interface ContainerObj {
   id: number
   x: number; y: number
   opened: boolean
-  type: ChestType
+  pendingVerification: boolean
+  type: ContainerType
   spawnArea: 'building' | 'wild'
 }
 
@@ -95,7 +96,7 @@ export interface GameMap {
   trees: TreeObj[]
   rocks: RockObj[]
   cars: CarObj[]
-  chests: ChestObj[]
+  containers: ContainerObj[]
   floorLoot: FloorLoot[]
   buildings: BuildingRect[]
   playerBuilds: PlayerBuild[]
@@ -126,15 +127,15 @@ function islandFalloff(tx: number, ty: number): number {
   return Math.max(0, 1 - dist / maxDist)
 }
 
-function randomChestType(rng: () => number): ChestType {
-  return rng() < NORMAL_CHEST_APPEAR_RATE ? 'normal' : 'rare'
+function randomChestContainerType(rng: () => number): ContainerType {
+  return rng() < RARE_CHEST_APPEAR_RATE ? 'rare_chest' : 'chest'
 }
 
-function isChestTooClose(chests: ChestObj[], x: number, y: number, minDistance: number): boolean {
+function isContainerTooClose(containers: ContainerObj[], x: number, y: number, minDistance: number): boolean {
   const minDistSq = minDistance * minDistance
-  for (const chest of chests) {
-    const dx = chest.x - x
-    const dy = chest.y - y
+  for (const container of containers) {
+    const dx = container.x - x
+    const dy = container.y - y
     if (dx * dx + dy * dy < minDistSq) return true
   }
   return false
@@ -148,13 +149,14 @@ export function generateMap(seed = 42): GameMap {
   const trees: TreeObj[] = []
   const rocks: RockObj[] = []
   const cars: CarObj[] = []
-  const chests: ChestObj[] = []
+  const containers: ContainerObj[] = []
   const floorLoot: FloorLoot[] = []
   const buildings: BuildingRect[] = []
   const wallColliders: AABB[] = []
   const poiLabels: { name: string; x: number; y: number }[] = []
   const buildingChestSpots: Array<{ x: number; y: number }> = []
-  let nextChestId = 1
+  const buildingAmmoSpots: Array<{ x: number; y: number }> = []
+  let nextContainerId = 1
 
   // 1) Base terrain
   for (let ty = 0; ty < MAP_TILES_Y; ty++) {
@@ -272,13 +274,18 @@ export function generateMap(seed = 42): GameMap {
         x: rect.x + rect.w / 2 + (rng() - 0.5) * rect.w * 0.4,
         y: rect.y + rect.h / 2 + (rng() - 0.5) * rect.h * 0.4,
       })
+      buildingAmmoSpots.push({
+        x: rect.x + rect.w * (0.25 + rng() * 0.5),
+        y: rect.y + rect.h * (0.25 + rng() * 0.5),
+      })
     }
   }
 
   // 4) Chest pass (weighted toward buildings, with wild fallback)
+  let chestCount = 0
   let chestAttempts = 0
   const maxChestAttempts = CHEST_SPAWN_COUNT * 20
-  while (chests.length < CHEST_SPAWN_COUNT && chestAttempts < maxChestAttempts) {
+  while (chestCount < CHEST_SPAWN_COUNT && chestAttempts < maxChestAttempts) {
     chestAttempts++
     const shouldUseBuilding = buildingChestSpots.length > 0
       && (rng() < CHEST_BUILDING_SPAWN_WEIGHT || chestAttempts > maxChestAttempts * 0.75)
@@ -286,15 +293,17 @@ export function generateMap(seed = 42): GameMap {
     if (shouldUseBuilding) {
       const idx = Math.floor(rng() * buildingChestSpots.length)
       const spot = buildingChestSpots.splice(idx, 1)[0]
-      if (!isChestTooClose(chests, spot.x, spot.y, 42)) {
-        chests.push({
-          id: nextChestId++,
+      if (!isContainerTooClose(containers, spot.x, spot.y, 42)) {
+        containers.push({
+          id: nextContainerId++,
           x: spot.x,
           y: spot.y,
           opened: false,
-          type: randomChestType(rng),
+          pendingVerification: false,
+          type: randomChestContainerType(rng),
           spawnArea: 'building',
         })
+        chestCount++
       }
       continue
     }
@@ -306,32 +315,99 @@ export function generateMap(seed = 42): GameMap {
     if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) continue
     const tile = tiles[ty * MAP_TILES_X + tx]
     if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) continue
-    if (isChestTooClose(chests, cx, cy, 42)) continue
+    if (isContainerTooClose(containers, cx, cy, 42)) continue
 
-    chests.push({
-      id: nextChestId++,
+    containers.push({
+      id: nextContainerId++,
       x: cx,
       y: cy,
       opened: false,
-      type: randomChestType(rng),
+      pendingVerification: false,
+      type: randomChestContainerType(rng),
       spawnArea: 'wild',
     })
+    chestCount++
   }
 
-  while (chests.length < CHEST_SPAWN_COUNT) {
+  while (chestCount < CHEST_SPAWN_COUNT) {
     const cx = 100 + rng() * (MAP_WIDTH - 200)
     const cy = 100 + rng() * (MAP_HEIGHT - 200)
-    chests.push({
-      id: nextChestId++,
+    containers.push({
+      id: nextContainerId++,
       x: cx,
       y: cy,
       opened: false,
-      type: randomChestType(rng),
+      pendingVerification: false,
+      type: randomChestContainerType(rng),
       spawnArea: 'wild',
     })
+    chestCount++
   }
 
-  // 5) Trees
+  // 5) Ammo box pass
+  let ammoCount = 0
+  let ammoAttempts = 0
+  const maxAmmoAttempts = AMMO_BOX_SPAWN_COUNT * 20
+  while (ammoCount < AMMO_BOX_SPAWN_COUNT && ammoAttempts < maxAmmoAttempts) {
+    ammoAttempts++
+    const shouldUseBuilding = buildingAmmoSpots.length > 0
+      && (rng() < AMMO_BOX_BUILDING_SPAWN_WEIGHT || ammoAttempts > maxAmmoAttempts * 0.75)
+
+    if (shouldUseBuilding) {
+      const idx = Math.floor(rng() * buildingAmmoSpots.length)
+      const spot = buildingAmmoSpots.splice(idx, 1)[0]
+      if (!isContainerTooClose(containers, spot.x, spot.y, 30)) {
+        containers.push({
+          id: nextContainerId++,
+          x: spot.x,
+          y: spot.y,
+          opened: false,
+          pendingVerification: false,
+          type: 'ammo_box',
+          spawnArea: 'building',
+        })
+        ammoCount++
+      }
+      continue
+    }
+
+    const ax = 100 + rng() * (MAP_WIDTH - 200)
+    const ay = 100 + rng() * (MAP_HEIGHT - 200)
+    const tx = Math.floor(ax / TILE_SIZE)
+    const ty = Math.floor(ay / TILE_SIZE)
+    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) continue
+    const tile = tiles[ty * MAP_TILES_X + tx]
+    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) continue
+    if (isContainerTooClose(containers, ax, ay, 30)) continue
+
+    containers.push({
+      id: nextContainerId++,
+      x: ax,
+      y: ay,
+      opened: false,
+      pendingVerification: false,
+      type: 'ammo_box',
+      spawnArea: 'wild',
+    })
+    ammoCount++
+  }
+
+  while (ammoCount < AMMO_BOX_SPAWN_COUNT) {
+    const ax = 100 + rng() * (MAP_WIDTH - 200)
+    const ay = 100 + rng() * (MAP_HEIGHT - 200)
+    containers.push({
+      id: nextContainerId++,
+      x: ax,
+      y: ay,
+      opened: false,
+      pendingVerification: false,
+      type: 'ammo_box',
+      spawnArea: 'wild',
+    })
+    ammoCount++
+  }
+
+  // 6) Trees
   const treeCount = 400
   for (let i = 0; i < treeCount; i++) {
     const tx = 50 + rng() * (MAP_WIDTH - 100)
@@ -346,7 +422,7 @@ export function generateMap(seed = 42): GameMap {
     }
   }
 
-  // 6) Rocks
+  // 7) Rocks
   const rockCount = 120
   for (let i = 0; i < rockCount; i++) {
     const rx = 50 + rng() * (MAP_WIDTH - 100)
@@ -361,7 +437,7 @@ export function generateMap(seed = 42): GameMap {
     }
   }
 
-  // 7) Cars (metal harvest)
+  // 8) Cars (metal harvest)
   const carCount = 90
   for (let i = 0; i < carCount; i++) {
     const cx = 80 + rng() * (MAP_WIDTH - 160)
@@ -375,7 +451,7 @@ export function generateMap(seed = 42): GameMap {
     }
   }
 
-  // 8) Floor loot
+  // 9) Floor loot
   const weaponIds = ['ar', 'shotgun', 'smg', 'sniper'] as const
   const rarities: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
   for (let i = 0; i < FLOOR_LOOT_COUNT; i++) {
@@ -417,7 +493,7 @@ export function generateMap(seed = 42): GameMap {
 
   return {
     seed,
-    tiles, trees, rocks, cars, chests, floorLoot,
+    tiles, trees, rocks, cars, containers, floorLoot,
     buildings, playerBuilds: [], wallColliders, poiLabels, minimapCanvas,
   }
 }
@@ -497,7 +573,7 @@ export function renderMap(
   ctx: CanvasRenderingContext2D,
   map: GameMap,
   cam: Camera,
-  options?: { highlightedChestId?: number | null; time?: number },
+  options?: { highlightedContainerId?: number | null; time?: number },
 ) {
   const startTX = Math.max(0, Math.floor(cam.x / TILE_SIZE) - 1)
   const startTY = Math.max(0, Math.floor(cam.y / TILE_SIZE) - 1)
@@ -600,18 +676,19 @@ export function renderMap(
     drawCar(ctx, sx, sy, car.health / 130)
   }
 
-  // Chests
-  for (const c of map.chests) {
+  // Containers
+  for (const c of map.containers) {
     const sx = c.x - cam.x
     const sy = c.y - cam.y
     if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
-    drawChest(
+    drawContainer(
       ctx,
       sx,
       sy,
       c.opened,
+      c.pendingVerification,
       c.type,
-      options?.highlightedChestId === c.id,
+      options?.highlightedContainerId === c.id,
       options?.time ?? 0,
     )
   }

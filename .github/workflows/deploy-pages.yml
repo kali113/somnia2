@@ -37,10 +37,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve contract address
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          address="${{ vars.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS }}"
+
+          if [[ -z "$address" ]] && [[ -f contracts/deployments/somnia-shannon-50312.json ]]; then
+            address="$(node -e "const fs=require('fs'); try { const d=JSON.parse(fs.readFileSync('contracts/deployments/somnia-shannon-50312.json','utf8')); process.stdout.write((d?.contract?.address || '').trim()) } catch (_) {}")"
+          fi
+
+          if [[ ! "$address" =~ ^0x[a-fA-F0-9]{40}$ ]] || [[ "${address,,}" == "0x0000000000000000000000000000000000000000" ]]; then
+            echo "::error::Missing contract address for Pages build. Set repo variable NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS or commit contracts/deployments/somnia-shannon-50312.json with contract.address."
+            exit 1
+          fi
+
+          echo "address=$address" >> "$GITHUB_OUTPUT"
+          echo "Resolved contract address: ${address:0:8}...${address: -4}"
+
       - name: Build
         run: pnpm run build
         env:
-          NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS: ${{ vars.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS }}
+          NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS: ${{ steps.contract.outputs.address }}
+          NEXT_PUBLIC_GAME_CONTRACT_ADDRESS: ${{ steps.contract.outputs.address }}
           NEXT_PUBLIC_SOMNIA_RPC_URL: https://dream-rpc.somnia.network
           NEXT_PUBLIC_SOMNIA_WS_URL: wss://dream-rpc.somnia.network/ws
           NEXT_PUBLIC_SOMNIA_EXPLORER_URL: https://shannon-explorer.somnia.network/

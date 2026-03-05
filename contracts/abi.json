@@ -1,388 +1,1011 @@
 [
   {
-    "type": "constructor",
-    "inputs": [{ "name": "_orchestrator", "type": "address", "internalType": "address" }],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "MAX_PLAYERS",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MIN_PLAYERS",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "ENTRY_FEE",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "QUEUE_TIMEOUT",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "joinQueue",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "leaveQueue",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "forceStartGame",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "getQueuePlayers",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "address[]", "internalType": "address[]" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getQueueSize",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "inQueue",
-    "inputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "approveSessionKey",
     "inputs": [
-      { "name": "_sessionKey", "type": "address", "internalType": "address" },
-      { "name": "_expiry", "type": "uint256", "internalType": "uint256" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "revokeSessionKey",
-    "inputs": [{ "name": "_sessionKey", "type": "address", "internalType": "address" }],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "isValidSession",
-    "inputs": [
-      { "name": "_player", "type": "address", "internalType": "address" },
-      { "name": "_sessionKey", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "submitGameResult",
-    "inputs": [
-      { "name": "_gameId", "type": "uint256", "internalType": "uint256" },
-      { "name": "_placements", "type": "address[]", "internalType": "address[]" },
-      { "name": "_kills", "type": "uint256[]", "internalType": "uint256[]" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "claimRewards",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "pendingRewards",
-    "inputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "totalEarned",
-    "inputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getPlayerStats",
-    "inputs": [{ "name": "_player", "type": "address", "internalType": "address" }],
-    "outputs": [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct PixelRoyale.PlayerStats",
-        "components": [
-          { "name": "gamesPlayed", "type": "uint256", "internalType": "uint256" },
-          { "name": "wins", "type": "uint256", "internalType": "uint256" },
-          { "name": "kills", "type": "uint256", "internalType": "uint256" },
-          { "name": "totalEarned", "type": "uint256", "internalType": "uint256" }
-        ]
+        "internalType": "address",
+        "name": "_orchestrator",
+        "type": "address"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "nonpayable",
+    "type": "constructor"
   },
   {
-    "type": "function",
-    "name": "getPlayerGameIds",
-    "inputs": [{ "name": "_player", "type": "address", "internalType": "address" }],
-    "outputs": [{ "name": "", "type": "uint256[]", "internalType": "uint256[]" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getGameResult",
-    "inputs": [{ "name": "_index", "type": "uint256", "internalType": "uint256" }],
-    "outputs": [
+    "anonymous": false,
+    "inputs": [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct PixelRoyale.GameResult",
-        "components": [
-          { "name": "gameId", "type": "uint256", "internalType": "uint256" },
-          { "name": "timestamp", "type": "uint256", "internalType": "uint256" },
-          { "name": "winner", "type": "address", "internalType": "address" },
-          { "name": "placements", "type": "address[]", "internalType": "address[]" },
-          { "name": "prizePool", "type": "uint256", "internalType": "uint256" },
-          { "name": "playerCount", "type": "uint8", "internalType": "uint8" }
-        ]
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "containerId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "containerKey",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "containerType",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "roll",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "weaponCode",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "weaponRarity",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "ammoAmount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "ammoWeaponCode",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "consumableCode",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "consumableAmount",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "woodAmount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "stoneAmount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint16",
+        "name": "metalAmount",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "name": "ContainerOpened",
+    "type": "event"
   },
   {
-    "type": "function",
-    "name": "getGameHistoryLength",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getRecentGames",
-    "inputs": [{ "name": "_count", "type": "uint256", "internalType": "uint256" }],
-    "outputs": [
+    "anonymous": false,
+    "inputs": [
       {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct PixelRoyale.GameResult[]",
-        "components": [
-          { "name": "gameId", "type": "uint256", "internalType": "uint256" },
-          { "name": "timestamp", "type": "uint256", "internalType": "uint256" },
-          { "name": "winner", "type": "address", "internalType": "address" },
-          { "name": "placements", "type": "address[]", "internalType": "address[]" },
-          { "name": "prizePool", "type": "uint256", "internalType": "uint256" },
-          { "name": "playerCount", "type": "uint8", "internalType": "uint8" }
-        ]
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address[]",
+        "name": "placements",
+        "type": "address[]"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "prizePool",
+        "type": "uint256"
       }
     ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "recordChestOpen",
-    "inputs": [
-      { "name": "_gameId", "type": "uint256", "internalType": "uint256" },
-      { "name": "_chestKey", "type": "bytes32", "internalType": "bytes32" },
-      { "name": "_chestType", "type": "uint8", "internalType": "uint8" },
-      { "name": "_roll", "type": "uint16", "internalType": "uint16" },
-      { "name": "_rewardType", "type": "uint8", "internalType": "uint8" },
-      { "name": "_rewardId", "type": "bytes32", "internalType": "bytes32" },
-      { "name": "_rewardAmount", "type": "uint16", "internalType": "uint16" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "getChestOpenCount",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getChestOpen",
-    "inputs": [{ "name": "_index", "type": "uint256", "internalType": "uint256" }],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct PixelRoyale.ChestOpenRecord",
-        "components": [
-          { "name": "gameId", "type": "uint256", "internalType": "uint256" },
-          { "name": "player", "type": "address", "internalType": "address" },
-          { "name": "chestKey", "type": "bytes32", "internalType": "bytes32" },
-          { "name": "chestType", "type": "uint8", "internalType": "uint8" },
-          { "name": "roll", "type": "uint16", "internalType": "uint16" },
-          { "name": "rewardType", "type": "uint8", "internalType": "uint8" },
-          { "name": "rewardId", "type": "bytes32", "internalType": "bytes32" },
-          { "name": "rewardAmount", "type": "uint16", "internalType": "uint16" },
-          { "name": "timestamp", "type": "uint256", "internalType": "uint256" }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "owner",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "orchestrator",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "nextGameId",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "setOrchestrator",
-    "inputs": [{ "name": "_orch", "type": "address", "internalType": "address" }],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "withdrawFees",
-    "inputs": [{ "name": "_amount", "type": "uint256", "internalType": "uint256" }],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "event",
-    "name": "PlayerJoinedQueue",
-    "inputs": [
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "queueSize", "type": "uint256", "indexed": false, "internalType": "uint256" }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PlayerLeftQueue",
-    "inputs": [
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "queueSize", "type": "uint256", "indexed": false, "internalType": "uint256" }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "GameStarted",
-    "inputs": [
-      { "name": "gameId", "type": "uint256", "indexed": true, "internalType": "uint256" },
-      { "name": "players", "type": "address[]", "indexed": false, "internalType": "address[]" },
-      { "name": "prizePool", "type": "uint256", "indexed": false, "internalType": "uint256" }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "GameEnded",
-    "inputs": [
-      { "name": "gameId", "type": "uint256", "indexed": true, "internalType": "uint256" },
-      { "name": "winner", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "placements", "type": "address[]", "indexed": false, "internalType": "address[]" },
-      { "name": "prizePool", "type": "uint256", "indexed": false, "internalType": "uint256" }
-    ],
-    "anonymous": false
+    "type": "event"
   },
   {
-    "type": "event",
-    "name": "RewardClaimed",
+    "anonymous": false,
     "inputs": [
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "amount", "type": "uint256", "indexed": false, "internalType": "uint256" }
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address[]",
+        "name": "players",
+        "type": "address[]"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "prizePool",
+        "type": "uint256"
+      }
     ],
-    "anonymous": false
+    "name": "GameStarted",
+    "type": "event"
   },
   {
-    "type": "event",
-    "name": "SessionKeyApproved",
+    "anonymous": false,
     "inputs": [
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "sessionKey", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "expiry", "type": "uint256", "indexed": false, "internalType": "uint256" }
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "oldOrch",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOrch",
+        "type": "address"
+      }
     ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SessionKeyRevoked",
-    "inputs": [
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "sessionKey", "type": "address", "indexed": true, "internalType": "address" }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "ChestOpened",
-    "inputs": [
-      { "name": "gameId", "type": "uint256", "indexed": true, "internalType": "uint256" },
-      { "name": "player", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "chestKey", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
-      { "name": "chestType", "type": "uint8", "indexed": false, "internalType": "uint8" },
-      { "name": "roll", "type": "uint16", "indexed": false, "internalType": "uint16" },
-      { "name": "rewardType", "type": "uint8", "indexed": false, "internalType": "uint8" },
-      { "name": "rewardId", "type": "bytes32", "indexed": false, "internalType": "bytes32" },
-      { "name": "rewardAmount", "type": "uint16", "indexed": false, "internalType": "uint16" },
-      { "name": "timestamp", "type": "uint256", "indexed": false, "internalType": "uint256" }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "OrchestratorUpdated",
-    "inputs": [
-      { "name": "oldOrch", "type": "address", "indexed": true, "internalType": "address" },
-      { "name": "newOrch", "type": "address", "indexed": true, "internalType": "address" }
-    ],
-    "anonymous": false
+    "type": "event"
   },
   {
-    "type": "receive",
-    "stateMutability": "payable"
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "queueSize",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerJoinedQueue",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "queueSize",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerLeftQueue",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "RewardClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sessionKey",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "expiry",
+        "type": "uint256"
+      }
+    ],
+    "name": "SessionKeyApproved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "SessionKeyRevoked",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "ENTRY_FEE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_PLAYERS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_PLAYERS",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "QUEUE_TIMEOUT",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "REWARD_BPS",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_sessionKey",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_expiry",
+        "type": "uint256"
+      }
+    ],
+    "name": "approveSessionKey",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "claimRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "forceStartGame",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "gameHistory",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "winner",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "prizePool",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "playerCount",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getGameHistoryLength",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_index",
+        "type": "uint256"
+      }
+    ],
+    "name": "getGameResult",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "gameId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "winner",
+            "type": "address"
+          },
+          {
+            "internalType": "address[]",
+            "name": "placements",
+            "type": "address[]"
+          },
+          {
+            "internalType": "uint256",
+            "name": "prizePool",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "playerCount",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct PixelRoyale.GameResult",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_player",
+        "type": "address"
+      }
+    ],
+    "name": "getPlayerGameIds",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_player",
+        "type": "address"
+      }
+    ],
+    "name": "getPlayerStats",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "gamesPlayed",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "wins",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "kills",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalEarned",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct PixelRoyale.PlayerStats",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getQueuePlayers",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getQueueSize",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_count",
+        "type": "uint256"
+      }
+    ],
+    "name": "getRecentGames",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "gameId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "winner",
+            "type": "address"
+          },
+          {
+            "internalType": "address[]",
+            "name": "placements",
+            "type": "address[]"
+          },
+          {
+            "internalType": "uint256",
+            "name": "prizePool",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "playerCount",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct PixelRoyale.GameResult[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "inQueue",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_player",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "isValidSession",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "joinQueue",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "leaveQueue",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nextGameId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_gameId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_containerId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_containerKey",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "_containerType",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_seed",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_playerNonce",
+        "type": "uint32"
+      }
+    ],
+    "name": "openContainerVerified",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "orchestrator",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "pendingRewards",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "playerContainerOpened",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "playerGames",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "queue",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "queueOpenedAt",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "revokeSessionKey",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "sessionKeys",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_orch",
+        "type": "address"
+      }
+    ],
+    "name": "setOrchestrator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "stats",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "gamesPlayed",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "wins",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "kills",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalEarned",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_gameId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "_placements",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_kills",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "submitGameResult",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "totalEarned",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
   }
 ]

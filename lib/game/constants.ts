@@ -29,8 +29,8 @@ export const RARITY_COLORS: Record<string, string> = {
 export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const
 export type Rarity = typeof RARITY_ORDER[number]
 
-export const CHEST_TYPES = ['normal', 'rare'] as const
-export type ChestType = typeof CHEST_TYPES[number]
+export const CONTAINER_TYPES = ['chest', 'rare_chest', 'ammo_box'] as const
+export type ContainerType = typeof CONTAINER_TYPES[number]
 
 // ── Weapon Definitions ─────────────────────────────────────────────────────
 
@@ -294,6 +294,7 @@ export const COLORS = {
   treeTrunk: '#6b4226',
   rock: '#8a8a8a',
   chest: '#ffd700',
+  ammoBox: '#ffb347',
   player: '#3ae8ff',
   playerOutline: '#1bb8cc',
   bot: '#ff4444',
@@ -310,12 +311,19 @@ export const COLORS = {
 
 // ── Misc ────────────────────────────────────────────────────────────────────
 
-export const CHEST_SPAWN_COUNT = 80
+export const CHEST_SPAWN_COUNT = 70
+export const AMMO_BOX_SPAWN_COUNT = 55
 export const FLOOR_LOOT_COUNT = 60
-export const NORMAL_CHEST_APPEAR_RATE = 0.93
+export const RARE_CHEST_APPEAR_RATE = 0.08
 export const CHEST_BUILDING_SPAWN_WEIGHT = 0.72
-export const CHEST_INTERACT_RANGE = 52
-export const CHEST_GLOW_RANGE = 120
+export const AMMO_BOX_BUILDING_SPAWN_WEIGHT = 0.84
+export const CONTAINER_INTERACT_RANGE = 52
+export const CONTAINER_GLOW_RANGE = 120
+export const CONTAINER_SEARCH_TIME: Record<ContainerType, number> = {
+  chest: 0.9,
+  rare_chest: 1.1,
+  ammo_box: 0.6,
+}
 export const SUPPLY_DROP_INTERVAL = 45  // seconds
 export const MINIMAP_SIZE = 160
 export const MINIMAP_PADDING = 12
