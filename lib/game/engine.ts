@@ -25,8 +25,8 @@ import { playShot, playHit, playElim, playChestOpen, playPickup, playBuild, play
 
 // ── Aim Assist ──────────────────────────────────────────────────────────────
 
-const AIM_ASSIST_RADIUS = 100   // screen-space pixels
-const AIM_ASSIST_STRENGTH = 0.65 // fraction to pull toward target (0 = off, 1 = full snap)
+const AIM_ASSIST_RADIUS = 55    // screen-space pixels
+const AIM_ASSIST_STRENGTH = 0.2  // fraction to pull toward target (0 = off, 1 = full snap)
 
 // ── Projectile ──────────────────────────────────────────────────────────────
 
