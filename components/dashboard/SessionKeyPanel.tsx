@@ -22,8 +22,10 @@ export default function SessionKeyPanel() {
   const [session, setSession] = useState<SessionWallet | null>(() => restoreSessionWallet())
   const [nowMs, setNowMs] = useState(() => Date.now())
 
-  const { writeContract: approveKey, data: approveHash, isPending: isApproving } = useWriteContract()
-  const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking } = useWriteContract()
+  const [txError, setTxError] = useState<string | null>(null)
+
+  const { writeContract: approveKey, data: approveHash, isPending: isApproving, error: approveError } = useWriteContract()
+  const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking, error: revokeError } = useWriteContract()
 
   const { isLoading: approveConfirming } = useWaitForTransactionReceipt({ hash: approveHash })
   const { isLoading: revokeConfirming } = useWaitForTransactionReceipt({ hash: revokeHash })
@@ -64,8 +66,16 @@ export default function SessionKeyPanel() {
 
   const handleCreateSession = useCallback(() => {
     if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    setTxError(null)
 
-    const newSession = createSessionWallet(3600_000) // 1 hour
+    let newSession
+    try {
+      newSession = createSessionWallet(3600_000) // 1 hour
+    } catch (e) {
+      setTxError(e instanceof Error ? e.message : 'Failed to create session wallet')
+      return
+    }
+
     setSession(newSession)
     setNowMs(Date.now())
 
@@ -165,11 +175,17 @@ export default function SessionKeyPanel() {
           </button>
         </div>
       ) : (
-        <button
-          onClick={handleCreateSession}
-          disabled={isBusy}
-          className="w-full rounded-lg bg-[rgba(58,232,255,0.1)] border border-[rgba(58,232,255,0.2)] px-4 py-3 font-mono text-xs font-bold text-[#3ae8ff] hover:bg-[rgba(58,232,255,0.2)] transition-colors disabled:opacity-50"
-        >
+        <>
+          {(txError ?? approveError?.message.split('\n')[0]) && (
+            <p className="text-[10px] font-mono text-[#ff4444] mb-3 break-words">
+              {txError ?? approveError?.message.split('\n')[0]}
+            </p>
+          )}
+          <button
+            onClick={handleCreateSession}
+            disabled={isBusy}
+            className="w-full rounded-lg bg-[rgba(58,232,255,0.1)] border border-[rgba(58,232,255,0.2)] px-4 py-3 font-mono text-xs font-bold text-[#3ae8ff] hover:bg-[rgba(58,232,255,0.2)] transition-colors disabled:opacity-50"
+          >
           {isBusy ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -178,7 +194,8 @@ export default function SessionKeyPanel() {
           ) : (
             'Create Session Key (1 hour)'
           )}
-        </button>
+          </button>
+        </>
       )}
     </div>
   )
