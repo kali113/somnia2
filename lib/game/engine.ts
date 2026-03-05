@@ -646,6 +646,7 @@ export function updateGame(state: GameState, dt: number) {
     }
     if (blockedByWall) continue
 
+    let blockedByBuild = false
     for (let j = state.map.playerBuilds.length - 1; j >= 0; j--) {
       const pb = state.map.playerBuilds[j]
       if (!pb.blocksProjectiles) continue
@@ -653,9 +654,34 @@ export function updateGame(state: GameState, dt: number) {
         pb.health -= p.damage
         emitSparks(state.particles, p.x, p.y, 3, '#aaa')
         state.projectiles.splice(i, 1)
+        blockedByBuild = true
         if (pb.health <= 0) {
           state.map.playerBuilds.splice(j, 1)
         }
+        break
+      }
+    }
+    if (blockedByBuild) continue
+
+    // Hit trees
+    let blockedByTree = false
+    for (let j = state.map.trees.length - 1; j >= 0; j--) {
+      const t = state.map.trees[j]
+      if (p.x >= t.x - 8 && p.x <= t.x + 8 && p.y >= t.y - 6 && p.y <= t.y + 10) {
+        emitSparks(state.particles, p.x, p.y, 3, '#6b4226')
+        state.projectiles.splice(i, 1)
+        blockedByTree = true
+        break
+      }
+    }
+    if (blockedByTree) continue
+
+    // Hit rocks
+    for (let j = state.map.rocks.length - 1; j >= 0; j--) {
+      const r = state.map.rocks[j]
+      if (p.x >= r.x - 10 && p.x <= r.x + 10 && p.y >= r.y - 8 && p.y <= r.y + 8) {
+        emitSparks(state.particles, p.x, p.y, 3, '#888')
+        state.projectiles.splice(i, 1)
         break
       }
     }
