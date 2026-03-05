@@ -16,7 +16,7 @@ import {
   PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
 import { SOMNIA_EXPLORER_URL } from '@/lib/somnia/config'
-import { Copy, ExternalLink, Wallet, LogOut, Check, AlertTriangle, Loader2 } from 'lucide-react'
+import { Copy, ExternalLink, Wallet, LogOut, Check, Loader2 } from 'lucide-react'
 import { useState, useCallback } from 'react'
 
 export default function WalletPanel() {
@@ -140,7 +140,7 @@ export default function WalletPanel() {
           {isBalancePending
             ? 'Loading...'
             : balance
-            ? `${Number(balance.formatted).toFixed(4)} STT`
+            ? `${(parseFloat(balance.formatted ?? '0') || 0).toFixed(4)} STT`
             : isBalanceError
             ? 'RPC Unavailable'
             : '-- STT'}
@@ -162,7 +162,7 @@ export default function WalletPanel() {
       <div className="mt-3 rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Game Contract</span>
-          {IS_PIXEL_ROYALE_CONFIGURED ? (
+          {IS_PIXEL_ROYALE_CONFIGURED && (
             <a
               href={`${SOMNIA_EXPLORER_URL.replace(/\/$/, '')}/address/${PIXEL_ROYALE_ADDRESS}`}
               target="_blank"
@@ -172,12 +172,10 @@ export default function WalletPanel() {
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-          ) : (
-            <AlertTriangle className="h-3.5 w-3.5 text-[#ff4444]" />
           )}
         </div>
-        <p className={`text-xs font-mono ${IS_PIXEL_ROYALE_CONFIGURED ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}`}>
-          {truncateAddress(PIXEL_ROYALE_ADDRESS, 6)}
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)]">
+          {IS_PIXEL_ROYALE_CONFIGURED ? truncateAddress(PIXEL_ROYALE_ADDRESS, 6) : 'Not deployed'}
         </p>
       </div>
     </div>

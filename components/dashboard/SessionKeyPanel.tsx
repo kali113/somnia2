@@ -3,11 +3,9 @@
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
 import {
   approveSessionKeyArgs,
-  CONTRACT_CONFIG_ERROR_MESSAGE,
   revokeSessionKeyArgs,
   getIsValidSessionArgs,
   IS_PIXEL_ROYALE_CONFIGURED,
-  PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
 import {
   createSessionWallet,
@@ -16,7 +14,7 @@ import {
   getSessionExpirySolidity,
   type SessionWallet,
 } from '@/lib/somnia/session-wallet'
-import { Key, Loader2, Shield, ShieldOff, AlertTriangle } from 'lucide-react'
+import { Key, Loader2, Shield, ShieldOff } from 'lucide-react'
 import { useState, useCallback, useEffect } from 'react'
 
 export default function SessionKeyPanel() {
@@ -116,16 +114,13 @@ export default function SessionKeyPanel() {
 
   if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return (
-      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
+      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
         <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
-          <h3 className="font-mono font-bold text-white text-sm">Session Key Disabled</h3>
+          <Key className="h-4 w-4 text-[rgba(255,255,255,0.3)]" />
+          <h3 className="font-mono font-bold text-[rgba(255,255,255,0.4)] text-sm">Session Key</h3>
         </div>
-        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
-          {CONTRACT_CONFIG_ERROR_MESSAGE}
-        </p>
-        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
-          Current address: {PIXEL_ROYALE_ADDRESS}
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.2)] text-center py-3">
+          Contract not deployed
         </p>
       </div>
     )

@@ -5,10 +5,8 @@ import {
   getRecentGamesArgs,
   formatSTT,
   IS_PIXEL_ROYALE_CONFIGURED,
-  CONTRACT_CONFIG_ERROR_MESSAGE,
-  PIXEL_ROYALE_ADDRESS,
 } from '@/lib/somnia/contract'
-import { History, Trophy, Skull, AlertTriangle } from 'lucide-react'
+import { History, Trophy, Skull } from 'lucide-react'
 
 export default function MatchHistory() {
   const { address } = useAccount()
@@ -33,16 +31,13 @@ export default function MatchHistory() {
 
   if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return (
-      <div className="rounded-xl border border-[rgba(255,68,68,0.3)] bg-[rgba(255,68,68,0.08)] p-6">
+      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
         <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
-          <h3 className="font-mono font-bold text-white text-sm">History Disabled</h3>
+          <History className="h-4 w-4 text-[rgba(255,255,255,0.3)]" />
+          <h3 className="font-mono font-bold text-[rgba(255,255,255,0.4)] text-sm">Match History</h3>
         </div>
-        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)] leading-relaxed mb-2">
-          {CONTRACT_CONFIG_ERROR_MESSAGE}
-        </p>
-        <p className="text-[11px] font-mono text-[rgba(255,255,255,0.45)]">
-          Current address: {PIXEL_ROYALE_ADDRESS}
+        <p className="text-xs font-mono text-[rgba(255,255,255,0.2)] text-center py-3">
+          Contract not deployed
         </p>
       </div>
     )
