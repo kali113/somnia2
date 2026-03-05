@@ -431,7 +431,7 @@ export function drawDamageNumber(
   ctx.lineWidth = 2
   ctx.font = 'bold 14px monospace'
   ctx.textAlign = 'center'
-  const text = `-${damage}`
+  const text = `-${Math.round(damage)}`
   ctx.strokeText(text, x, y)
   ctx.fillText(text, x, y)
   ctx.restore()
