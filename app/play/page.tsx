@@ -11,16 +11,10 @@ import Leaderboard from '@/components/dashboard/Leaderboard'
 import RewardsPanel from '@/components/dashboard/RewardsPanel'
 import SessionKeyPanel from '@/components/dashboard/SessionKeyPanel'
 import {
-  IS_PIXEL_ROYALE_CONFIGURED,
-  PIXEL_ROYALE_ADDRESS,
-  truncateAddress,
-} from '@/lib/somnia/contract'
-import {
   Crosshair,
   ArrowLeft,
   Zap,
   Gamepad2,
-  AlertTriangle,
 } from 'lucide-react'
 
 // Subtle animated background particles (lighter than landing page)
@@ -175,17 +169,6 @@ export default function PlayPage() {
               </Link>
             </div>
 
-            {!IS_PIXEL_ROYALE_CONFIGURED && (
-              <div className="mt-4 rounded-xl border border-[rgba(255,68,68,0.35)] bg-[rgba(255,68,68,0.12)] p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
-                  <p className="text-xs font-mono font-bold text-[#ff7b7b]">Contract not configured</p>
-                </div>
-                <p className="text-xs font-mono text-[rgba(255,255,255,0.75)]">
-                  Set `NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS` during build/deploy. Current value: {truncateAddress(PIXEL_ROYALE_ADDRESS, 6)}
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Grid Layout */}

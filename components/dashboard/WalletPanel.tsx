@@ -159,10 +159,10 @@ export default function WalletPanel() {
         <ExternalLink className="h-3.5 w-3.5" />
       </a>
 
-      <div className="mt-3 rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Game Contract</span>
-          {IS_PIXEL_ROYALE_CONFIGURED && (
+      {IS_PIXEL_ROYALE_CONFIGURED && (
+        <div className="mt-3 rounded-lg bg-[rgba(0,0,0,0.3)] px-4 py-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-mono text-[rgba(255,255,255,0.4)]">Game Contract</span>
             <a
               href={`${SOMNIA_EXPLORER_URL.replace(/\/$/, '')}/address/${PIXEL_ROYALE_ADDRESS}`}
               target="_blank"
@@ -172,12 +172,12 @@ export default function WalletPanel() {
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-          )}
+          </div>
+          <p className="text-xs font-mono text-[rgba(255,255,255,0.75)]">
+            {truncateAddress(PIXEL_ROYALE_ADDRESS, 6)}
+          </p>
         </div>
-        <p className="text-xs font-mono text-[rgba(255,255,255,0.75)]">
-          {IS_PIXEL_ROYALE_CONFIGURED ? truncateAddress(PIXEL_ROYALE_ADDRESS, 6) : 'Not deployed'}
-        </p>
-      </div>
+      )}
     </div>
   )
 }

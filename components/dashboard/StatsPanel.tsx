@@ -75,20 +75,6 @@ export default function StatsPanel() {
     )
   }
 
-  if (!IS_PIXEL_ROYALE_CONFIGURED) {
-    return (
-      <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Trophy className="h-4 w-4 text-[rgba(255,255,255,0.3)]" />
-          <h3 className="font-mono font-bold text-[rgba(255,255,255,0.4)] text-sm">Player Stats</h3>
-        </div>
-        <p className="text-xs font-mono text-[rgba(255,255,255,0.2)] text-center py-3">
-          Contract not deployed
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-6">
       <h3 className="font-mono font-bold text-white text-sm mb-4">Player Stats</h3>
