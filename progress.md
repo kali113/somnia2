@@ -18,6 +18,15 @@ Original prompt: there is not a victory screen when killing everyone
 - Smoke checked `/`, `/play`, `/game`, and `http://localhost:3001/api/health`.
 - Browser smoke note: `/favicon.ico` is still a 404 on the static export server; no gameplay/runtime errors were observed from the storm changes.
 - Important deploy note: the checked-in code now expects a redeployed `PixelRoyale` contract with the new storm commit function/event before verified on-chain storm commits can succeed on testnet. Until redeployed, verified matches fall back to local deterministic storm commits after the backend request fails.
+- Follow-up branch for this turn: `fix-live-storm-commit`.
+- Added backend root-env loading and deployer-key fallback in `server/index.ts`, so the server now picks up the same Somnia key/address data as the frontend without needing a duplicate `server/.env`.
+- Replaced duplicated hardcoded contract-address fallbacks with the deployment artifact (`contracts/deployments/somnia-shannon-50312.json`) in the frontend/runtime and backend.
+- Added a localhost backend fallback in `lib/somnia/runtime-config.ts` and widened default backend CORS allowlist to include `localhost:3000/3002` and `127.0.0.1:3000/3002`.
+- Verified after the path fix that `cd server && pnpm start` now boots with the real orchestrator wallet and deployment-file contract address.
+- Deployment is still blocked by wallet funding, not code:
+- `pnpm deploy:somnia` failed because deployer/orchestrator `0xEdAcF7e7B79b78686bd45CC10B9695B62B1af02A` has `0 STT`.
+- The Google Cloud Somnia faucet page accepts the address but rejects unsigned requests with: `You are signed out. Sign in to your Google Account to receive testnet tokens.`
+- Once that wallet is funded and `pnpm deploy:somnia` succeeds, the repo should auto-pick up the new contract address from the deployment JSON on the next rebuild/restart.
 
 - Current prompt: bots are running into the storm.
 - Created branch `fix-bots-avoid-storm` from the current dirty worktree without touching unrelated edits.
@@ -70,3 +79,25 @@ Original prompt: there is not a victory screen when killing everyone
     - `output/mobile-check/game-after-controls.png`
 - Remaining note:
   - Mobile build placement/shooting UI is implemented, but I only automated movement and build-mode toggling in this pass. A fuller multi-touch browser script would be the next step if deeper gameplay validation is needed.
+
+- Current prompt: optimize the game engine with spatial indexing across environment, structures, entities, projectiles, bot threat scans, and build placement.
+- Created branch `perf-spatial-grids`.
+- Read the gameplay/docs slices for collision, map generation, engine projectile flow, bot AI, and build placement.
+- Current plan:
+  - Add a generic reference-based spatial grid in `lib/game/collision.ts`.
+  - Build persistent environment and structure grids in `lib/game/map.ts`.
+  - Rewire engine, bot, and player hot paths to query grids and maintain them on build/env destruction or creation.
+- Implemented the spatial indexing pass:
+  - Added `SpatialGridRef<T>` with point/AABB insert, remove, area query, and point query.
+  - Added kind-tagged environment objects plus persistent `envGrid` and `structureGrid` on `GameMap`.
+  - Replaced linear environment/structure broadphase, bot threat scans, projectile collision checks, and build placement overlap checks with grid queries.
+  - Wired grid maintenance for player-build creation/destruction and for harvested tree/rock/car removal.
+- Verification completed:
+  - `pnpm lint`
+  - `pnpm build`
+  - `develop-web-game` client run against `/game` with artifacts in `output/web-game/perf-spatial-grids/` and no console-error artifacts.
+  - Targeted Playwright smoke on `/game` confirmed:
+    - player collision still blocks against trees and walls
+    - projectiles still block on walls, trees, and player builds
+    - bots still acquire threats and deal combat damage
+    - harvested trees are removed from `envGrid` and no longer block movement

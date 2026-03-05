@@ -10,7 +10,15 @@ import {
 } from './constants'
 import { createInputState, setupInput, clearFrameInput, updateMouseWorld, type InputState } from './input'
 import { createCamera, updateCamera, resizeCamera, type Camera } from './camera'
-import { generateMap, renderMap, getEnvironmentColliders, getStructureColliders, type ContainerObj, type GameMap } from './map'
+import {
+  generateMap,
+  renderMap,
+  getEnvironmentCollider,
+  getEnvironmentColliders,
+  getStructureColliders,
+  type ContainerObj,
+  type GameMap,
+} from './map'
 import {
   createPlayer, updatePlayer, getActiveWeapon, tryPickupWeapon, tryPickupConsumable, addAmmoToPlayer,
   takeDamage, getBuildPlacement, canPlaceBuild, selectBestConsumable,
@@ -31,7 +39,7 @@ import {
 } from './storm'
 import { createParticleSystem, updateParticles, renderParticles, emitSparks, emitHitMarker, emitElimination, type ParticleSystem } from './particles'
 import { drawPlayer, drawBullet, drawLootItem, drawAmmoPack, drawSupplyDrop, drawMinimapDot, drawBuildPiece as drawBuildPieceSprite } from './sprites'
-import { distance, angleBetween, circleOverlap, type AABB } from './collision'
+import { distance, angleBetween, circleOverlap, pointInAABB, SpatialGridRef, type AABB } from './collision'
 import { playShot, playHit, playElim, playChestOpen, playPickup, playBuild, playVictory, playEliminated, playSupplyDrop } from './audio'
 
 // ── Aim Assist ──────────────────────────────────────────────────────────────
@@ -522,6 +530,22 @@ function computeAimAssist(
   }
 }
 
+function rebuildEntityGrid(state: GameState, grid?: SpatialGridRef<Player>): SpatialGridRef<Player> {
+  const entityGrid = grid ?? new SpatialGridRef<Player>(200)
+  entityGrid.clear()
+
+  if (state.player.alive) {
+    entityGrid.insertPoint(state.player, state.player.x, state.player.y, PLAYER_SIZE / 2)
+  }
+
+  for (const bot of state.bots) {
+    if (!bot.alive) continue
+    entityGrid.insertPoint(bot, bot.x, bot.y, PLAYER_SIZE / 2)
+  }
+
+  return entityGrid
+}
+
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
@@ -706,12 +730,20 @@ export function updateGame(state: GameState, dt: number) {
     }
   }
 
+  let entityGrid = rebuildEntityGrid(state)
+
   // ── Update bots ──────────────────────────────────────────────────────
   for (let i = 0; i < state.bots.length; i++) {
     const bot = state.bots[i]
     if (!bot.alive) continue
 
-    const result = updateBot(bot, state.player, state.bots, state.storm, state.map, dt, now, state.particles)
+    const prevBotX = bot.x
+    const prevBotY = bot.y
+    const result = updateBot(bot, entityGrid, state.storm, state.map, dt, now, state.particles)
+    entityGrid.removePoint(bot, prevBotX, prevBotY, PLAYER_SIZE / 2)
+    if (bot.alive) {
+      entityGrid.insertPoint(bot, bot.x, bot.y, PLAYER_SIZE / 2)
+    }
 
     if (result.fired) {
       const slot = bot.slots[bot.activeSlot]
@@ -754,8 +786,10 @@ export function updateGame(state: GameState, dt: number) {
       continue
     }
 
+    const entityCandidates = entityGrid.queryPoint(p.x, p.y)
+
     // Hit player (skip if shooter is a teammate)
-    if (p.ownerId >= 0 && state.player.alive) {
+    if (p.ownerId >= 0 && state.player.alive && entityCandidates?.includes(state.player)) {
       const shooterBot = state.bots[p.ownerId]
       if (shooterBot && shooterBot.teamId !== state.player.teamId && circleOverlap(p.x, p.y, 4, state.player.x, state.player.y, PLAYER_SIZE / 2)) {
         const { shieldDmg, healthDmg } = takeDamage(state.player, p.damage)
@@ -785,13 +819,13 @@ export function updateGame(state: GameState, dt: number) {
     // Hit bots (skip friendly fire)
     const shooterTeamId = p.ownerId === -1 ? state.player.teamId : (state.bots[p.ownerId]?.teamId ?? -1)
     let projectileRemoved = false
-    for (let j = 0; j < state.bots.length; j++) {
-      const bot = state.bots[j]
-      if (!bot.alive || j === p.ownerId) continue
-      if (bot.teamId === shooterTeamId) continue  // no friendly fire
-      if (circleOverlap(p.x, p.y, 4, bot.x, bot.y, PLAYER_SIZE / 2)) {
+    const shooterEntity = p.ownerId === -1 ? state.player : state.bots[p.ownerId]
+    for (const entity of entityCandidates ?? []) {
+      if (entity === state.player || entity === shooterEntity || !entity.alive) continue
+      if (entity.teamId === shooterTeamId) continue
+      if (circleOverlap(p.x, p.y, 4, entity.x, entity.y, PLAYER_SIZE / 2)) {
         playHit()
-        const eliminated = processBotHit(bot, p.damage, state.particles)
+        const eliminated = processBotHit(entity, p.damage, state.particles)
         state.projectiles.splice(i, 1)
         projectileRemoved = true
 
@@ -811,10 +845,10 @@ export function updateGame(state: GameState, dt: number) {
             state.bots[p.ownerId].kills++
           }
 
-          addKillFeed(state, killerName, bot.name, p.weaponId)
+          addKillFeed(state, killerName, entity.name, p.weaponId)
 
           // Decrement aliveTeams if bot's entire team is gone (team 0 decremented on player death)
-          if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
+          if (entity.teamId !== 0 && !isBotTeamAlive(state, entity.teamId)) {
             state.aliveTeams--
           }
 
@@ -832,9 +866,11 @@ export function updateGame(state: GameState, dt: number) {
     if (projectileRemoved) continue
 
     // Hit world structures
+    const structureCandidates = state.map.structureGrid.queryPoint(p.x, p.y)
     let blockedByWall = false
-    for (const wall of state.map.wallColliders) {
-      if (p.x >= wall.x && p.x <= wall.x + wall.w && p.y >= wall.y && p.y <= wall.y + wall.h) {
+    for (const item of structureCandidates ?? []) {
+      if ('health' in item) continue
+      if (pointInAABB(p.x, p.y, item)) {
         emitSparks(state.particles, p.x, p.y, 2, '#7b6a5a')
         state.projectiles.splice(i, 1)
         blockedByWall = true
@@ -844,16 +880,17 @@ export function updateGame(state: GameState, dt: number) {
     if (blockedByWall) continue
 
     let blockedByBuild = false
-    for (let j = state.map.playerBuilds.length - 1; j >= 0; j--) {
-      const pb = state.map.playerBuilds[j]
-      if (!pb.blocksProjectiles) continue
-      if (p.x >= pb.x && p.x <= pb.x + pb.w && p.y >= pb.y && p.y <= pb.y + pb.h) {
-        pb.health -= p.damage
+    for (const item of structureCandidates ?? []) {
+      if (!('health' in item) || !item.blocksProjectiles || item.health <= 0) continue
+      if (pointInAABB(p.x, p.y, item)) {
+        item.health -= p.damage
         emitSparks(state.particles, p.x, p.y, 3, '#aaa')
         state.projectiles.splice(i, 1)
         blockedByBuild = true
-        if (pb.health <= 0) {
-          state.map.playerBuilds.splice(j, 1)
+        if (item.health <= 0) {
+          state.map.structureGrid.removeAABB(item, item)
+          const buildIndex = state.map.playerBuilds.indexOf(item)
+          if (buildIndex >= 0) state.map.playerBuilds.splice(buildIndex, 1)
         }
         break
       }
@@ -862,9 +899,10 @@ export function updateGame(state: GameState, dt: number) {
 
     // Hit trees
     let blockedByTree = false
-    for (let j = state.map.trees.length - 1; j >= 0; j--) {
-      const t = state.map.trees[j]
-      if (p.x >= t.x - 8 && p.x <= t.x + 8 && p.y >= t.y - 6 && p.y <= t.y + 10) {
+    const envCandidates = state.map.envGrid.queryPoint(p.x, p.y)
+    for (const obj of envCandidates ?? []) {
+      if (obj.kind !== 'tree' || obj.health <= 0) continue
+      if (pointInAABB(p.x, p.y, getEnvironmentCollider(obj))) {
         emitSparks(state.particles, p.x, p.y, 3, '#6b4226')
         state.projectiles.splice(i, 1)
         blockedByTree = true
@@ -874,9 +912,9 @@ export function updateGame(state: GameState, dt: number) {
     if (blockedByTree) continue
 
     // Hit rocks
-    for (let j = state.map.rocks.length - 1; j >= 0; j--) {
-      const r = state.map.rocks[j]
-      if (p.x >= r.x - 10 && p.x <= r.x + 10 && p.y >= r.y - 8 && p.y <= r.y + 8) {
+    for (const obj of envCandidates ?? []) {
+      if (obj.kind !== 'rock' || obj.health <= 0) continue
+      if (pointInAABB(p.x, p.y, getEnvironmentCollider(obj))) {
         emitSparks(state.particles, p.x, p.y, 3, '#888')
         state.projectiles.splice(i, 1)
         break
@@ -1073,6 +1111,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     emitSparks(state.particles, tree.x, tree.y, 4, '#6b4226')
     if (tree.health <= 0) {
       grantMaterials(player, { wood: MATERIAL_HARVEST.tree.wood - 12, stone: 0, metal: 0 })
+      state.map.envGrid.removePoint(tree, tree.x, tree.y, 16)
       state.map.trees.splice(best.index, 1)
       emitSparks(state.particles, tree.x, tree.y, 10, '#2d5a1e')
     }
@@ -1087,6 +1126,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     emitSparks(state.particles, rock.x, rock.y, 4, '#888')
     if (rock.health <= 0) {
       grantMaterials(player, { wood: 0, stone: MATERIAL_HARVEST.rock.stone - 12, metal: 0 })
+      state.map.envGrid.removePoint(rock, rock.x, rock.y, 16)
       state.map.rocks.splice(best.index, 1)
       emitSparks(state.particles, rock.x, rock.y, 10, '#aaa')
     }
@@ -1101,6 +1141,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     emitSparks(state.particles, car.x, car.y, 5, '#8f9aa6')
     if (car.health <= 0) {
       grantMaterials(player, { wood: 0, stone: 0, metal: MATERIAL_HARVEST.car.metal - 10 })
+      state.map.envGrid.removePoint(car, car.x, car.y, 24)
       state.map.cars.splice(best.index, 1)
       emitSparks(state.particles, car.x, car.y, 12, '#d4dde8')
     }
@@ -1114,6 +1155,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
   emitSparks(state.particles, x, y, 4, '#b9c0c8')
   if (build.health <= 0) {
     grantMaterials(player, materialToReward(build.material, 8))
+    state.map.structureGrid.removeAABB(build, build)
     state.map.playerBuilds.splice(best.index, 1)
     emitSparks(state.particles, x, y, 10, '#dde3ea')
   }

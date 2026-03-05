@@ -9,7 +9,7 @@ import {
   type Rarity, type ConsumableId, type ContainerType,
 } from './constants'
 import { drawTree, drawRock, drawCar, drawContainer, drawBuildPiece } from './sprites'
-import type { AABB } from './collision'
+import { type AABB, SpatialGridRef } from './collision'
 import type { Camera } from './camera'
 
 // ── Tile Types ──────────────────────────────────────────────────────────────
@@ -26,19 +26,24 @@ export enum TileType {
 // ── Map Objects ─────────────────────────────────────────────────────────────
 
 export interface TreeObj {
+  kind: 'tree'
   x: number; y: number
   health: number
 }
 
 export interface RockObj {
+  kind: 'rock'
   x: number; y: number
   health: number
 }
 
 export interface CarObj {
+  kind: 'car'
   x: number; y: number
   health: number
 }
+
+export type EnvObj = TreeObj | RockObj | CarObj
 
 export interface ContainerObj {
   id: number
@@ -101,6 +106,8 @@ export interface GameMap {
   buildings: BuildingRect[]
   playerBuilds: PlayerBuild[]
   wallColliders: AABB[]
+  envGrid: SpatialGridRef<EnvObj>
+  structureGrid: SpatialGridRef<AABB | PlayerBuild>
   poiLabels: { name: string; x: number; y: number }[]
   minimapCanvas: HTMLCanvasElement | null
 }
@@ -152,6 +159,7 @@ export function generateMap(seed = 42): GameMap {
   const containers: ContainerObj[] = []
   const floorLoot: FloorLoot[] = []
   const buildings: BuildingRect[] = []
+  const playerBuilds: PlayerBuild[] = []
   const wallColliders: AABB[] = []
   const poiLabels: { name: string; x: number; y: number }[] = []
   const buildingChestSpots: Array<{ x: number; y: number }> = []
@@ -417,7 +425,7 @@ export function generateMap(seed = 42): GameMap {
     if (tileX >= 0 && tileX < MAP_TILES_X && tileY >= 0 && tileY < MAP_TILES_Y) {
       const t = tiles[tileY * MAP_TILES_X + tileX]
       if (t === TileType.Grass) {
-        trees.push({ x: tx, y: ty, health: 100 })
+        trees.push({ kind: 'tree', x: tx, y: ty, health: 100 })
       }
     }
   }
@@ -432,7 +440,7 @@ export function generateMap(seed = 42): GameMap {
     if (tileX >= 0 && tileX < MAP_TILES_X && tileY >= 0 && tileY < MAP_TILES_Y) {
       const t = tiles[tileY * MAP_TILES_X + tileX]
       if (t === TileType.Grass || t === TileType.Sand) {
-        rocks.push({ x: rx, y: ry, health: 150 })
+        rocks.push({ kind: 'rock', x: rx, y: ry, health: 150 })
       }
     }
   }
@@ -447,7 +455,7 @@ export function generateMap(seed = 42): GameMap {
     if (tileX < 0 || tileX >= MAP_TILES_X || tileY < 0 || tileY >= MAP_TILES_Y) continue
     const tile = tiles[tileY * MAP_TILES_X + tileX]
     if (tile === TileType.Road || tile === TileType.BuildingFloor || tile === TileType.Sand) {
-      cars.push({ x: cx, y: cy, health: 130 })
+      cars.push({ kind: 'car', x: cx, y: cy, health: 130 })
     }
   }
 
@@ -490,11 +498,13 @@ export function generateMap(seed = 42): GameMap {
   }
 
   const minimapCanvas = buildMinimapCanvas(tiles, buildings, trees, rocks, cars)
+  const envGrid = buildEnvironmentGrid(trees, rocks, cars)
+  const structureGrid = buildStructureGrid(wallColliders)
 
   return {
     seed,
     tiles, trees, rocks, cars, containers, floorLoot,
-    buildings, playerBuilds: [], wallColliders, poiLabels, minimapCanvas,
+    buildings, playerBuilds, wallColliders, envGrid, structureGrid, poiLabels, minimapCanvas,
   }
 }
 
@@ -710,45 +720,71 @@ export function renderMap(
 
 // ── Get tree/rock colliders near a point ────────────────────────────────────
 
+function buildEnvironmentGrid(trees: TreeObj[], rocks: RockObj[], cars: CarObj[]): SpatialGridRef<EnvObj> {
+  const grid = new SpatialGridRef<EnvObj>(200)
+  for (const tree of trees) grid.insertPoint(tree, tree.x, tree.y, 16)
+  for (const rock of rocks) grid.insertPoint(rock, rock.x, rock.y, 16)
+  for (const car of cars) grid.insertPoint(car, car.x, car.y, 24)
+  return grid
+}
+
+function buildStructureGrid(wallColliders: AABB[]): SpatialGridRef<AABB | PlayerBuild> {
+  const grid = new SpatialGridRef<AABB | PlayerBuild>(200)
+  for (const wall of wallColliders) grid.insertAABB(wall, wall)
+  return grid
+}
+
+export function getEnvironmentCollider(obj: EnvObj): AABB {
+  switch (obj.kind) {
+    case 'tree':
+      return { x: obj.x - 8, y: obj.y - 6, w: 16, h: 16 }
+    case 'rock':
+      return { x: obj.x - 10, y: obj.y - 8, w: 20, h: 16 }
+    case 'car':
+      return { x: obj.x - 16, y: obj.y - 10, w: 32, h: 20 }
+  }
+}
+
+export function getEnvironmentBuildOverlay(obj: EnvObj): AABB {
+  switch (obj.kind) {
+    case 'tree':
+      return { x: obj.x - 10, y: obj.y - 10, w: 20, h: 20 }
+    case 'rock':
+      return { x: obj.x - 12, y: obj.y - 10, w: 24, h: 20 }
+    case 'car':
+      return { x: obj.x - 16, y: obj.y - 10, w: 32, h: 20 }
+  }
+}
+
+function isEnvironmentCandidateInRange(obj: EnvObj, x: number, y: number, range: number): boolean {
+  return Math.abs(obj.x - x) < range && Math.abs(obj.y - y) < range
+}
+
+function isStructureCandidateInRange(box: AABB, x: number, y: number, range: number): boolean {
+  const centerX = box.x + box.w / 2
+  const centerY = box.y + box.h / 2
+  return Math.abs(centerX - x) < range && Math.abs(centerY - y) < range
+}
+
 export function getEnvironmentColliders(map: GameMap, x: number, y: number, range: number): AABB[] {
   const colliders: AABB[] = []
-  for (const t of map.trees) {
-    if (t.health <= 0) continue
-    if (Math.abs(t.x - x) < range && Math.abs(t.y - y) < range) {
-      colliders.push({ x: t.x - 8, y: t.y - 6, w: 16, h: 16 })
-    }
-  }
-  for (const r of map.rocks) {
-    if (r.health <= 0) continue
-    if (Math.abs(r.x - x) < range && Math.abs(r.y - y) < range) {
-      colliders.push({ x: r.x - 10, y: r.y - 8, w: 20, h: 16 })
-    }
-  }
-  for (const c of map.cars) {
-    if (c.health <= 0) continue
-    if (Math.abs(c.x - x) < range && Math.abs(c.y - y) < range) {
-      colliders.push({ x: c.x - 16, y: c.y - 10, w: 32, h: 20 })
-    }
+  for (const obj of map.envGrid.query(x, y, range)) {
+    if (obj.health <= 0 || !isEnvironmentCandidateInRange(obj, x, y, range)) continue
+    colliders.push(getEnvironmentCollider(obj))
   }
   return colliders
 }
 
 export function getStructureColliders(map: GameMap, x: number, y: number, range: number): AABB[] {
   const colliders: AABB[] = []
-  for (const wall of map.wallColliders) {
-    const centerX = wall.x + wall.w / 2
-    const centerY = wall.y + wall.h / 2
-    if (Math.abs(centerX - x) < range && Math.abs(centerY - y) < range) {
-      colliders.push(wall)
+  for (const item of map.structureGrid.query(x, y, range)) {
+    if ('health' in item) {
+      if (!item.blocksMovement || item.health <= 0 || !isStructureCandidateInRange(item, x, y, range)) continue
+      colliders.push(item)
+      continue
     }
-  }
-  for (const build of map.playerBuilds) {
-    if (!build.blocksMovement || build.health <= 0) continue
-    const centerX = build.x + build.w / 2
-    const centerY = build.y + build.h / 2
-    if (Math.abs(centerX - x) < range && Math.abs(centerY - y) < range) {
-      colliders.push(build)
-    }
+    if (!isStructureCandidateInRange(item, x, y, range)) continue
+    colliders.push(item)
   }
   return colliders
 }

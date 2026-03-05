@@ -8,7 +8,7 @@ import {
   type BuildMaterial, type BuildPieceId, type ConsumableId,
 } from './constants'
 import type { InputState } from './input'
-import type { GameMap, PlayerBuild } from './map'
+import { getEnvironmentBuildOverlay, type GameMap, type PlayerBuild } from './map'
 import { aabbOverlap, circleAABBOverlap, type AABB } from './collision'
 
 // ── Inventory Slot ──────────────────────────────────────────────────────────
@@ -282,23 +282,6 @@ function getPieceSize(pieceId: BuildPieceId, rotation: 0 | 1): { w: number; h: n
   }
 }
 
-function getBuildOverlay(map: GameMap): AABB[] {
-  const overlay: AABB[] = []
-  for (const t of map.trees) {
-    if (t.health <= 0) continue
-    overlay.push({ x: t.x - 10, y: t.y - 10, w: 20, h: 20 })
-  }
-  for (const r of map.rocks) {
-    if (r.health <= 0) continue
-    overlay.push({ x: r.x - 12, y: r.y - 10, w: 24, h: 20 })
-  }
-  for (const c of map.cars) {
-    if (c.health <= 0) continue
-    overlay.push({ x: c.x - 16, y: c.y - 10, w: 32, h: 20 })
-  }
-  return overlay
-}
-
 export interface BuildPlacement extends AABB {
   pieceId: BuildPieceId
   rotation: 0 | 1
@@ -341,17 +324,15 @@ export function canPlaceBuild(player: Player, map: GameMap, build: BuildPlacemen
     return false
   }
 
-  for (const existing of map.playerBuilds) {
-    if (aabbOverlap(build, existing)) return false
+  const queryRange = Math.max(build.w, build.h) / 2 + 24
+  for (const item of map.structureGrid.query(centerX, centerY, queryRange)) {
+    if ('health' in item && item.health <= 0) continue
+    if (aabbOverlap(build, item)) return false
   }
 
-  for (const wall of map.wallColliders) {
-    if (aabbOverlap(build, wall)) return false
-  }
-
-  const blockedAreas = getBuildOverlay(map)
-  for (const area of blockedAreas) {
-    if (aabbOverlap(build, area)) return false
+  for (const obj of map.envGrid.query(centerX, centerY, queryRange)) {
+    if (obj.health <= 0) continue
+    if (aabbOverlap(build, getEnvironmentBuildOverlay(obj))) return false
   }
 
   if (circleAABBOverlap(player.x, player.y, PLAYER_SIZE / 2, build)) {
@@ -479,6 +460,7 @@ export function updatePlayer(
         maxHealth,
       }
       map.playerBuilds.push(pb)
+      map.structureGrid.insertAABB(pb, pb)
       buildPlaced = true
     }
   }

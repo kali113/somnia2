@@ -99,3 +99,113 @@ export class SpatialGrid {
     return result
   }
 }
+
+export class SpatialGridRef<T> {
+  private static readonly KEY_OFFSET = 1 << 20
+  private static readonly KEY_STRIDE = 1 << 21
+
+  private cellSize: number
+  private cells: Map<number, T[]>
+
+  constructor(cellSize: number) {
+    this.cellSize = cellSize
+    this.cells = new Map()
+  }
+
+  clear() {
+    this.cells.clear()
+  }
+
+  private key(cx: number, cy: number): number {
+    return (cx + SpatialGridRef.KEY_OFFSET) * SpatialGridRef.KEY_STRIDE + (cy + SpatialGridRef.KEY_OFFSET)
+  }
+
+  private getPointCellRange(x: number, y: number, r: number) {
+    return {
+      minCX: Math.floor((x - r) / this.cellSize),
+      maxCX: Math.floor((x + r) / this.cellSize),
+      minCY: Math.floor((y - r) / this.cellSize),
+      maxCY: Math.floor((y + r) / this.cellSize),
+    }
+  }
+
+  private getAABBCellRange(box: AABB) {
+    return {
+      minCX: Math.floor(box.x / this.cellSize),
+      maxCX: Math.floor((box.x + box.w) / this.cellSize),
+      minCY: Math.floor(box.y / this.cellSize),
+      maxCY: Math.floor((box.y + box.h) / this.cellSize),
+    }
+  }
+
+  private insertIntoRange(obj: T, minCX: number, maxCX: number, minCY: number, maxCY: number) {
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        const key = this.key(cx, cy)
+        const cell = this.cells.get(key)
+        if (cell) {
+          cell.push(obj)
+        } else {
+          this.cells.set(key, [obj])
+        }
+      }
+    }
+  }
+
+  private removeFromRange(obj: T, minCX: number, maxCX: number, minCY: number, maxCY: number) {
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        const key = this.key(cx, cy)
+        const cell = this.cells.get(key)
+        if (!cell) continue
+
+        for (let i = cell.length - 1; i >= 0; i--) {
+          if (cell[i] === obj) cell.splice(i, 1)
+        }
+
+        if (cell.length === 0) this.cells.delete(key)
+      }
+    }
+  }
+
+  insertPoint(obj: T, x: number, y: number, r: number) {
+    const { minCX, maxCX, minCY, maxCY } = this.getPointCellRange(x, y, r)
+    this.insertIntoRange(obj, minCX, maxCX, minCY, maxCY)
+  }
+
+  insertAABB(obj: T, box: AABB) {
+    const { minCX, maxCX, minCY, maxCY } = this.getAABBCellRange(box)
+    this.insertIntoRange(obj, minCX, maxCX, minCY, maxCY)
+  }
+
+  removePoint(obj: T, x: number, y: number, r: number) {
+    const { minCX, maxCX, minCY, maxCY } = this.getPointCellRange(x, y, r)
+    this.removeFromRange(obj, minCX, maxCX, minCY, maxCY)
+  }
+
+  removeAABB(obj: T, box: AABB) {
+    const { minCX, maxCX, minCY, maxCY } = this.getAABBCellRange(box)
+    this.removeFromRange(obj, minCX, maxCX, minCY, maxCY)
+  }
+
+  query(x: number, y: number, r: number): Set<T> {
+    const result = new Set<T>()
+    const { minCX, maxCX, minCY, maxCY } = this.getPointCellRange(x, y, r)
+
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        const cell = this.cells.get(this.key(cx, cy))
+        if (!cell) continue
+        for (const obj of cell) result.add(obj)
+      }
+    }
+
+    return result
+  }
+
+  queryPoint(x: number, y: number): T[] | undefined {
+    const cx = Math.floor(x / this.cellSize)
+    const cy = Math.floor(y / this.cellSize)
+    return this.cells.get(this.key(cx, cy))
+  }
+}

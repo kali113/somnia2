@@ -10,7 +10,7 @@ import type { GameMap } from './map'
 import { getEnvironmentColliders, getStructureColliders } from './map'
 import type { StormState } from './storm'
 import { isInStorm } from './storm'
-import { distance, angleBetween, aabbOverlap, type AABB } from './collision'
+import { distance, angleBetween, aabbOverlap, type AABB, type SpatialGridRef } from './collision'
 import type { ParticleSystem } from './particles'
 import { emitHitMarker, emitElimination } from './particles'
 
@@ -183,8 +183,7 @@ function getStormPressure(x: number, y: number, zone: BotNavigationZone): number
 
 export function updateBot(
   bot: Bot,
-  player: Player,
-  allBots: Bot[],
+  entityGrid: SpatialGridRef<Player>,
   storm: StormState,
   map: GameMap,
   dt: number,
@@ -206,20 +205,12 @@ export function updateBot(
   let nearestThreat: Player | null = null
   let nearestDist = Infinity
 
-  if (player.alive && player.teamId !== bot.teamId) {
-    const d = distance(bot.x, bot.y, player.x, player.y)
-    if (d < bot.sightRange) {
-      nearestThreat = player
-      nearestDist = d
-    }
-  }
-
-  for (const other of allBots) {
-    if (other === bot || !other.alive) continue
-    if (other.teamId === bot.teamId) continue  // skip teammates
-    const d = distance(bot.x, bot.y, other.x, other.y)
+  for (const entity of entityGrid.query(bot.x, bot.y, bot.sightRange)) {
+    if (entity === bot || !entity.alive) continue
+    if (entity.teamId === bot.teamId) continue
+    const d = distance(bot.x, bot.y, entity.x, entity.y)
     if (d < bot.sightRange && d < nearestDist) {
-      nearestThreat = other
+      nearestThreat = entity
       nearestDist = d
     }
   }

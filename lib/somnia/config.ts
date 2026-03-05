@@ -1,6 +1,8 @@
 // ── Somnia Shannon Testnet Configuration ────────────────────────────────────
 // Source: docs.somnia.network/developer/network-info
 
+import deployment from '@/contracts/deployments/somnia-shannon-50312.json'
+
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
 export const SOMNIA_RPC_URL =
@@ -17,8 +19,8 @@ export const SOMNIA_FAUCET_URL =
   process.env.NEXT_PUBLIC_SOMNIA_FAUCET_URL ||
   'https://cloud.google.com/application/web3/faucet/somnia/shannon'
 
-const HARDCODED_PIXEL_ROYALE_ADDRESS =
-  '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7' as const
+const DEPLOYED_PIXEL_ROYALE_ADDRESS =
+  (deployment.contract?.address || ZERO_ADDRESS) as `0x${string}`
 
 export const SOMNIA_TESTNET = {
   id: 50312,
@@ -49,7 +51,7 @@ export const SOMNIA_TESTNET = {
 const rawGameContractAddress =
   process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
   process.env.NEXT_PUBLIC_GAME_CONTRACT_ADDRESS ||
-  HARDCODED_PIXEL_ROYALE_ADDRESS
+  DEPLOYED_PIXEL_ROYALE_ADDRESS
 
 const normalizedGameContractAddress = rawGameContractAddress.trim()
 

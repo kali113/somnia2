@@ -1,8 +1,11 @@
-import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { WebSocketServer, WebSocket } from 'ws'
 import http from 'http'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
 import { createPublicClient, createWalletClient, http as viemHttp, isAddress, type Address } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { playerRouter } from './routes/player.js'
@@ -12,16 +15,58 @@ import { leaderboardRouter } from './routes/leaderboard.js'
 import { Indexer } from './indexer.js'
 import { GameStore } from './store.js'
 
+const runtimeDir = path.dirname(fileURLToPath(import.meta.url))
+const serverRoot = path.basename(runtimeDir) === 'dist'
+  ? path.resolve(runtimeDir, '..')
+  : runtimeDir
+const projectRoot = path.resolve(serverRoot, '..')
+
+dotenv.config({ path: path.join(projectRoot, '.env'), quiet: true })
+dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true, quiet: true })
+dotenv.config({ path: path.join(serverRoot, '.env'), override: true, quiet: true })
+dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet: true })
+
+function readDeploymentContractAddress(): string {
+  try {
+    const deploymentPath = path.join(projectRoot, 'contracts', 'deployments', 'somnia-shannon-50312.json')
+    const raw = readFileSync(deploymentPath, 'utf8')
+    const payload = JSON.parse(raw) as { contract?: { address?: string } }
+    return (payload.contract?.address || '').trim()
+  } catch {
+    return ''
+  }
+}
+
 // ── Environment ─────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3001', 10)
 const SOMNIA_RPC = process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
-const HARDCODED_CONTRACT_ADDRESS = '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7' as const
-const rawContractAddress = (process.env.GAME_CONTRACT_ADDRESS || HARDCODED_CONTRACT_ADDRESS).trim()
+const DEPLOYED_CONTRACT_ADDRESS = readDeploymentContractAddress()
+const rawContractAddress = (
+  process.env.GAME_CONTRACT_ADDRESS ||
+  process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
+  process.env.NEXT_PUBLIC_GAME_CONTRACT_ADDRESS ||
+  DEPLOYED_CONTRACT_ADDRESS ||
+  ZERO_ADDRESS
+).trim()
 const CONTRACT_ADDRESS = (isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS) as Address
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
-const ORCHESTRATOR_KEY = process.env.ORCHESTRATOR_PRIVATE_KEY as `0x${string}` | undefined
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000'
+const ORCHESTRATOR_KEY = (
+  process.env.ORCHESTRATOR_PRIVATE_KEY ||
+  process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
+) as `0x${string}` | undefined
+const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+const CORS_ORIGINS = configuredCorsOrigins.length > 0
+  ? configuredCorsOrigins
+  : [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3002',
+      'http://127.0.0.1:3002',
+    ]
 
 // ── Somnia chain definition ─────────────────────────────────────────────────
 const somniaTestnet = {
@@ -59,7 +104,15 @@ const store = new GameStore()
 
 // ── Express app ─────────────────────────────────────────────────────────────
 const app = express()
-app.use(cors({ origin: CORS_ORIGIN }))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || CORS_ORIGINS.includes(origin)) {
+      callback(null, true)
+      return
+    }
+    callback(new Error(`Origin ${origin} not allowed by CORS`))
+  },
+}))
 app.use(express.json())
 
 // Attach shared state to request
