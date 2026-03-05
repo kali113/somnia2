@@ -33,6 +33,9 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=$REMOTE_ROOT
+Environment=HOME=/root
+Environment=PM2_HOME=/root/.pm2
+Environment=USER=root
 ExecStart=$REMOTE_ROOT/bin/check.sh
 EOF
 
