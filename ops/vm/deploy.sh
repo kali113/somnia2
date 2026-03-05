@@ -71,6 +71,7 @@ write_status() {
   "updatedAt": "$(iso_now)"
 }
 EOF
+  chmod 644 "$STATUS_JSON"
 }
 
 append_history() {
@@ -144,6 +145,7 @@ append_history() {
       }]}' > "$tmp_json"
   fi
   mv "$tmp_json" "$HISTORY_JSON"
+  chmod 644 "$HISTORY_JSON"
 }
 
 STARTED_AT="$(iso_now)"

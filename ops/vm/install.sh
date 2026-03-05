@@ -23,6 +23,7 @@ fi
 install -m 644 "$ROOT_DIR/status-site/index.html" "$STATUS_ROOT/index.html"
 install -m 644 "$ROOT_DIR/status-site/styles.css" "$STATUS_ROOT/assets/styles.css"
 install -m 644 "$ROOT_DIR/status-site/app.js" "$STATUS_ROOT/assets/app.js"
+ln -sfn "$STATUS_ROOT" /var/www/somnia2/status
 
 cat > /etc/systemd/system/somnia2-deploy.service <<EOF
 [Unit]
@@ -63,17 +64,21 @@ status_block = """
         return 301 /status/;
     }
 
-    location /status/ {
-        alias /var/www/somnia2-status/;
-        try_files $uri $uri/ /status/index.html;
+    location = /status/ {
+        rewrite ^ /status/index.html break;
     }
 """.strip()
 
-if "location /status/" not in text:
+if "location = /status" not in text:
     marker = "    location / {\n        try_files $uri $uri/ $uri.html /index.html;\n    }\n"
     if marker not in text:
         raise SystemExit("Expected nginx location block not found.")
     text = text.replace(marker, status_block + "\n\n" + marker)
+    path.write_text(text)
+elif "location ^~ /status/data/" in text:
+    start = text.index("location = /status")
+    end = text.index("    location / {", start)
+    text = text[:start] + status_block + "\n\n" + text[end:]
     path.write_text(text)
 PY
 
@@ -86,6 +91,7 @@ if [[ ! -f "$STATUS_ROOT/data/history.json" ]]; then
   cat > "$STATUS_ROOT/data/history.json" <<EOF
 {"history":[]}
 EOF
+  chmod 644 "$STATUS_ROOT/data/history.json"
 fi
 
 if [[ ! -f "$STATUS_ROOT/data/status.json" ]]; then
@@ -106,6 +112,8 @@ if [[ ! -f "$STATUS_ROOT/data/status.json" ]]; then
   "updatedAt": ""
 }
 EOF
+  chmod 644 "$STATUS_ROOT/data/status.json"
 fi
 
 touch "$STATUS_ROOT/data/deploy.log"
+chmod 644 "$STATUS_ROOT/data/deploy.log"
