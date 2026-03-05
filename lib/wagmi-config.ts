@@ -1,7 +1,7 @@
 'use client'
 
 import { http, createConfig } from 'wagmi'
-import { defineChain } from 'viem'
+import { defineChain, custom, fallback } from 'viem'
 import { injected } from 'wagmi/connectors'
 import { SOMNIA_TESTNET } from '@/lib/somnia/config'
 
@@ -30,13 +30,21 @@ export const somniaTestnet = defineChain({
 })
 
 // ── Wagmi Config ────────────────────────────────────────────────────────────
+// Use MetaMask's injected provider as the primary transport so balance reads
+// go through the same RPC MetaMask is using. Fall back to the public HTTP RPC.
+const publicHttp = http(SOMNIA_TESTNET.rpcUrls.default.http[0])
+const injectedProvider = typeof window !== 'undefined' ? (window as any).ethereum : undefined
+const somniaTransport = injectedProvider
+  ? fallback([custom(injectedProvider), publicHttp])
+  : publicHttp
+
 export const wagmiConfig = createConfig({
   chains: [somniaTestnet],
   connectors: [
     injected({ target: 'metaMask' }),
   ],
   transports: {
-    [somniaTestnet.id]: http(SOMNIA_TESTNET.rpcUrls.default.http[0]),
+    [somniaTestnet.id]: somniaTransport,
   },
   ssr: false,
 })
