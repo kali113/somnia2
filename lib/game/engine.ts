@@ -23,6 +23,11 @@ import { drawPlayer, drawBullet, drawLootItem, drawAmmoPack, drawSupplyDrop, dra
 import { distance, angleBetween, circleOverlap, type AABB } from './collision'
 import { playShot, playHit, playElim, playChestOpen, playPickup, playBuild, playVictory, playEliminated, playSupplyDrop } from './audio'
 
+// ── Aim Assist ──────────────────────────────────────────────────────────────
+
+const AIM_ASSIST_RADIUS = 100   // screen-space pixels
+const AIM_ASSIST_STRENGTH = 0.65 // fraction to pull toward target (0 = off, 1 = full snap)
+
 // ── Projectile ──────────────────────────────────────────────────────────────
 
 interface Projectile {
@@ -98,6 +103,7 @@ export interface GameState {
   dropTimer: number
   activeChestId: number | null
   promptChestId: number | null
+  aimAssistBotIdx: number   // index into bots[], -1 if no target
 
   // Callbacks for React UI
   onKillFeedUpdate?: (feed: KillFeedEntry[]) => void
@@ -177,6 +183,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: { botCount?: numbe
     dropTimer: 0,
     activeChestId: null,
     promptChestId: null,
+    aimAssistBotIdx: -1,
   }
 
   // Store cleanup on canvas for later
@@ -381,6 +388,42 @@ function isBotTeamAlive(state: GameState, teamId: number): boolean {
   return state.bots.some(b => b.teamId === teamId && b.alive)
 }
 
+// ── Aim Assist (human player only) ──────────────────────────────────────────
+
+function computeAimAssist(
+  state: GameState,
+): { worldX: number; worldY: number; botIdx: number } | null {
+  if (!state.player.alive || state.player.buildMode) return null
+
+  const { input, camera: cam, player, bots } = state
+  let bestIdx = -1
+  let bestDistSq = AIM_ASSIST_RADIUS * AIM_ASSIST_RADIUS
+
+  for (let i = 0; i < bots.length; i++) {
+    const bot = bots[i]
+    if (!bot.alive || bot.teamId === player.teamId) continue
+    // Convert bot world position to screen space and compare to cursor
+    const sx = bot.x - cam.x
+    const sy = bot.y - cam.y
+    const dx = sx - input.mouseX
+    const dy = sy - input.mouseY
+    const dSq = dx * dx + dy * dy
+    if (dSq < bestDistSq) {
+      bestDistSq = dSq
+      bestIdx = i
+    }
+  }
+
+  if (bestIdx < 0) return null
+
+  const target = bots[bestIdx]
+  return {
+    worldX: input.mouseWorldX + (target.x - input.mouseWorldX) * AIM_ASSIST_STRENGTH,
+    worldY: input.mouseWorldY + (target.y - input.mouseWorldY) * AIM_ASSIST_STRENGTH,
+    botIdx: bestIdx,
+  }
+}
+
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
@@ -394,6 +437,14 @@ export function updateGame(state: GameState, dt: number) {
 
   // Update mouse world coords
   updateMouseWorld(state.input, state.camera.x, state.camera.y)
+
+  // ── Aim assist (human player only) ───────────────────────────────────
+  const aimAssist = computeAimAssist(state)
+  state.aimAssistBotIdx = aimAssist?.botIdx ?? -1
+  if (aimAssist) {
+    state.input.mouseWorldX = aimAssist.worldX
+    state.input.mouseWorldY = aimAssist.worldY
+  }
 
   // ── Get colliders near player ─────────────────────────────────────────
   const envColliders = getEnvironmentColliders(state.map, state.player.x, state.player.y, 100)
@@ -1002,6 +1053,26 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     drawPlayer(ctx, sx, sy, bot.angle, COLORS.bot, COLORS.botOutline, PLAYER_SIZE, bot.health, bot.shield, bot.name, bot.alive)
   }
 
+  // ── Aim assist lock ring ──────────────────────────────────────────────
+  if (state.aimAssistBotIdx >= 0) {
+    const aaTarget = bots[state.aimAssistBotIdx]
+    if (aaTarget?.alive) {
+      const asx = aaTarget.x - cam.x
+      const asy = aaTarget.y - cam.y
+      if (asx > -40 && asx < cam.width + 40 && asy > -40 && asy < cam.height + 40) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(255, 210, 60, 0.75)'
+        ctx.lineWidth = 1.5
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.arc(asx, asy, PLAYER_SIZE / 2 + 8, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.restore()
+      }
+    }
+  }
+
   // ── Player ────────────────────────────────────────────────────────────
   if (player.alive) {
     drawPlayer(
@@ -1054,8 +1125,9 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // ── Crosshair ─────────────────────────────────────────────────────────
   if (player.alive && !player.buildMode) {
-    const cx = state.input.mouseX
-    const cy = state.input.mouseY
+    // Use aim-assisted world coords so the crosshair snaps with the aim
+    const cx = state.input.mouseWorldX - cam.x
+    const cy = state.input.mouseWorldY - cam.y
     ctx.strokeStyle = '#fff'
     ctx.lineWidth = 1.5
     ctx.beginPath()
