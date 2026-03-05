@@ -27,6 +27,25 @@ Original prompt: there is not a victory screen when killing everyone
 - `pnpm deploy:somnia` failed because deployer/orchestrator `0xEdAcF7e7B79b78686bd45CC10B9695B62B1af02A` has `0 STT`.
 - The Google Cloud Somnia faucet page accepts the address but rejects unsigned requests with: `You are signed out. Sign in to your Google Account to receive testnet tokens.`
 - Once that wallet is funded and `pnpm deploy:somnia` succeeds, the repo should auto-pick up the new contract address from the deployment JSON on the next rebuild/restart.
+- Follow-up branch for this turn: `deploy-storm-commit-contract`.
+- Funded deployer/orchestrator `0xEdAcF7e7B79b78686bd45CC10B9695B62B1af02A` with `1 STT`.
+- Deployed updated `PixelRoyale` with live storm commit support:
+- New contract address: `0x3fe0b7aa1b541b3b6fba3dae0899d0a0b40901c1`
+- Deployment tx: `0x30a72be3057b5fe7e15bdb14ebc561d931988a1231156123e0038feb76068e23`
+- Updated `contracts/deployments/somnia-shannon-50312.json`; frontend/backend fallback config now resolves to the new address automatically after rebuild/restart.
+- Verified backend startup uses the new contract and orchestrator wallet.
+- Verified the live `/api/game/storm` path by mounting `gameRouter` with a synthetic active match and submitting `{ gameId: 9001, phase: 0 }`.
+- Successful live storm commit tx: `0xfc4a17b5f8908772b5edf94854cfdecf2ecb07e5d00beefaf7089a84a8628a43`
+- On-chain readback for `(gameId=9001, phase=0)` returned `committed=true`, target center `(1434, 1722)`, target radius `1200`.
+- Fixed a hydration mismatch on `/` caused by localhost backend auto-detection by making the queue header mount-safe in `app/page.tsx`.
+- Final verification:
+- `pnpm lint`
+- `pnpm build`
+- `cd server && pnpm build`
+- `cd server && pnpm start`
+- `curl http://localhost:3001/api/health`
+- Static smoke checks for `/`, `/play`, `/game` after deploy + rebuild
+- Remaining known noise in static export smoke: 404s for `/favicon.ico` and `/_vercel/insights/script.js`; no React/runtime page errors remain.
 
 - Current prompt: bots are running into the storm.
 - Created branch `fix-bots-avoid-storm` from the current dirty worktree without touching unrelated edits.
