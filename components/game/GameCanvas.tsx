@@ -4,7 +4,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import {
   initGame, updateGame, renderGame, resizeGame, cleanupGame,
   type GameState, type GamePhase, type KillFeedEntry, type SupplyDrop,
-  type ChestPromptState, type ChestOpenResult,
+  type ContainerPromptState, type ContainerVerificationRequest, type ContainerRewardBundle,
 } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
@@ -18,11 +18,14 @@ interface GameCanvasProps {
   onPlayerUpdate: (player: Player) => void
   onStormUpdate: (storm: StormState) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
-  onChestPromptUpdate?: (prompt: ChestPromptState | null) => void
-  onChestOpened?: (result: ChestOpenResult) => void
+  onContainerPromptUpdate?: (prompt: ContainerPromptState | null) => void
+  onContainerVerificationRequested?: (request: ContainerVerificationRequest) => void
+  onContainerOpened?: (result: ContainerRewardBundle) => void
   gameStateRef: React.MutableRefObject<GameState | null>
   botCount?: number
   mode?: GameMode
+  gameId?: number
+  verifiedContainers?: boolean
 }
 
 export default function GameCanvas({
@@ -32,11 +35,14 @@ export default function GameCanvas({
   onPlayerUpdate,
   onStormUpdate,
   onSupplyDrop,
-  onChestPromptUpdate,
-  onChestOpened,
+  onContainerPromptUpdate,
+  onContainerVerificationRequested,
+  onContainerOpened,
   gameStateRef,
   botCount,
   mode,
+  gameId,
+  verifiedContainers,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
@@ -65,7 +71,13 @@ export default function GameCanvas({
       const mapSeed = await fetchSomniaRandomSeed()
       if (cancelled) return
 
-      const state = initGame(canvas, { botCount, mapSeed, mode })
+      const state = initGame(canvas, {
+        botCount,
+        mapSeed,
+        mode,
+        gameId,
+        verifiedContainers,
+      })
       gameStateRef.current = state
 
       // Wire up callbacks
@@ -75,8 +87,9 @@ export default function GameCanvas({
       state.onPlayerUpdate = onPlayerUpdate
       state.onStormUpdate = onStormUpdate
       state.onSupplyDrop = onSupplyDrop
-      state.onChestPromptUpdate = onChestPromptUpdate
-      state.onChestOpened = onChestOpened
+      state.onContainerPromptUpdate = onContainerPromptUpdate
+      state.onContainerVerificationRequested = onContainerVerificationRequested
+      state.onContainerOpened = onContainerOpened
 
       let lastTime = -1
 
@@ -113,8 +126,8 @@ export default function GameCanvas({
   }, [
     handleResize, onKillFeedUpdate, onAliveCountUpdate,
     onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop,
-    onChestPromptUpdate, onChestOpened,
-    gameStateRef, botCount, mode,
+    onContainerPromptUpdate, onContainerVerificationRequested, onContainerOpened,
+    gameStateRef, botCount, mode, gameId, verifiedContainers,
   ])
 
   return (

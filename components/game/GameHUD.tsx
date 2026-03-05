@@ -3,7 +3,7 @@
 import { WEAPONS, ITEMS, RARITY_COLORS, BUILD_PIECE_ORDER, BUILD_PIECES } from '@/lib/game/constants'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
-import type { ChestPromptState } from '@/lib/game/engine'
+import type { ContainerPromptState } from '@/lib/game/engine'
 import { Shield, Heart, TreePine, Mountain, Wrench } from 'lucide-react'
 
 interface GameHUDProps {
@@ -11,10 +11,16 @@ interface GameHUDProps {
   aliveCount: number
   storm: StormState | null
   gameTime: number
-  chestPrompt: ChestPromptState | null
+  containerPrompt: ContainerPromptState | null
 }
 
-export default function GameHUD({ player, aliveCount, storm, gameTime, chestPrompt }: GameHUDProps) {
+function containerLabel(type: ContainerPromptState['containerType']): string {
+  if (type === 'rare_chest') return 'RARE CHEST'
+  if (type === 'ammo_box') return 'AMMO BOX'
+  return 'CHEST'
+}
+
+export default function GameHUD({ player, aliveCount, storm, gameTime, containerPrompt }: GameHUDProps) {
   if (!player) return null
 
   const activePiece = BUILD_PIECES[player.buildPiece]
@@ -187,14 +193,30 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, chestProm
           </div>
         )}
 
-        {chestPrompt && (
+        {containerPrompt && (
           <div className="rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono">
             <div className="text-[11px] text-[#ffd166]">
-              {chestPrompt.chestType === 'rare' ? 'RARE CHEST' : 'CHEST'} NEARBY
+              {containerLabel(containerPrompt.containerType)} NEARBY
             </div>
             <div className="text-[10px] text-[rgba(255,255,255,0.8)]">
-              Press <span className="text-[#3ae8ff]">{chestPrompt.key}</span> to open
+              {containerPrompt.status === 'ready' && (
+                <>Hold <span className="text-[#3ae8ff]">{containerPrompt.key}</span> to search</>
+              )}
+              {containerPrompt.status === 'searching' && (
+                <>Searching... {Math.round(containerPrompt.progress * 100)}%</>
+              )}
+              {containerPrompt.status === 'verifying' && (
+                <>Verifying on-chain...</>
+              )}
             </div>
+            {containerPrompt.status === 'searching' && (
+              <div className="mt-2 h-1.5 w-44 overflow-hidden rounded bg-[rgba(255,255,255,0.15)]">
+                <div
+                  className="h-full bg-[#ffd166] transition-all duration-75"
+                  style={{ width: `${Math.round(containerPrompt.progress * 100)}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -232,7 +254,7 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, chestProm
       {/* Controls hint */}
       <div className="absolute bottom-3 left-3 text-[10px] font-mono text-[rgba(255,255,255,0.3)] leading-relaxed">
         <div>WASD Move | Mouse Aim & Shoot</div>
-        <div>1-5 Slots | R Reload (uses reserve ammo) | E Open Chest | F Heal</div>
+        <div>1-5 Slots | R Reload (uses reserve ammo) | E Search Container | F Heal</div>
         <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
       </div>
     </div>
