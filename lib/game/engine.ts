@@ -26,7 +26,7 @@ import { playShot, playHit, playElim, playChestOpen, playPickup, playBuild, play
 // ── Aim Assist ──────────────────────────────────────────────────────────────
 
 const AIM_ASSIST_RADIUS = 55    // screen-space pixels
-const AIM_ASSIST_STRENGTH = 0.2  // fraction to pull toward target (0 = off, 1 = full snap)
+const AIM_ASSIST_STRENGTH = 0.08 // fraction to pull toward target (0 = off, 1 = full snap)
 
 // ── Projectile ──────────────────────────────────────────────────────────────
 
@@ -1051,26 +1051,6 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
     const sy = bot.y - cam.y
     if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
     drawPlayer(ctx, sx, sy, bot.angle, COLORS.bot, COLORS.botOutline, PLAYER_SIZE, bot.health, bot.shield, bot.name, bot.alive)
-  }
-
-  // ── Aim assist lock ring ──────────────────────────────────────────────
-  if (state.aimAssistBotIdx >= 0) {
-    const aaTarget = bots[state.aimAssistBotIdx]
-    if (aaTarget?.alive) {
-      const asx = aaTarget.x - cam.x
-      const asy = aaTarget.y - cam.y
-      if (asx > -40 && asx < cam.width + 40 && asy > -40 && asy < cam.height + 40) {
-        ctx.save()
-        ctx.strokeStyle = 'rgba(255, 210, 60, 0.75)'
-        ctx.lineWidth = 1.5
-        ctx.setLineDash([4, 4])
-        ctx.beginPath()
-        ctx.arc(asx, asy, PLAYER_SIZE / 2 + 8, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.setLineDash([])
-        ctx.restore()
-      }
-    }
   }
 
   // ── Player ────────────────────────────────────────────────────────────
