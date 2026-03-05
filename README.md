@@ -72,10 +72,17 @@ Required backend env:
 
 ## GitHub Pages deployment
 
+GitHub Pages does not read your local `.env` files.
+
 Set repository variable:
 
 - `NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS`
 
-The Pages workflow reads this variable during build, so the frontend points to the real deployed contract address (not `0x000...000`).
+The workflow resolves the contract address from:
+
+- `vars.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS` (preferred), or
+- `contracts/deployments/somnia-shannon-50312.json` (`contract.address`) if the repo variable is missing.
+
+If neither is present (or the address is invalid), the Pages build fails with a clear error.
 
 Workflow: `.github/workflows/deploy-pages.yml`
