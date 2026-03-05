@@ -1,0 +1,8 @@
+{
+  "chainId": 50312,
+  "chainName": "Somnia Testnet",
+  "contract": {
+    "name": "PixelRoyale",
+    "address": "0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7"
+  }
+}
