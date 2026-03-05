@@ -753,8 +753,13 @@ export function updateGame(state: GameState, dt: number) {
   // ── Storm damage to player ───────────────────────────────────────────
   if (state.player.alive && isInStorm(state.storm, state.player.x, state.player.y)) {
     const dmg = state.storm.damagePerTick * dt * 2
-    const stormDamage = takeDamage(state.player, dmg)
-    if (stormDamage.shieldDmg > 0 || stormDamage.healthDmg > 0) {
+    const healthDmg = Math.min(state.player.health, dmg)
+    if (healthDmg > 0) {
+      state.player.health -= healthDmg
+      if (state.player.health <= 0) {
+        state.player.health = 0
+        state.player.alive = false
+      }
       cancelConsumableUse(state.player)
     }
     if (!state.player.alive) {

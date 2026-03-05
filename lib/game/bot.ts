@@ -265,10 +265,11 @@ export function updateBot(
   bot.x = Math.max(PLAYER_SIZE, Math.min(MAP_WIDTH - PLAYER_SIZE, bot.x))
   bot.y = Math.max(PLAYER_SIZE, Math.min(MAP_HEIGHT - PLAYER_SIZE, bot.y))
 
-  // Storm damage
+  // Storm damage (bypasses shield, hits health directly)
   if (isInStorm(storm, bot.x, bot.y)) {
     const dmg = storm.damagePerTick * dt * 2
-    takeDamage(bot, dmg)
+    bot.health = Math.max(0, bot.health - dmg)
+    if (bot.health <= 0) bot.alive = false
   }
 
   return {
