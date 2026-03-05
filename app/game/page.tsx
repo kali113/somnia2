@@ -22,7 +22,7 @@ import VictoryScreen from '@/components/game/VictoryScreen'
 import EventFeed from '@/components/game/EventFeed'
 import WalletConnect from '@/components/game/WalletConnect'
 import { Volume2, VolumeX } from 'lucide-react'
-import { setMuted, isMuted } from '@/lib/game/audio'
+import { activateAudio, setMuted, isMuted } from '@/lib/game/audio'
 
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
   ssr: false,
@@ -247,6 +247,9 @@ function GamePageInner() {
     const newMuted = !muted
     setMutedState(newMuted)
     setMuted(newMuted)
+    if (!newMuted) {
+      void activateAudio()
+    }
   }, [muted])
 
   const canStartGame = !isMatchMode || walletConnected
@@ -316,7 +319,10 @@ function GamePageInner() {
         </div>
       )}
 
-      <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+      <div
+        className="absolute top-3 z-20 flex max-w-[calc(100vw-24px)] flex-wrap items-center justify-end gap-2"
+        style={{ right: 'calc(12px + 160px + 16px)' }}
+      >
         <WalletConnect
           onConnect={handleWalletConnect}
           onDisconnect={handleWalletDisconnect}

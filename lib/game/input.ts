@@ -27,6 +27,14 @@ export function createInputState(): InputState {
 }
 
 export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
+  const resetInputState = () => {
+    state.keys.clear()
+    state.mouseDown = false
+    state.justPressed.clear()
+    state.justClicked = false
+    state.scrollDelta = 0
+  }
+
   const onKeyDown = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase()
     if (!state.keys.has(key)) {
@@ -57,7 +65,7 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
   }
 
   const onMouseUp = (e: MouseEvent) => {
-    if (e.button === 0) {
+    if (e.button === 0 || e.button === undefined) {
       state.mouseDown = false
     }
   }
@@ -68,21 +76,24 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
   }
 
   const onContextMenu = (e: Event) => e.preventDefault()
+  const onBlur = () => resetInputState()
 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('mouseup', onMouseUp)
+  window.addEventListener('blur', onBlur)
   canvas.addEventListener('mousemove', onMouseMove)
   canvas.addEventListener('mousedown', onMouseDown)
-  canvas.addEventListener('mouseup', onMouseUp)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('contextmenu', onContextMenu)
 
   return () => {
     window.removeEventListener('keydown', onKeyDown)
     window.removeEventListener('keyup', onKeyUp)
+    window.removeEventListener('mouseup', onMouseUp)
+    window.removeEventListener('blur', onBlur)
     canvas.removeEventListener('mousemove', onMouseMove)
     canvas.removeEventListener('mousedown', onMouseDown)
-    canvas.removeEventListener('mouseup', onMouseUp)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('contextmenu', onContextMenu)
   }

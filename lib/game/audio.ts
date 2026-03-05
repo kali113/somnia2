@@ -3,7 +3,7 @@
 let audioCtx: AudioContext | null = null
 let muted = false
 
-function getCtx(): AudioContext | null {
+function ensureCtx(): AudioContext | null {
   if (!audioCtx) {
     try {
       audioCtx = new AudioContext()
@@ -22,10 +22,26 @@ export function isMuted(): boolean {
   return muted
 }
 
+export async function activateAudio(): Promise<boolean> {
+  const ctx = ensureCtx()
+  if (!ctx) return false
+
+  try {
+    if (ctx.state === 'suspended') {
+      await ctx.resume()
+    }
+  } catch {
+    return false
+  }
+
+  return ctx.state === 'running'
+}
+
 function playTone(freq: number, duration: number, type: OscillatorType = 'square', volume = 0.1) {
   if (muted) return
-  const ctx = getCtx()
-  if (!ctx) return
+  if (!audioCtx || audioCtx.state !== 'running') return
+
+  const ctx = audioCtx
 
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()

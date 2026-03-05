@@ -1283,6 +1283,157 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
   renderMinimap(ctx, state)
 }
 
+function roundValue(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+function isVisibleInCamera(state: GameState, x: number, y: number, padding = 32): boolean {
+  return x >= state.camera.x - padding
+    && x <= state.camera.x + state.camera.width + padding
+    && y >= state.camera.y - padding
+    && y <= state.camera.y + state.camera.height + padding
+}
+
+function getPlayerLocationName(state: GameState): string | null {
+  const px = state.player.x
+  const py = state.player.y
+
+  for (const poi of POI_DEFS) {
+    const x1 = poi.tileX * TILE_SIZE
+    const y1 = poi.tileY * TILE_SIZE
+    const x2 = (poi.tileX + poi.width) * TILE_SIZE
+    const y2 = (poi.tileY + poi.height) * TILE_SIZE
+    if (px >= x1 && px <= x2 && py >= y1 && py <= y2) {
+      return poi.name
+    }
+  }
+
+  return null
+}
+
+export function renderGameToText(state: GameState): string {
+  const activeSlot = state.player.slots[state.player.activeSlot]
+  const activeWeapon = activeSlot ? WEAPONS[activeSlot.weaponId] : null
+  const visibleBots = state.bots
+    .filter((bot) => bot.alive && isVisibleInCamera(state, bot.x, bot.y))
+    .slice(0, 8)
+    .map((bot) => ({
+      name: bot.name,
+      x: roundValue(bot.x),
+      y: roundValue(bot.y),
+      health: roundValue(bot.health),
+      shield: roundValue(bot.shield),
+      teamId: bot.teamId,
+    }))
+
+  const visibleLoot = state.map.floorLoot
+    .filter((loot) => !loot.picked && isVisibleInCamera(state, loot.x, loot.y))
+    .slice(0, 8)
+    .map((loot) => ({
+      kind: loot.kind,
+      x: roundValue(loot.x),
+      y: roundValue(loot.y),
+      label: loot.kind === 'weapon'
+        ? loot.weaponId
+        : loot.kind === 'consumable'
+          ? loot.itemId
+          : loot.weaponId ?? 'ammo',
+      rarity: loot.rarity,
+      amount: loot.kind === 'ammo' ? loot.amount : undefined,
+    }))
+
+  const visibleContainers = state.map.containers
+    .filter((container) => !container.opened && isVisibleInCamera(state, container.x, container.y))
+    .slice(0, 6)
+    .map((container) => ({
+      id: container.id,
+      type: container.type,
+      x: roundValue(container.x),
+      y: roundValue(container.y),
+      distance: roundValue(distance(state.player.x, state.player.y, container.x, container.y)),
+      pendingVerification: container.pendingVerification,
+    }))
+
+  const visibleSupplyDrops = state.supplyDrops
+    .filter((drop) => !drop.opened && isVisibleInCamera(state, drop.x, drop.y))
+    .slice(0, 4)
+    .map((drop) => ({
+      x: roundValue(drop.x),
+      y: roundValue(drop.y),
+      falling: drop.falling,
+      rarity: drop.rarity,
+    }))
+
+  const visibleBuilds = state.map.playerBuilds
+    .filter((build) => isVisibleInCamera(state, build.x + build.w / 2, build.y + build.h / 2))
+    .slice(0, 6)
+    .map((build) => ({
+      piece: build.pieceId,
+      material: build.material,
+      x: roundValue(build.x),
+      y: roundValue(build.y),
+      health: roundValue(build.health),
+    }))
+
+  return JSON.stringify({
+    coordinateSystem: 'world origin top-left; +x right; +y down; visible lists filtered to current camera',
+    phase: state.phase,
+    mode: state.mode,
+    time: roundValue(state.time),
+    aliveCount: state.aliveCount,
+    location: getPlayerLocationName(state),
+    camera: {
+      x: roundValue(state.camera.x),
+      y: roundValue(state.camera.y),
+      width: state.camera.width,
+      height: state.camera.height,
+    },
+    player: {
+      x: roundValue(state.player.x),
+      y: roundValue(state.player.y),
+      angle: roundValue(state.player.angle),
+      health: roundValue(state.player.health),
+      shield: roundValue(state.player.shield),
+      alive: state.player.alive,
+      kills: state.player.kills,
+      buildMode: state.player.buildMode,
+      buildMaterial: state.player.buildMaterial,
+      buildPiece: state.player.buildPiece,
+      activeSlot: state.player.activeSlot + 1,
+      activeWeapon: activeWeapon?.name ?? 'Empty',
+      ammo: activeSlot ? (Number.isFinite(activeSlot.ammo) ? activeSlot.ammo : 'inf') : 0,
+      reserveAmmo: activeSlot ? (Number.isFinite(activeSlot.reserveAmmo) ? activeSlot.reserveAmmo : 'inf') : 0,
+      materials: {
+        wood: state.player.wood,
+        stone: state.player.stone,
+        metal: state.player.metal,
+      },
+      consumables: state.player.consumables,
+      activeConsumable: state.player.activeConsumableUse
+        ? {
+            itemId: state.player.activeConsumableUse.itemId,
+            remaining: roundValue(Math.max(0, state.player.activeConsumableUse.endsAt - state.time)),
+          }
+        : null,
+    },
+    storm: {
+      phase: state.storm.phase + 1,
+      shrinking: state.storm.shrinking,
+      timer: roundValue(Math.max(0, state.storm.timer)),
+      radius: roundValue(state.storm.currentRadius),
+      centerX: roundValue(state.storm.centerX),
+      centerY: roundValue(state.storm.centerY),
+      damagePerTick: state.storm.damagePerTick,
+      playerInStorm: isInStorm(state.storm, state.player.x, state.player.y),
+    },
+    visibleBots,
+    visibleLoot,
+    visibleContainers,
+    visibleSupplyDrops,
+    visibleBuilds,
+  })
+}
+
 // ── Minimap ─────────────────────────────────────────────────────────────────
 
 function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
