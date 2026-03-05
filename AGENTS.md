@@ -32,6 +32,7 @@ Start with one or two docs below, then follow their file pointers:
 - Run required verification (`pnpm lint && pnpm build`) before merging into `main`.
 - Merge the feature branch into local `main` after verification passes.
 - Delete the feature branch after it is merged.
+- Push `main` to remote after merging: `git push origin main`.
 - No PR is required for this local workflow.
 
 ## Guardrails
