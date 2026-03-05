@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Crosshair, Zap, Shield, Swords, Cloud, Users, ChevronRight } from 'lucide-react'
 import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
@@ -101,6 +101,15 @@ function PixelBackground() {
 
 export default function HomePage() {
   const { queue, backendConfigured } = useMatchmaking()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setMounted(true)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#050508]">
@@ -125,7 +134,7 @@ export default function HomePage() {
             <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-[#4cff4c]" style={{ boxShadow: '0 0 6px #4cff4c' }} />
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">
-                {backendConfigured ? `${queue?.size ?? 0} players queued` : 'Matchmaking offline'}
+                {mounted && backendConfigured ? `${queue?.size ?? 0} players queued` : 'Matchmaking offline'}
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-[rgba(123,45,255,0.15)] px-3 py-1 border border-[rgba(123,45,255,0.3)]">
