@@ -2,7 +2,11 @@
 // Connects to Somnia testnet via WebSocket to subscribe to on-chain game events.
 
 import { decodeEventLog } from 'viem'
-import { SOMNIA_TESTNET, GAME_CONTRACT_ADDRESS } from './config'
+import {
+  SOMNIA_TESTNET,
+  GAME_CONTRACT_ADDRESS,
+  IS_GAME_CONTRACT_CONFIGURED,
+} from './config'
 import { pixelRoyaleAbi } from './contract'
 import {
   createChestOpenedEvent,
@@ -34,7 +38,7 @@ export function createReactivityConnection(
   async function connect() {
     if (connected || ws) return
 
-    if (!GAME_CONTRACT_ADDRESS) {
+    if (!IS_GAME_CONTRACT_CONFIGURED) {
       onEvent(createConnectionEvent('Missing contract address configuration', 'chain_error'))
       return
     }

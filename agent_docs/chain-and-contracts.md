@@ -7,7 +7,8 @@ Use this for wallet, RPC, contract call, or ABI tasks.
 - Contract helpers: `lib/somnia/contract.ts`
 - Reactivity/events helpers: `lib/somnia/events.ts`, `lib/somnia/reactivity.ts`
 - Session wallet logic: `lib/somnia/session-wallet.ts`
-- Wagmi setup: `lib/wagmi-config.ts`
+- Thirdweb setup: `lib/thirdweb-config.ts`
+- Wallet/contract hook shim: `lib/wagmi-shim.ts`
 
 ## Contract Sources
 - Solidity contract: `contracts/PixelRoyale.sol`

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { useAccount } from 'wagmi'
+import { useAccount } from '@/lib/wagmi-shim'
 import WalletPanel from '@/components/dashboard/WalletPanel'
 import QueuePanel from '@/components/dashboard/QueuePanel'
 import StatsPanel from '@/components/dashboard/StatsPanel'
@@ -11,10 +11,16 @@ import Leaderboard from '@/components/dashboard/Leaderboard'
 import RewardsPanel from '@/components/dashboard/RewardsPanel'
 import SessionKeyPanel from '@/components/dashboard/SessionKeyPanel'
 import {
+  IS_PIXEL_ROYALE_CONFIGURED,
+  PIXEL_ROYALE_ADDRESS,
+  truncateAddress,
+} from '@/lib/somnia/contract'
+import {
   Crosshair,
   ArrowLeft,
   Zap,
   Gamepad2,
+  AlertTriangle,
 } from 'lucide-react'
 
 // Subtle animated background particles (lighter than landing page)
@@ -168,6 +174,18 @@ export default function PlayPage() {
                 Practice Mode (Solo vs Bots)
               </Link>
             </div>
+
+            {!IS_PIXEL_ROYALE_CONFIGURED && (
+              <div className="mt-4 rounded-xl border border-[rgba(255,68,68,0.35)] bg-[rgba(255,68,68,0.12)] p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-[#ff4444]" />
+                  <p className="text-xs font-mono font-bold text-[#ff7b7b]">Contract not configured</p>
+                </div>
+                <p className="text-xs font-mono text-[rgba(255,255,255,0.75)]">
+                  Testnet is currently unstable. Queue, rewards, and leaderboard are paused until we redeploy. Current value: {truncateAddress(PIXEL_ROYALE_ADDRESS, 6)}
+                </p>
+              </div>
+            )}
 
           </div>
 

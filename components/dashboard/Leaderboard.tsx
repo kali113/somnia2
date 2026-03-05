@@ -1,7 +1,6 @@
 'use client'
 
-import { useReadContract } from 'wagmi'
-import { useAccount } from 'wagmi'
+import { useReadContract, useAccount } from '@/lib/wagmi-shim'
 import {
   getRecentGamesArgs,
   truncateAddress,

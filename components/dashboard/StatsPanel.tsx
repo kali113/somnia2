@@ -1,6 +1,6 @@
 'use client'
 
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useReadContract } from '@/lib/wagmi-shim'
 import {
   getPlayerStatsArgs,
   formatSTT,

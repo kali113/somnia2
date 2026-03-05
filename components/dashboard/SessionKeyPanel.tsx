@@ -1,6 +1,6 @@
 'use client'
 
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from '@/lib/wagmi-shim'
 import {
   approveSessionKeyArgs,
   revokeSessionKeyArgs,
@@ -27,8 +27,14 @@ export default function SessionKeyPanel() {
   const { writeContract: approveKey, data: approveHash, isPending: isApproving, error: approveError } = useWriteContract()
   const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking, error: revokeError } = useWriteContract()
 
-  const { isLoading: approveConfirming } = useWaitForTransactionReceipt({ hash: approveHash })
-  const { isLoading: revokeConfirming } = useWaitForTransactionReceipt({ hash: revokeHash })
+  const {
+    data: approveReceipt,
+    isLoading: approveConfirming,
+  } = useWaitForTransactionReceipt({ hash: approveHash })
+  const {
+    data: revokeReceipt,
+    isLoading: revokeConfirming,
+  } = useWaitForTransactionReceipt({ hash: revokeHash })
 
   // Check on-chain session validity
   const { data: isValidOnChain, refetch: refetchSession } = useReadContract({
@@ -58,11 +64,10 @@ export default function SessionKeyPanel() {
 
   // Refetch on-chain session after approve/revoke confirms
   useEffect(() => {
-    if (approveHash || revokeHash) {
-      const timer = setTimeout(() => refetchSession(), 3000)
-      return () => clearTimeout(timer)
+    if (approveReceipt?.status === 'success' || revokeReceipt?.status === 'success') {
+      refetchSession()
     }
-  }, [approveHash, revokeHash, refetchSession])
+  }, [approveReceipt?.status, revokeReceipt?.status, refetchSession])
 
   const handleCreateSession = useCallback(() => {
     if (!IS_PIXEL_ROYALE_CONFIGURED) return
@@ -98,6 +103,11 @@ export default function SessionKeyPanel() {
   }, [session, address, revokeKey])
 
   const isBusy = isApproving || isRevoking || approveConfirming || revokeConfirming
+  const receiptError = approveReceipt?.status === 'reverted'
+    ? 'Session approval transaction reverted. Please try again.'
+    : revokeReceipt?.status === 'reverted'
+      ? 'Session revoke transaction reverted. Please try again.'
+      : null
   const timeLeft = session
     ? (() => {
       const remaining = session.expiry - nowMs
@@ -148,7 +158,9 @@ export default function SessionKeyPanel() {
                 ) : (
                   <>
                     <ShieldOff className="h-3 w-3 text-[#ff8c00]" />
-                    <span className="text-[10px] font-mono text-[#ff8c00]">Pending Approval</span>
+                    <span className="text-[10px] font-mono text-[#ff8c00]">
+                      {approveConfirming ? 'Confirming on-chain' : 'Pending Approval'}
+                    </span>
                   </>
                 )}
               </div>
@@ -176,9 +188,9 @@ export default function SessionKeyPanel() {
         </div>
       ) : (
         <>
-          {(txError ?? approveError?.message.split('\n')[0]) && (
+          {(txError ?? receiptError ?? approveError?.message.split('\n')[0]) && (
             <p className="text-[10px] font-mono text-[#ff4444] mb-3 break-words">
-              {txError ?? approveError?.message.split('\n')[0]}
+              {txError ?? receiptError ?? approveError?.message.split('\n')[0]}
             </p>
           )}
           <button

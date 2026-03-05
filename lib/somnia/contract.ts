@@ -47,7 +47,7 @@ export interface GameResult {
   playerCount: number
 }
 
-// ── Read helpers (used via wagmi's useReadContract or directly) ──────────────
+// ── Read helpers (used via wallet hook shim or directly) ─────────────────────
 
 export function getQueueSizeArgs() {
   return {
@@ -128,7 +128,7 @@ export function getIsValidSessionArgs(player: Address, sessionKey: Address) {
   } as const
 }
 
-// ── Write helpers (args for wagmi's useWriteContract) ───────────────────────
+// ── Write helpers (args for wallet hook shim useWriteContract) ───────────────
 
 export function joinQueueArgs() {
   assertContractConfigured()

@@ -17,6 +17,9 @@ export const SOMNIA_FAUCET_URL =
   process.env.NEXT_PUBLIC_SOMNIA_FAUCET_URL ||
   'https://cloud.google.com/application/web3/faucet/somnia/shannon'
 
+const HARDCODED_PIXEL_ROYALE_ADDRESS =
+  '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7' as const
+
 export const SOMNIA_TESTNET = {
   id: 50312,
   name: 'Somnia Testnet',
@@ -46,7 +49,7 @@ export const SOMNIA_TESTNET = {
 const rawGameContractAddress =
   process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
   process.env.NEXT_PUBLIC_GAME_CONTRACT_ADDRESS ||
-  '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7'
+  HARDCODED_PIXEL_ROYALE_ADDRESS
 
 const normalizedGameContractAddress = rawGameContractAddress.trim()
 

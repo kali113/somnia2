@@ -1,7 +1,22 @@
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
-import { createWalletClient, http, formatEther, parseEther, type WalletClient } from 'viem'
-import { somniaTestnet } from '@/lib/wagmi-config'
-import { SOMNIA_RPC_URL } from '@/lib/somnia/config'
+import { createWalletClient, defineChain, http, formatEther, parseEther, type WalletClient } from 'viem'
+import { SOMNIA_RPC_URL, SOMNIA_TESTNET } from '@/lib/somnia/config'
+
+const somniaSessionChain = defineChain({
+  id: SOMNIA_TESTNET.id,
+  name: SOMNIA_TESTNET.name,
+  nativeCurrency: SOMNIA_TESTNET.nativeCurrency,
+  rpcUrls: {
+    default: {
+      http: [SOMNIA_RPC_URL],
+      webSocket: SOMNIA_TESTNET.rpcUrls.default.webSocket,
+    },
+  },
+  blockExplorers: {
+    default: SOMNIA_TESTNET.blockExplorers.default,
+  },
+  testnet: SOMNIA_TESTNET.testnet,
+})
 
 const SESSION_KEY = 'pixel_royale_session'
 export const SESSION_UPDATED_EVENT = 'pixel-royale-session-updated'
@@ -36,7 +51,7 @@ export function createSessionWallet(durationMs: number = 3600_000): SessionWalle
 
   const client = createWalletClient({
     account,
-    chain: somniaTestnet,
+    chain: somniaSessionChain,
     transport: http(SOMNIA_RPC_URL),
   })
 
@@ -71,7 +86,7 @@ export function restoreSessionWallet(): SessionWallet | null {
     const account = privateKeyToAccount(privateKey)
     const client = createWalletClient({
       account,
-      chain: somniaTestnet,
+      chain: somniaSessionChain,
       transport: http(SOMNIA_RPC_URL),
     })
 

@@ -2,6 +2,8 @@ import { isAddress, type Address } from 'viem'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const FALLBACK_DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD' as Address
+const HARDCODED_PIXEL_ROYALE_ADDRESS =
+  '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7' as Address
 
 function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, '')
@@ -15,7 +17,13 @@ function toWsUrl(httpUrl: string): string {
   return httpUrl.replace(/^http/i, 'ws')
 }
 
-const contractEnv = (process.env.NEXT_PUBLIC_GAME_CONTRACT_ADDRESS || '').trim()
+const configuredContractEnv = (
+  process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
+  process.env.NEXT_PUBLIC_GAME_CONTRACT_ADDRESS ||
+  ''
+).trim()
+
+const contractEnv = configuredContractEnv || HARDCODED_PIXEL_ROYALE_ADDRESS
 const contractIsAddress = isAddress(contractEnv)
 const contractIsZero = contractEnv.toLowerCase() === ZERO_ADDRESS
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from '@/lib/wagmi-shim'
 import {
   getPendingRewardsArgs,
   claimRewardsArgs,

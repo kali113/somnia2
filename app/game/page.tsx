@@ -51,15 +51,11 @@ function GamePageInner() {
   const parsedMatchId = matchIdParam ? Number(matchIdParam) : NaN
   const isMatchMode = Number.isFinite(parsedMatchId)
 
-  const gameMode: GameMode = (() => {
-    const modeParam = searchParams.get('mode') as GameMode | null
-    if (modeParam === 'duo' || modeParam === 'squad') return modeParam
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('preferredGameMode') as GameMode | null
-      if (stored === 'duo' || stored === 'squad') return stored
-    }
-    return 'solo'
-  })()
+  const gameMode: GameMode = 'solo'
+
+  useEffect(() => {
+    localStorage.setItem('preferredGameMode', 'solo')
+  }, [])
 
   const [match, setMatch] = useState<MatchRecord | null>(null)
   const [matchError, setMatchError] = useState<string | null>(null)

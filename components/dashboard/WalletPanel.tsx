@@ -7,8 +7,8 @@ import {
   useConnect,
   useDisconnect,
   useSwitchChain,
-} from 'wagmi'
-import { somniaTestnet } from '@/lib/wagmi-config'
+} from '@/lib/wagmi-shim'
+import { somniaTestnet } from '@/lib/thirdweb-config'
 import {
   truncateAddress,
   SOMNIA_FAUCET_URL,

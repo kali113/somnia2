@@ -16,7 +16,8 @@ import { GameStore } from './store.js'
 const PORT = parseInt(process.env.PORT || '3001', 10)
 const SOMNIA_RPC = process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
-const rawContractAddress = (process.env.GAME_CONTRACT_ADDRESS || '').trim()
+const HARDCODED_CONTRACT_ADDRESS = '0x2e30F75873B1A3A07A55179E6e7CBb7Fa8a3B0a7' as const
+const rawContractAddress = (process.env.GAME_CONTRACT_ADDRESS || HARDCODED_CONTRACT_ADDRESS).trim()
 const CONTRACT_ADDRESS = (isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS) as Address
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
 const ORCHESTRATOR_KEY = process.env.ORCHESTRATOR_PRIVATE_KEY as `0x${string}` | undefined
