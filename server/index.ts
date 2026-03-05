@@ -6,13 +6,21 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { createPublicClient, createWalletClient, http as viemHttp, isAddress, type Address } from 'viem'
+import {
+  createPublicClient,
+  createWalletClient,
+  http as viemHttp,
+  isAddress,
+  parseAbi,
+  type Address,
+} from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { playerRouter } from './routes/player.js'
 import { queueRouter } from './routes/queue.js'
 import { gameRouter } from './routes/game.js'
 import { leaderboardRouter } from './routes/leaderboard.js'
-import { Indexer } from './indexer.js'
+import { matchmakingRouter } from './routes/matchmaking.js'
+import { Indexer, type IndexedEvent } from './indexer.js'
 import { GameStore } from './store.js'
 
 const runtimeDir = path.dirname(fileURLToPath(import.meta.url))
@@ -25,6 +33,10 @@ dotenv.config({ path: path.join(projectRoot, '.env'), quiet: true })
 dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true, quiet: true })
 dotenv.config({ path: path.join(serverRoot, '.env'), override: true, quiet: true })
 dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet: true })
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
+const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
 
 function readDeploymentContractAddress(): string {
   try {
@@ -40,7 +52,6 @@ function readDeploymentContractAddress(): string {
 // ── Environment ─────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3001', 10)
 const SOMNIA_RPC = process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 const DEPLOYED_CONTRACT_ADDRESS = readDeploymentContractAddress()
 const rawContractAddress = (
   process.env.GAME_CONTRACT_ADDRESS ||
@@ -66,6 +77,8 @@ const CORS_ORIGINS = configuredCorsOrigins.length > 0
       'http://127.0.0.1:3000',
       'http://localhost:3002',
       'http://127.0.0.1:3002',
+      'http://188.166.47.230',
+      'https://188.166.47.230',
     ]
 
 // ── Somnia chain definition ─────────────────────────────────────────────────
@@ -84,15 +97,16 @@ const publicClient = createPublicClient({
   transport: viemHttp(SOMNIA_RPC),
 })
 
+let orchestratorAccount: ReturnType<typeof privateKeyToAccount> | null = null
 let orchestratorClient: ReturnType<typeof createWalletClient> | null = null
-if (ORCHESTRATOR_KEY && ORCHESTRATOR_KEY !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-  const account = privateKeyToAccount(ORCHESTRATOR_KEY)
+if (ORCHESTRATOR_KEY && ORCHESTRATOR_KEY !== ZERO_PRIVATE_KEY) {
+  orchestratorAccount = privateKeyToAccount(ORCHESTRATOR_KEY)
   orchestratorClient = createWalletClient({
-    account,
+    account: orchestratorAccount,
     chain: somniaTestnet as any,
     transport: viemHttp(SOMNIA_RPC),
   })
-  console.log(`[orchestrator] Wallet: ${account.address}`)
+  console.log(`[orchestrator] Wallet: ${orchestratorAccount.address}`)
 }
 
 if (!CONTRACT_CONFIGURED) {
@@ -129,69 +143,181 @@ app.use('/api/player', playerRouter)
 app.use('/api/queue', queueRouter)
 app.use('/api/game', gameRouter)
 app.use('/api/leaderboard', leaderboardRouter)
+app.use('/api/matchmaking', matchmakingRouter)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() })
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    contractAddress: CONTRACT_CONFIGURED ? CONTRACT_ADDRESS : null,
+    orchestrator: orchestratorAccount?.address ?? null,
+  })
 })
 
 // ── HTTP + WebSocket server ─────────────────────────────────────────────────
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws/queue' })
 
-// Track connected clients
-const wsClients = new Set<WebSocket>()
+type WsMessageType = 'queue_update' | 'match_assigned' | 'match_updated' | 'orchestrator_status' | 'game_event'
 
-wss.on('connection', (ws) => {
-  wsClients.add(ws)
-  console.log(`[ws] Client connected (${wsClients.size} total)`)
+interface WsClient {
+  ws: WebSocket
+  address: string | null
+}
 
-  // Send current queue state immediately
-  ws.send(JSON.stringify({
-    type: 'queue_update',
-    data: store.getQueueState(),
-  }))
+const wsClients = new Set<WsClient>()
+
+function sendWs(client: WsClient, type: WsMessageType, data: unknown) {
+  if (client.ws.readyState !== WebSocket.OPEN) return
+  client.ws.send(JSON.stringify({ schemaVersion: 1, type, data }))
+}
+
+function broadcast(type: WsMessageType, data: unknown) {
+  for (const client of wsClients) {
+    sendWs(client, type, data)
+  }
+}
+
+function broadcastQueueUpdate() {
+  broadcast('queue_update', store.getQueueState())
+}
+
+function broadcastMatchUpdated(matchId: number) {
+  const match = store.getMatch(matchId)
+  if (!match) return
+  broadcast('match_updated', match)
+}
+
+function broadcastMatchAssignments(matchId: number) {
+  const match = store.getMatch(matchId)
+  if (!match) return
+
+  for (const player of match.players) {
+    const payload = {
+      address: player,
+      matchId: match.matchId,
+      redirectPath: `/game?matchId=${match.matchId}`,
+      status: match.status,
+    }
+
+    for (const client of wsClients) {
+      if (client.address === player) {
+        sendWs(client, 'match_assigned', payload)
+      }
+    }
+  }
+}
+
+function broadcastGameEvent(event: unknown) {
+  broadcast('game_event', event)
+}
+
+function handleIndexedEvent(event: IndexedEvent) {
+  switch (event.type) {
+    case 'queue_synced':
+    case 'queue_joined':
+    case 'queue_left': {
+      broadcastQueueUpdate()
+      break
+    }
+    case 'game_started': {
+      broadcastQueueUpdate()
+      broadcastMatchUpdated(event.gameId)
+      broadcastMatchAssignments(event.gameId)
+      broadcastGameEvent(event)
+      break
+    }
+    case 'game_ended': {
+      broadcastQueueUpdate()
+      broadcastMatchUpdated(event.gameId)
+      broadcastGameEvent(event)
+      break
+    }
+    case 'reward_claimed':
+    case 'session_approved':
+    case 'session_revoked': {
+      broadcastGameEvent(event)
+      break
+    }
+  }
+}
+
+wss.on('connection', (ws, req) => {
+  const requestUrl = new URL(req.url || '/ws/queue', `http://${req.headers.host || 'localhost'}`)
+  const rawAddress = requestUrl.searchParams.get('address')
+  const address = rawAddress && isAddress(rawAddress) ? rawAddress.toLowerCase() : null
+
+  const client: WsClient = { ws, address }
+  wsClients.add(client)
+
+  console.log(`[ws] Client connected (${wsClients.size} total)`) 
+  sendWs(client, 'queue_update', store.getQueueState())
+
+  if (address) {
+    const match = store.getMatchForPlayer(address)
+    if (match) {
+      sendWs(client, 'match_assigned', {
+        address,
+        matchId: match.matchId,
+        redirectPath: `/game?matchId=${match.matchId}`,
+        status: match.status,
+      })
+    }
+  }
 
   ws.on('close', () => {
-    wsClients.delete(ws)
+    wsClients.delete(client)
     console.log(`[ws] Client disconnected (${wsClients.size} total)`)
   })
 })
 
-// Broadcast queue updates to all WebSocket clients
-function broadcastQueueUpdate() {
-  const msg = JSON.stringify({
-    type: 'queue_update',
-    data: store.getQueueState(),
-  })
-  for (const ws of wsClients) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(msg)
-    }
-  }
-}
-
-// Broadcast game events
-function broadcastGameEvent(event: any) {
-  const msg = JSON.stringify({
-    type: 'game_event',
-    data: event,
-  })
-  for (const ws of wsClients) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(msg)
-    }
-  }
-}
-
-// Make broadcast functions available
+// Make broadcast functions available for existing routes
 ;(app as any).broadcastQueueUpdate = broadcastQueueUpdate
 ;(app as any).broadcastGameEvent = broadcastGameEvent
 
 // ── Chain Event Indexer ─────────────────────────────────────────────────────
-const indexer = new Indexer(publicClient as any, CONTRACT_ADDRESS, store, (event: any) => {
-  broadcastGameEvent(event)
-  broadcastQueueUpdate()
-})
+const indexer = new Indexer(publicClient as any, CONTRACT_ADDRESS, store, handleIndexedEvent)
+
+// ── Timeout matchmaking orchestrator ───────────────────────────────────────
+let forceStartInFlight = false
+let forceStartTimer: ReturnType<typeof setInterval> | null = null
+
+function startForceStartLoop() {
+  if (forceStartTimer || !orchestratorClient || !orchestratorAccount || !CONTRACT_CONFIGURED) return
+
+  forceStartTimer = setInterval(async () => {
+    if (forceStartInFlight || !orchestratorClient || !orchestratorAccount) return
+    if (!store.canForceStart()) return
+
+    forceStartInFlight = true
+    try {
+      const txHash = await orchestratorClient.writeContract({
+        account: orchestratorAccount,
+        chain: somniaTestnet as any,
+        address: CONTRACT_ADDRESS,
+        abi: FORCE_START_ABI,
+        functionName: 'forceStartGame',
+        args: [],
+      })
+
+      broadcast('orchestrator_status', {
+        status: 'force_start_submitted',
+        txHash,
+      })
+
+      console.log(`[orchestrator] forceStartGame submitted: ${txHash}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      broadcast('orchestrator_status', {
+        status: 'force_start_failed',
+        error: message,
+      })
+      console.error(`[orchestrator] forceStartGame failed: ${message}`)
+    } finally {
+      forceStartInFlight = false
+    }
+  }, 5000)
+}
 
 // ── Start server ────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
@@ -206,6 +332,10 @@ server.listen(PORT, () => {
 ╚══════════════════════════════════════════════════════╝
   `)
 
-  // Start indexer
-  indexer.start().catch(console.error)
+  indexer.start().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[indexer] failed to start: ${message}`)
+  })
+
+  startForceStartLoop()
 })
