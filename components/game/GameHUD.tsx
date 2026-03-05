@@ -12,6 +12,8 @@ interface GameHUDProps {
   storm: StormState | null
   gameTime: number
   containerPrompt: ContainerPromptState | null
+  touchControls?: boolean
+  onSelectSlot?: (slotIndex: number) => void
 }
 
 function containerLabel(type: ContainerPromptState['containerType']): string {
@@ -20,7 +22,15 @@ function containerLabel(type: ContainerPromptState['containerType']): string {
   return 'CHEST'
 }
 
-export default function GameHUD({ player, aliveCount, storm, gameTime, containerPrompt }: GameHUDProps) {
+export default function GameHUD({
+  player,
+  aliveCount,
+  storm,
+  gameTime,
+  containerPrompt,
+  touchControls = false,
+  onSelectSlot,
+}: GameHUDProps) {
   if (!player) return null
 
   const activePiece = BUILD_PIECES[player.buildPiece]
@@ -40,7 +50,10 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       {/* Top bar */}
-      <div className="flex items-center justify-center gap-6 pt-3">
+      <div
+        className={`flex flex-wrap items-center gap-2 px-3 sm:gap-6 ${touchControls ? 'justify-start pr-28' : 'justify-center'}`}
+        style={{ paddingTop: touchControls ? 'calc(env(safe-area-inset-top) + 3.5rem)' : '0.75rem' }}
+      >
         {/* Alive count */}
         <div className="flex items-center gap-2 rounded-lg bg-[rgba(0,0,0,0.75)] px-4 py-2 text-sm font-mono text-white backdrop-blur-sm">
           <span className="text-[#4cff4c]">{aliveCount}</span>
@@ -64,9 +77,12 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
       </div>
 
       {/* Bottom section */}
-      <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 pb-4">
+      <div
+        className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 px-3"
+        style={{ paddingBottom: touchControls ? 'calc(env(safe-area-inset-bottom) + 0.75rem)' : '1rem' }}
+      >
         {/* Health & Shield bars */}
-        <div className="flex flex-col gap-1 w-72">
+        <div className="flex w-[min(18rem,calc(100vw-1.5rem))] flex-col gap-1 sm:w-72">
           {/* Shield */}
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-[#4ca6ff]" />
@@ -99,16 +115,21 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
         </div>
 
         {/* Inventory slots */}
-        <div className="flex gap-1">
+        <div className="flex w-full max-w-[24rem] justify-center gap-1">
           {player.slots.map((slot, i) => {
             const isActive = i === player.activeSlot
             const weapon = slot ? WEAPONS[slot.weaponId] : null
             const rarityColor = slot ? RARITY_COLORS[slot.rarity] : 'transparent'
+            const slotLabel = weapon ? weapon.name : 'Empty slot'
 
             return (
-              <div
+              <button
                 key={i}
-                className="relative flex flex-col items-center justify-center w-16 h-16 rounded-lg"
+                type="button"
+                onClick={() => onSelectSlot?.(i)}
+                tabIndex={onSelectSlot ? 0 : -1}
+                className={`relative flex h-[3.8rem] min-w-0 flex-1 flex-col items-center justify-center rounded-lg sm:h-16 sm:max-w-16 ${onSelectSlot ? 'pointer-events-auto' : ''}`}
+                aria-label={`Select slot ${i + 1}: ${slotLabel}`}
                 style={{
                   backgroundColor: isActive ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.65)',
                   border: isActive
@@ -125,20 +146,20 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
                   <>
                     {/* Weapon name */}
                     <span
-                      className="text-[9px] font-mono mt-2 text-center leading-tight"
+                      className="mt-2 text-center font-mono text-[8px] leading-tight sm:text-[9px]"
                       style={{ color: rarityColor }}
                     >
                       {weapon.name}
                     </span>
                     {/* Ammo */}
                     {!weapon.isMelee && slot && (
-                      <span className="text-[10px] font-mono text-white mt-0.5">
+                      <span className="mt-0.5 font-mono text-[9px] text-white sm:text-[10px]">
                         {slot.ammo}/{slot.reserveAmmo}
                       </span>
                     )}
                   </>
                 ) : (
-                  <span className="text-[10px] text-[rgba(255,255,255,0.3)]">Empty</span>
+                  <span className="text-[9px] text-[rgba(255,255,255,0.3)] sm:text-[10px]">Empty</span>
                 )}
 
                 {/* Rarity bar */}
@@ -148,13 +169,13 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
                     style={{ backgroundColor: rarityColor }}
                   />
                 )}
-              </div>
+              </button>
             )
           })}
         </div>
 
         {/* Materials */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <div className="flex items-center gap-1 text-xs font-mono">
             <TreePine className="h-3 w-3 text-[#8b5a2b]" />
             <span className="text-[#c49a6c]">{player.wood}</span>
@@ -170,7 +191,7 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
         </div>
 
         {/* Consumables */}
-        <div className="flex gap-2 text-[10px] font-mono">
+        <div className="flex flex-wrap justify-center gap-2 text-[10px] font-mono">
           <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffd27a]">Bandage {player.consumables.bandage}</div>
           <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffe8b0]">Medkit {player.consumables.medkit}</div>
           <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#6dd0ff]">Mini {player.consumables.mini_shield}</div>
@@ -179,7 +200,7 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
 
         {/* Consumable use */}
         {activeUse && activeUseDef && (
-          <div className="w-72 rounded-lg border border-[rgba(120,210,255,0.45)] bg-[rgba(26,45,62,0.75)] px-3 py-2">
+          <div className="w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[rgba(120,210,255,0.45)] bg-[rgba(26,45,62,0.75)] px-3 py-2 sm:w-72">
             <div className="mb-1 flex items-center justify-between font-mono text-[11px] text-[#9be4ff]">
               <span>USING {activeUseDef.name.toUpperCase()}</span>
               <span>{activeUseRemaining.toFixed(1)}s</span>
@@ -194,13 +215,15 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
         )}
 
         {containerPrompt && (
-          <div className="rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono">
+          <div className="w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono sm:w-auto">
             <div className="text-[11px] text-[#ffd166]">
               {containerLabel(containerPrompt.containerType)} NEARBY
             </div>
             <div className="text-[10px] text-[rgba(255,255,255,0.8)]">
               {containerPrompt.status === 'ready' && (
-                <>Hold <span className="text-[#3ae8ff]">{containerPrompt.key}</span> to search</>
+                <>
+                  {touchControls ? 'Hold OPEN to search' : <>Hold <span className="text-[#3ae8ff]">{containerPrompt.key}</span> to search</>}
+                </>
               )}
               {containerPrompt.status === 'searching' && (
                 <>Searching... {Math.round(containerPrompt.progress * 100)}%</>
@@ -222,24 +245,31 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
 
         {/* Build mode indicator */}
         {player.buildMode && (
-          <div className="rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] px-4 py-2 font-mono text-xs text-[#d7ffe0]">
+          <div className="w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] px-4 py-2 font-mono text-xs text-[#d7ffe0] sm:w-auto">
             <div className="text-[11px] text-[#4cff4c]">
               BUILD: {activePiece.name.toUpperCase()} ({player.buildMaterial.toUpperCase()}) - {activePiece.baseCost} mats
             </div>
             <div className={canAffordPiece ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}>
               {canAffordPiece ? activePiece.purpose : `Need ${activePiece.baseCost} ${player.buildMaterial}`}
             </div>
-            <div className="mt-1 flex gap-2 text-[10px] text-[rgba(255,255,255,0.65)]">
+            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[rgba(255,255,255,0.65)]">
               {BUILD_PIECE_ORDER.map((pieceId, index) => {
                 const piece = BUILD_PIECES[pieceId]
                 const selected = pieceId === player.buildPiece
                 return (
                   <span key={pieceId} className={selected ? 'text-[#4cff4c]' : ''}>
-                    {index === 0 ? 'Z' : index === 1 ? 'X' : 'C'}:{piece.name}
+                    {touchControls
+                      ? piece.name
+                      : `${index === 0 ? 'Z' : index === 1 ? 'X' : 'C'}:${piece.name}`}
                   </span>
                 )
               })}
             </div>
+            {touchControls && (
+              <div className="mt-1 text-[10px] text-[rgba(255,255,255,0.65)]">
+                OPEN rotates | PLACE builds | BUILD exits
+              </div>
+            )}
           </div>
         )}
 
@@ -252,10 +282,22 @@ export default function GameHUD({ player, aliveCount, storm, gameTime, container
       </div>
 
       {/* Controls hint */}
-      <div className="absolute bottom-3 left-3 text-[10px] font-mono text-[rgba(255,255,255,0.3)] leading-relaxed">
-        <div>WASD Move | Mouse Aim & Shoot</div>
-        <div>1-5 Slots | R Reload (uses reserve ammo) | E Search Container | F Heal</div>
-        <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
+      <div
+        className="absolute left-3 font-mono text-[10px] leading-relaxed text-[rgba(255,255,255,0.3)]"
+        style={{ bottom: touchControls ? 'calc(env(safe-area-inset-bottom) + 0.75rem)' : '0.75rem' }}
+      >
+        {touchControls ? (
+          <>
+            <div>LEFT PAD MOVE | RIGHT PAD AIM & SHOOT</div>
+            <div>TAP SLOTS | OPEN SEARCHES | RELOAD / HEAL / BUILD</div>
+          </>
+        ) : (
+          <>
+            <div>WASD Move | Mouse Aim & Shoot</div>
+            <div>1-5 Slots | R Reload (uses reserve ammo) | E Search Container | F Heal</div>
+            <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
+          </>
+        )}
       </div>
     </div>
   )

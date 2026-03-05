@@ -5,10 +5,10 @@ import {
   initGame, updateGame, renderGame, resizeGame, cleanupGame,
   renderGameToText,
   type GameState, type GamePhase, type KillFeedEntry, type SupplyDrop,
-  type ContainerPromptState, type ContainerVerificationRequest, type ContainerRewardBundle,
+  type ContainerPromptState, type ContainerVerificationRequest, type ContainerRewardBundle, type StormCommitRequest,
 } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
-import type { StormState } from '@/lib/game/storm'
+import { isInStorm, type StormState } from '@/lib/game/storm'
 import type { GameMode } from '@/lib/game/constants'
 import { fetchSomniaRandomSeed } from '@/lib/somnia/random'
 import { activateAudio } from '@/lib/game/audio'
@@ -16,6 +16,19 @@ import { activateAudio } from '@/lib/game/audio'
 type GameHookWindow = Window & {
   render_game_to_text?: () => string
   advanceTime?: (ms: number) => Promise<void>
+  pixel_debug_state?: GameState | null
+  pixel_debug_snapshot?: () => {
+    time: number
+    aliveCount: number
+    storm: {
+      shrinking: boolean
+      currentRadius: number
+      targetRadius: number
+    }
+    botsInStorm: number
+    botsOutsideTargetZone: number
+    stormBotSample: Array<{ name: string; x: number; y: number }>
+  }
 }
 
 interface GameCanvasProps {
@@ -24,6 +37,7 @@ interface GameCanvasProps {
   onPhaseChange: (phase: GamePhase) => void
   onPlayerUpdate: (player: Player) => void
   onStormUpdate: (storm: StormState) => void
+  onStormCommitRequested?: (request: StormCommitRequest) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
   onContainerPromptUpdate?: (prompt: ContainerPromptState | null) => void
   onContainerVerificationRequested?: (request: ContainerVerificationRequest) => void
@@ -33,6 +47,7 @@ interface GameCanvasProps {
   mode?: GameMode
   gameId?: number
   verifiedContainers?: boolean
+  verifiedStorms?: boolean
 }
 
 export default function GameCanvas({
@@ -41,6 +56,7 @@ export default function GameCanvas({
   onPhaseChange,
   onPlayerUpdate,
   onStormUpdate,
+  onStormCommitRequested,
   onSupplyDrop,
   onContainerPromptUpdate,
   onContainerVerificationRequested,
@@ -50,6 +66,7 @@ export default function GameCanvas({
   mode,
   gameId,
   verifiedContainers,
+  verifiedStorms,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
@@ -60,10 +77,15 @@ export default function GameCanvas({
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
+    const viewport = window.visualViewport
+    const width = Math.max(1, Math.round(viewport?.width ?? window.innerWidth))
+    const height = Math.max(1, Math.round(viewport?.height ?? window.innerHeight))
+    canvas.width = width
+    canvas.height = height
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
     if (gameStateRef.current) {
-      resizeGame(gameStateRef.current, canvas.width, canvas.height)
+      resizeGame(gameStateRef.current, width, height)
     }
   }, [gameStateRef])
 
@@ -81,8 +103,8 @@ export default function GameCanvas({
     if (!canvas) return
 
     let cancelled = false
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
+    canvas.style.touchAction = 'none'
+    handleResize()
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctxRef.current = ctx
@@ -91,6 +113,49 @@ export default function GameCanvas({
     win.render_game_to_text = () => {
       const state = gameStateRef.current
       return state ? renderGameToText(state) : JSON.stringify({ phase: 'loading' })
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      win.pixel_debug_state = gameStateRef.current
+      win.pixel_debug_snapshot = () => {
+        const state = gameStateRef.current
+        if (!state) {
+          return {
+            time: 0,
+            aliveCount: 0,
+            storm: { shrinking: false, currentRadius: 0, targetRadius: 0 },
+            botsInStorm: 0,
+            botsOutsideTargetZone: 0,
+            stormBotSample: [],
+          }
+        }
+
+        const aliveBots = state.bots.filter((bot) => bot.alive)
+        const botsInStorm = aliveBots.filter((bot) => isInStorm(state.storm, bot.x, bot.y))
+        const botsOutsideTargetZone = state.storm.shrinking
+          ? aliveBots.filter((bot) => {
+              const dx = bot.x - state.storm.targetCenterX
+              const dy = bot.y - state.storm.targetCenterY
+              return dx * dx + dy * dy > state.storm.targetRadius * state.storm.targetRadius
+            }).length
+          : 0
+
+        return {
+          time: state.time,
+          aliveCount: state.aliveCount,
+          storm: {
+            shrinking: state.storm.shrinking,
+            currentRadius: state.storm.currentRadius,
+            targetRadius: state.storm.targetRadius,
+          },
+          botsInStorm: botsInStorm.length,
+          botsOutsideTargetZone,
+          stormBotSample: botsInStorm.slice(0, 6).map((bot) => ({
+            name: bot.name,
+            x: Math.round(bot.x),
+            y: Math.round(bot.y),
+          })),
+        }
+      }
     }
     win.advanceTime = async (ms: number) => {
       if (!gameStateRef.current) return
@@ -123,8 +188,12 @@ export default function GameCanvas({
         mode,
         gameId,
         verifiedContainers,
+        verifiedStorms,
       })
       gameStateRef.current = state
+      if (process.env.NODE_ENV !== 'production') {
+        win.pixel_debug_state = state
+      }
 
       // Wire up callbacks
       state.onKillFeedUpdate = onKillFeedUpdate
@@ -132,6 +201,7 @@ export default function GameCanvas({
       state.onPhaseChange = onPhaseChange
       state.onPlayerUpdate = onPlayerUpdate
       state.onStormUpdate = onStormUpdate
+      state.onStormCommitRequested = onStormCommitRequested
       state.onSupplyDrop = onSupplyDrop
       state.onContainerPromptUpdate = onContainerPromptUpdate
       state.onContainerVerificationRequested = onContainerVerificationRequested
@@ -167,6 +237,8 @@ export default function GameCanvas({
     })
 
     window.addEventListener('resize', handleResize)
+    window.visualViewport?.addEventListener('resize', handleResize)
+    window.visualViewport?.addEventListener('scroll', handleResize)
 
     return () => {
       cancelled = true
@@ -176,7 +248,11 @@ export default function GameCanvas({
       window.removeEventListener('pointerdown', handleUserActivation)
       window.removeEventListener('keydown', handleUserActivation)
       window.removeEventListener('resize', handleResize)
+      window.visualViewport?.removeEventListener('resize', handleResize)
+      window.visualViewport?.removeEventListener('scroll', handleResize)
       win.render_game_to_text = undefined
+      win.pixel_debug_state = undefined
+      win.pixel_debug_snapshot = undefined
       win.advanceTime = undefined
       cleanupGame(canvas)
       ctxRef.current = null
@@ -184,15 +260,15 @@ export default function GameCanvas({
     }
   }, [
     handleResize, stepGame, onKillFeedUpdate, onAliveCountUpdate,
-    onPhaseChange, onPlayerUpdate, onStormUpdate, onSupplyDrop,
+    onPhaseChange, onPlayerUpdate, onStormUpdate, onStormCommitRequested, onSupplyDrop,
     onContainerPromptUpdate, onContainerVerificationRequested, onContainerOpened,
-    gameStateRef, botCount, mode, gameId, verifiedContainers,
+    gameStateRef, botCount, mode, gameId, verifiedContainers, verifiedStorms,
   ])
 
   return (
     <canvas
       ref={canvasRef}
-      className="block w-full h-full"
+      className="game-touch-surface block h-full w-full"
       style={{ cursor: 'none', imageRendering: 'pixelated' }}
     />
   )

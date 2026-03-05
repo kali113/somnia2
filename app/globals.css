@@ -4,6 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --background: #050508;
   --foreground: #e8e8ef;
   --card: #0a0a10;
@@ -121,5 +125,21 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+    -webkit-text-size-adjust: 100%;
   }
+
+  html {
+    min-height: 100%;
+  }
+
+  button,
+  [role='button'],
+  a {
+    touch-action: manipulation;
+  }
+}
+
+.game-touch-surface {
+  touch-action: none;
 }

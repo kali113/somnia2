@@ -31,10 +31,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#050508',
-  userScalable: false,
+  userScalable: true,
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({
@@ -44,7 +43,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="font-mono antialiased bg-[#050508] text-white overflow-x-hidden">
+      <body className="min-h-dvh overflow-x-hidden bg-[#050508] font-mono text-white antialiased">
         <Providers>
           {children}
         </Providers>

@@ -18,6 +18,7 @@ import {
   createRewardClaimedEvent,
   createSessionApprovedEvent,
   createSessionRevokedEvent,
+  createStormCommittedEvent,
   type SomniaEvent,
 } from './events'
 
@@ -193,6 +194,22 @@ function handleLog(
         parsed.args.prizePool.toString(),
         txHash,
       ))
+      return
+    }
+
+    if (parsed.eventName === 'StormCircleCommitted') {
+      onEvent(createStormCommittedEvent({
+        gameId: Number(parsed.args.gameId),
+        phase: Number(parsed.args.phase),
+        currentCenterX: Number(parsed.args.currentCenterX),
+        currentCenterY: Number(parsed.args.currentCenterY),
+        currentRadius: Number(parsed.args.currentRadius),
+        targetCenterX: Number(parsed.args.targetCenterX),
+        targetCenterY: Number(parsed.args.targetCenterY),
+        targetRadius: Number(parsed.args.targetRadius),
+        entropyHash: String(parsed.args.entropyHash),
+        timestamp: Number(parsed.args.timestamp),
+      }, txHash))
       return
     }
 

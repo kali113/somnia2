@@ -5,9 +5,11 @@ import type { KillFeedEntry } from '@/lib/game/engine'
 interface KillFeedProps {
   entries: KillFeedEntry[]
   gameTime: number
+  touchControls?: boolean
 }
 
-export default function KillFeed({ entries, gameTime }: KillFeedProps) {
+export default function KillFeed({ entries, gameTime, touchControls = false }: KillFeedProps) {
+  if (touchControls) return null
   if (entries.length === 0) return null
 
   return (

@@ -383,7 +383,8 @@ export function updatePlayer(
   let buildPlaced = false
 
   // ── Movement ──────────────────────────────────────────────────────────
-  let dx = 0, dy = 0
+  let dx = input.moveX
+  let dy = input.moveY
   if (input.keys.has('w') || input.keys.has('arrowup')) dy -= 1
   if (input.keys.has('s') || input.keys.has('arrowdown')) dy += 1
   if (input.keys.has('a') || input.keys.has('arrowleft')) dx -= 1

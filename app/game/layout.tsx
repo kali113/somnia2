@@ -11,7 +11,7 @@ export default function GameLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="h-screen w-screen overflow-hidden select-none">
+    <div className="h-[100dvh] w-full overflow-hidden select-none">
       {children}
     </div>
   )

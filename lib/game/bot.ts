@@ -18,6 +18,12 @@ import { emitHitMarker, emitElimination } from './particles'
 
 type BotMode = 'loot' | 'move_to_zone' | 'fight' | 'build'
 
+interface BotNavigationZone {
+  centerX: number
+  centerY: number
+  radius: number
+}
+
 export interface Bot extends Player {
   mode: BotMode
   targetX: number
@@ -84,6 +90,95 @@ export function createBot(id: number, x: number, y: number, teamId: number = 0):
   }
 }
 
+function getBotNavigationZone(storm: StormState): BotNavigationZone {
+  if (storm.shrinking) {
+    return {
+      centerX: storm.targetCenterX,
+      centerY: storm.targetCenterY,
+      radius: Math.max(0, storm.targetRadius),
+    }
+  }
+
+  return {
+    centerX: storm.centerX,
+    centerY: storm.centerY,
+    radius: Math.max(0, storm.currentRadius),
+  }
+}
+
+function getBotNavigationRadius(radius: number): number {
+  const safetyMargin = Math.min(160, Math.max(60, radius * 0.12))
+  return Math.max(0, radius - safetyMargin)
+}
+
+function clampPointToZone(x: number, y: number, zone: BotNavigationZone): { x: number; y: number } {
+  const safeRadius = getBotNavigationRadius(zone.radius)
+  if (safeRadius <= 0) {
+    return { x: zone.centerX, y: zone.centerY }
+  }
+
+  const dx = x - zone.centerX
+  const dy = y - zone.centerY
+  const dist = Math.hypot(dx, dy)
+  if (dist <= safeRadius || dist === 0) {
+    return { x, y }
+  }
+
+  const scale = safeRadius / dist
+  return {
+    x: zone.centerX + dx * scale,
+    y: zone.centerY + dy * scale,
+  }
+}
+
+function pickRandomZonePoint(zone: BotNavigationZone): { x: number; y: number } {
+  const safeRadius = getBotNavigationRadius(zone.radius)
+  if (safeRadius <= 0) {
+    return { x: zone.centerX, y: zone.centerY }
+  }
+
+  const angle = Math.random() * Math.PI * 2
+  const dist = Math.sqrt(Math.random()) * safeRadius
+  return {
+    x: zone.centerX + Math.cos(angle) * dist,
+    y: zone.centerY + Math.sin(angle) * dist,
+  }
+}
+
+function pickStormRetreatPoint(bot: Bot, zone: BotNavigationZone): { x: number; y: number } {
+  const safeRadius = getBotNavigationRadius(zone.radius)
+  if (safeRadius <= 0) {
+    return { x: zone.centerX, y: zone.centerY }
+  }
+
+  const dx = bot.x - zone.centerX
+  const dy = bot.y - zone.centerY
+  const dist = Math.hypot(dx, dy)
+  if (dist < 1) {
+    return pickRandomZonePoint(zone)
+  }
+
+  const retreatRadius = Math.min(safeRadius * 0.65, Math.max(0, dist - 140))
+  const scale = retreatRadius / dist
+  return {
+    x: zone.centerX + dx * scale,
+    y: zone.centerY + dy * scale,
+  }
+}
+
+function getStormPressure(x: number, y: number, zone: BotNavigationZone): number {
+  const safeRadius = getBotNavigationRadius(zone.radius)
+  if (safeRadius <= 0) return 1
+
+  const distFromCenter = distance(x, y, zone.centerX, zone.centerY)
+  if (distFromCenter >= safeRadius) return 1
+
+  const warningRadius = Math.max(0, safeRadius - Math.max(100, safeRadius * 0.15))
+  if (distFromCenter <= warningRadius) return 0
+
+  return (distFromCenter - warningRadius) / Math.max(1, safeRadius - warningRadius)
+}
+
 // ── Update Bot AI ───────────────────────────────────────────────────────────
 
 export function updateBot(
@@ -100,6 +195,12 @@ export function updateBot(
 
   let fired = false
   bot.aiTimer -= dt
+  const navigationZone = getBotNavigationZone(storm)
+  const clampedTarget = clampPointToZone(bot.targetX, bot.targetY, navigationZone)
+  bot.targetX = clampedTarget.x
+  bot.targetY = clampedTarget.y
+  const stormPressure = getStormPressure(bot.x, bot.y, navigationZone)
+  const mustReturnToZone = isInStorm(storm, bot.x, bot.y) || stormPressure >= 0.9
 
   // Find nearest threat (player or other bot)
   let nearestThreat: Player | null = null
@@ -124,19 +225,25 @@ export function updateBot(
   }
 
   // Mode selection
-  if (bot.aiTimer <= 0) {
+  if (mustReturnToZone) {
+    bot.mode = 'move_to_zone'
+    const retreatTarget = pickStormRetreatPoint(bot, navigationZone)
+    bot.targetX = retreatTarget.x
+    bot.targetY = retreatTarget.y
+  } else if (bot.aiTimer <= 0) {
     bot.aiTimer = 1.5 + Math.random() * 2
 
-    if (isInStorm(storm, bot.x, bot.y)) {
-      bot.mode = 'move_to_zone'
-      bot.targetX = storm.centerX + (Math.random() - 0.5) * storm.currentRadius * 0.5
-      bot.targetY = storm.centerY + (Math.random() - 0.5) * storm.currentRadius * 0.5
-    } else if (nearestThreat && nearestDist < bot.sightRange * bot.aggressiveness) {
+    if (nearestThreat && nearestDist < bot.sightRange * bot.aggressiveness) {
       bot.mode = 'fight'
     } else {
       bot.mode = 'loot'
-      bot.targetX = bot.x + (Math.random() - 0.5) * 300
-      bot.targetY = bot.y + (Math.random() - 0.5) * 300
+      const lootTarget = clampPointToZone(
+        bot.x + (Math.random() - 0.5) * 300,
+        bot.y + (Math.random() - 0.5) * 300,
+        navigationZone,
+      )
+      bot.targetX = lootTarget.x
+      bot.targetY = lootTarget.y
     }
   }
 
@@ -158,8 +265,13 @@ export function updateBot(
         bot.angle = angle
       } else if (bot.mode === 'loot') {
         // Reached waypoint — pick a new one immediately instead of oscillating
-        bot.targetX = bot.x + (Math.random() - 0.5) * 300
-        bot.targetY = bot.y + (Math.random() - 0.5) * 300
+        const lootTarget = clampPointToZone(
+          bot.x + (Math.random() - 0.5) * 300,
+          bot.y + (Math.random() - 0.5) * 300,
+          navigationZone,
+        )
+        bot.targetX = lootTarget.x
+        bot.targetY = lootTarget.y
       }
 
       // Pick up nearby floor loot
@@ -207,13 +319,20 @@ export function updateBot(
 
         // Strafe while fighting
         const strafeAngle = bot.angle + Math.PI / 2 * (Math.sin(now * 2) > 0 ? 1 : -1)
-        if (nearestDist > 100) {
-          // Move toward target
-          bot.x += Math.cos(bot.angle) * speed * 0.5 * dt
-          bot.y += Math.sin(bot.angle) * speed * 0.5 * dt
-        }
-        bot.x += Math.cos(strafeAngle) * speed * 0.3 * dt
-        bot.y += Math.sin(strafeAngle) * speed * 0.3 * dt
+        const retreatAngle = angleBetween(bot.x, bot.y, navigationZone.centerX, navigationZone.centerY)
+        const chaseScale = nearestDist > 100 ? 0.5 * (1 - stormPressure) : 0
+        const strafeScale = 0.3 * (1 - stormPressure)
+        const retreatScale = stormPressure * 0.9
+        bot.x += (
+          Math.cos(bot.angle) * chaseScale
+          + Math.cos(strafeAngle) * strafeScale
+          + Math.cos(retreatAngle) * retreatScale
+        ) * speed * dt
+        bot.y += (
+          Math.sin(bot.angle) * chaseScale
+          + Math.sin(strafeAngle) * strafeScale
+          + Math.sin(retreatAngle) * retreatScale
+        ) * speed * dt
 
         // Fire
         bot.activeSlot = 1

@@ -10,6 +10,11 @@ export interface InputState {
   justPressed: Set<string>
   justClicked: boolean
   scrollDelta: number
+  moveX: number
+  moveY: number
+  aimX: number
+  aimY: number
+  virtualAimActive: boolean
 }
 
 export function createInputState(): InputState {
@@ -23,6 +28,11 @@ export function createInputState(): InputState {
     justPressed: new Set(),
     justClicked: false,
     scrollDelta: 0,
+    moveX: 0,
+    moveY: 0,
+    aimX: 1,
+    aimY: 0,
+    virtualAimActive: false,
   }
 }
 
@@ -33,6 +43,9 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
     state.justPressed.clear()
     state.justClicked = false
     state.scrollDelta = 0
+    state.moveX = 0
+    state.moveY = 0
+    state.virtualAimActive = false
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -55,12 +68,14 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
     const rect = canvas.getBoundingClientRect()
     state.mouseX = e.clientX - rect.left
     state.mouseY = e.clientY - rect.top
+    state.virtualAimActive = false
   }
 
   const onMouseDown = (e: MouseEvent) => {
     if (e.button === 0) {
       state.mouseDown = true
       state.justClicked = true
+      state.virtualAimActive = false
     }
   }
 
@@ -109,7 +124,85 @@ export function updateMouseWorld(
   state: InputState,
   cameraX: number,
   cameraY: number,
+  playerX?: number,
+  playerY?: number,
 ) {
+  if (
+    state.virtualAimActive
+    && typeof playerX === 'number'
+    && typeof playerY === 'number'
+  ) {
+    const magnitude = Math.hypot(state.aimX, state.aimY) || 1
+    const normalX = state.aimX / magnitude
+    const normalY = state.aimY / magnitude
+    const aimDistance = 180
+
+    state.mouseWorldX = playerX + normalX * aimDistance
+    state.mouseWorldY = playerY + normalY * aimDistance
+    state.mouseX = state.mouseWorldX - cameraX
+    state.mouseY = state.mouseWorldY - cameraY
+    return
+  }
+
   state.mouseWorldX = state.mouseX + cameraX
   state.mouseWorldY = state.mouseY + cameraY
+}
+
+function normalizeKey(key: string): string {
+  return key.toLowerCase()
+}
+
+function clampAxis(x: number, y: number): { x: number; y: number } {
+  const length = Math.hypot(x, y)
+  if (length <= 1 || length === 0) return { x, y }
+  return { x: x / length, y: y / length }
+}
+
+export function setVirtualMove(state: InputState, x: number, y: number) {
+  const next = clampAxis(x, y)
+  state.moveX = next.x
+  state.moveY = next.y
+}
+
+export function resetVirtualMove(state: InputState) {
+  state.moveX = 0
+  state.moveY = 0
+}
+
+export function setVirtualAim(state: InputState, x: number, y: number, firing = true) {
+  const next = clampAxis(x, y)
+  state.aimX = next.x
+  state.aimY = next.y
+  state.virtualAimActive = true
+  state.mouseDown = firing
+}
+
+export function clearVirtualAim(state: InputState) {
+  state.virtualAimActive = false
+  state.mouseDown = false
+}
+
+export function tapVirtualKey(state: InputState, key: string) {
+  state.justPressed.add(normalizeKey(key))
+}
+
+export function setVirtualKeyHeld(state: InputState, key: string, held: boolean) {
+  const normalized = normalizeKey(key)
+  if (held) {
+    if (!state.keys.has(normalized)) {
+      state.justPressed.add(normalized)
+    }
+    state.keys.add(normalized)
+    return
+  }
+  state.keys.delete(normalized)
+}
+
+export function addVirtualScroll(state: InputState, delta: number) {
+  if (delta === 0) return
+  state.scrollDelta += Math.sign(delta)
+}
+
+export function tapVirtualClick(state: InputState) {
+  state.justClicked = true
 }

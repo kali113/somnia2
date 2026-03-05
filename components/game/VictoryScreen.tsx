@@ -28,14 +28,14 @@ export default function VictoryScreen({
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.8)] backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-6">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.8)] px-4 backdrop-blur-sm">
+      <div className="flex w-full max-w-3xl flex-col items-center gap-6">
         {/* Title */}
         <div className="text-center">
           {isVictory ? (
             <>
               <h1
-                className="text-6xl font-black tracking-wider text-transparent bg-clip-text"
+                className="bg-clip-text text-4xl font-black tracking-wider text-transparent sm:text-6xl"
                 style={{
                   backgroundImage: 'linear-gradient(to bottom, #ffd700, #ff8c00)',
                   WebkitBackgroundClip: 'text',
@@ -47,7 +47,7 @@ export default function VictoryScreen({
             </>
           ) : (
             <>
-              <h1 className="text-5xl font-black tracking-wider text-[#ff4444]">
+              <h1 className="text-4xl font-black tracking-wider text-[#ff4444] sm:text-5xl">
                 ELIMINATED
               </h1>
               <p className="mt-2 text-lg font-mono text-[rgba(255,255,255,0.6)]">
@@ -59,18 +59,18 @@ export default function VictoryScreen({
 
         {/* Stats */}
         {player && (
-          <div className="flex gap-6">
-            <div className="flex flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-6 py-4">
+          <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
+            <div className="flex min-w-[8.5rem] flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-5 py-4 sm:px-6">
               <Swords className="h-5 w-5 text-[#ff4444]" />
               <span className="text-2xl font-mono font-bold text-white">{player.kills}</span>
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">Eliminations</span>
             </div>
-            <div className="flex flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-6 py-4">
+            <div className="flex min-w-[8.5rem] flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-5 py-4 sm:px-6">
               <Timer className="h-5 w-5 text-[#4ca6ff]" />
               <span className="text-2xl font-mono font-bold text-white">{formatTime(gameTime)}</span>
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">Survived</span>
             </div>
-            <div className="flex flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-6 py-4">
+            <div className="flex min-w-[8.5rem] flex-col items-center gap-1 rounded-xl bg-[rgba(255,255,255,0.08)] px-5 py-4 sm:px-6">
               <Target className="h-5 w-5 text-[#4cff4c]" />
               <span className="text-2xl font-mono font-bold text-white">{player.damageDealt}</span>
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">Damage</span>
@@ -79,10 +79,10 @@ export default function VictoryScreen({
         )}
 
         {/* Actions */}
-        <div className="flex gap-4 mt-4 pointer-events-auto">
+        <div className="mt-4 flex w-full flex-col gap-3 pointer-events-auto sm:w-auto sm:flex-row sm:gap-4">
           <button
             onClick={onPlayAgain}
-            className="rounded-xl px-8 py-3 font-mono font-bold text-sm transition-all hover:scale-105"
+            className="rounded-xl px-8 py-3 font-mono text-sm font-bold transition-all hover:scale-105"
             style={{
               backgroundColor: isVictory ? '#ffd700' : '#3ae8ff',
               color: '#000',
@@ -92,7 +92,7 @@ export default function VictoryScreen({
           </button>
           <button
             onClick={onBackToMenu}
-            className="rounded-xl bg-[rgba(255,255,255,0.1)] px-8 py-3 font-mono font-bold text-sm text-white transition-all hover:bg-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.15)]"
+            className="rounded-xl border border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.1)] px-8 py-3 font-mono text-sm font-bold text-white transition-all hover:bg-[rgba(255,255,255,0.2)]"
           >
             BACK TO MENU
           </button>

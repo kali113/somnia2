@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SomniaEvent } from '@/lib/somnia/events'
 import { formatEventMessage } from '@/lib/somnia/events'
-import { Trophy, Users, Link2, AlertTriangle, Coins, KeySquare, PackageOpen } from 'lucide-react'
+import { Trophy, Users, Link2, AlertTriangle, Coins, KeySquare, PackageOpen, Orbit } from 'lucide-react'
 
 interface EventFeedProps {
   events: SomniaEvent[]
   isLive: boolean
+  touchControls?: boolean
 }
 
 const EVENT_ICONS: Record<string, typeof Users> = {
@@ -15,6 +16,7 @@ const EVENT_ICONS: Record<string, typeof Users> = {
   queue_left: Users,
   game_started: Trophy,
   game_ended: Trophy,
+  storm_committed: Orbit,
   chest_opened: PackageOpen,
   reward_claimed: Coins,
   session_approved: KeySquare,
@@ -28,6 +30,7 @@ const EVENT_COLORS: Record<string, string> = {
   queue_left: '#ff8c00',
   game_started: '#3ae8ff',
   game_ended: '#ffd700',
+  storm_committed: '#9f8cff',
   chest_opened: '#ffd166',
   reward_claimed: '#4cff4c',
   session_approved: '#7b2dff',
@@ -36,7 +39,7 @@ const EVENT_COLORS: Record<string, string> = {
   chain_error: '#ff4444',
 }
 
-export default function EventFeed({ events, isLive }: EventFeedProps) {
+export default function EventFeed({ events, isLive, touchControls = false }: EventFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -52,6 +55,28 @@ export default function EventFeed({ events, isLive }: EventFeedProps) {
     }, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  if (touchControls) {
+    return (
+      <div
+        className="pointer-events-none absolute left-3 z-10"
+        style={{ top: 'calc(env(safe-area-inset-top) + 4.75rem)' }}
+      >
+        <div className="flex items-center gap-1.5 rounded-lg bg-[rgba(0,0,0,0.78)] px-3 py-1.5 backdrop-blur-sm">
+          <div
+            className="h-2 w-2 rounded-full"
+            style={{
+              backgroundColor: isLive ? '#4cff4c' : '#ff4444',
+              boxShadow: `0 0 6px ${isLive ? '#4cff4c' : '#ff4444'}`,
+            }}
+          />
+          <span className="text-[10px] font-mono text-[rgba(255,255,255,0.72)]">
+            SOMNIA {isLive ? 'LIVE' : 'DISCONNECTED'}
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="absolute left-3 top-16 z-10 w-64 pointer-events-none">

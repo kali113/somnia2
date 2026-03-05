@@ -5,6 +5,7 @@ export type SomniaEventType =
   | 'queue_left'
   | 'game_started'
   | 'game_ended'
+  | 'storm_committed'
   | 'chest_opened'
   | 'reward_claimed'
   | 'session_approved'
@@ -20,6 +21,7 @@ export interface SomniaEvent {
     | QueueEventData
     | GameStartedEventData
     | GameEndedEventData
+    | StormCommittedEventData
     | ChestOpenedEventData
     | RewardClaimedEventData
     | SessionEventData
@@ -44,6 +46,19 @@ export interface GameEndedEventData {
   winner: string
   placements: string[]
   prizePool: string
+}
+
+export interface StormCommittedEventData {
+  gameId: number
+  phase: number
+  currentCenterX: number
+  currentCenterY: number
+  currentRadius: number
+  targetCenterX: number
+  targetCenterY: number
+  targetRadius: number
+  entropyHash: string
+  timestamp: number
 }
 
 export interface ChestOpenedEventData {
@@ -136,6 +151,20 @@ export function createGameEndedEvent(
     type: 'game_ended',
     timestamp: Date.now(),
     data: { gameId, winner, placements, prizePool } as GameEndedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createStormCommittedEvent(
+  data: StormCommittedEventData,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'storm_committed',
+    timestamp: Date.now(),
+    data,
     source: 'testnet',
     txHash,
   }
@@ -238,6 +267,10 @@ export function formatEventMessage(event: SomniaEvent): string {
     case 'game_ended': {
       const d = event.data as GameEndedEventData
       return `Match #${d.gameId} ended. Winner: ${d.winner.slice(0, 6)}...`
+    }
+    case 'storm_committed': {
+      const d = event.data as StormCommittedEventData
+      return `Storm p${d.phase + 1} committed for match #${d.gameId} -> r:${d.targetRadius}`
     }
     case 'chest_opened': {
       const d = event.data as ChestOpenedEventData

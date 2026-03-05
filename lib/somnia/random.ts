@@ -9,16 +9,12 @@ interface RpcBlockPayload {
 const MAX_INT31 = BigInt(0x7fffffff)
 
 function fallbackSeed(): number {
-  return Math.max(1, Date.now() % 0x7fffffff)
+  return 50312
 }
 
 function normalizeSeed(rawHex: string): number {
   const value = BigInt(rawHex)
-  const localEntropy = typeof crypto !== 'undefined'
-    ? crypto.getRandomValues(new Uint32Array(1))[0]
-    : Math.floor(Math.random() * 0xffffffff)
-  const mixed = Number((value ^ BigInt(localEntropy)) & MAX_INT31)
-  return Math.max(1, mixed)
+  return Math.max(1, Number(value & MAX_INT31))
 }
 
 export async function fetchSomniaRandomSeed(timeoutMs = 2200): Promise<number> {

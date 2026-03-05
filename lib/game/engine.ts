@@ -17,7 +17,18 @@ import {
   startConsumableUse, cancelConsumableUse, completeConsumableUseIfReady, type Player,
 } from './player'
 import { createBot, updateBot, processBotHit, type Bot } from './bot'
-import { createStorm, updateStorm, isInStorm, renderStorm, renderStormMinimap, type StormState } from './storm'
+import {
+  applyStormCommit,
+  createStorm,
+  fallbackStormCommit,
+  updateStorm,
+  isInStorm,
+  renderStorm,
+  renderStormMinimap,
+  type StormCommitRequest as BaseStormCommitRequest,
+  type StormCircleCommit,
+  type StormState,
+} from './storm'
 import { createParticleSystem, updateParticles, renderParticles, emitSparks, emitHitMarker, emitElimination, type ParticleSystem } from './particles'
 import { drawPlayer, drawBullet, drawLootItem, drawAmmoPack, drawSupplyDrop, drawMinimapDot, drawBuildPiece as drawBuildPieceSprite } from './sprites'
 import { distance, angleBetween, circleOverlap, type AABB } from './collision'
@@ -95,6 +106,10 @@ export interface ContainerRewardBundle {
   verified: boolean
 }
 
+export interface StormCommitRequest extends BaseStormCommitRequest {
+  gameId: number
+}
+
 // ── Game State ──────────────────────────────────────────────────────────────
 
 export type GamePhase = 'lobby' | 'dropping' | 'playing' | 'victory' | 'eliminated'
@@ -120,6 +135,7 @@ export interface GameState {
   dropTimer: number
   gameId: number
   verifiedContainers: boolean
+  verifiedStorms: boolean
   activeContainerId: number | null
   promptContainerId: number | null
   pendingContainerId: number | null
@@ -134,6 +150,7 @@ export interface GameState {
   onPhaseChange?: (phase: GamePhase) => void
   onPlayerUpdate?: (player: Player) => void
   onStormUpdate?: (storm: StormState) => void
+  onStormCommitRequested?: (request: StormCommitRequest) => void
   onSupplyDrop?: (drop: SupplyDrop) => void
   onContainerPromptUpdate?: (prompt: ContainerPromptState | null) => void
   onContainerVerificationRequested?: (request: ContainerVerificationRequest) => void
@@ -148,6 +165,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
   mode?: GameMode
   gameId?: number
   verifiedContainers?: boolean
+  verifiedStorms?: boolean
 }): GameState {
   const input = createInputState()
   const cleanup = setupInput(canvas, input)
@@ -198,7 +216,10 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
     player,
     bots,
     map,
-    storm: createStorm(),
+    storm: createStorm({
+      seed: mapSeed,
+      verified: options?.verifiedStorms ?? false,
+    }),
     camera,
     input,
     particles: createParticleSystem(),
@@ -213,6 +234,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
     dropTimer: 0,
     gameId: Math.max(0, Math.floor(options?.gameId ?? 0)),
     verifiedContainers: options?.verifiedContainers ?? false,
+    verifiedStorms: options?.verifiedStorms ?? false,
     activeContainerId: null,
     promptContainerId: null,
     pendingContainerId: null,
@@ -512,7 +534,7 @@ export function updateGame(state: GameState, dt: number) {
   updateCamera(state.camera, state.player.x, state.player.y, dt)
 
   // Update mouse world coords
-  updateMouseWorld(state.input, state.camera.x, state.camera.y)
+  updateMouseWorld(state.input, state.camera.x, state.camera.y, state.player.x, state.player.y)
 
   // ── Aim assist (human player only) ───────────────────────────────────
   const aimAssist = computeAimAssist(state)
@@ -903,7 +925,13 @@ export function updateGame(state: GameState, dt: number) {
   }
 
   // ── Update storm ─────────────────────────────────────────────────────
-  updateStorm(state.storm, dt)
+  const stormResult = updateStorm(state.storm, dt)
+  if (stormResult.commitRequest && state.verifiedStorms) {
+    state.onStormCommitRequested?.({
+      gameId: state.gameId,
+      phase: stormResult.commitRequest.phase,
+    })
+  }
   state.onStormUpdate?.(state.storm)
 
   // ── Update particles ─────────────────────────────────────────────────
@@ -1160,6 +1188,22 @@ export function rejectVerifiedContainerOpen(state: GameState, containerId: numbe
   }
   resetContainerSearch(state)
   return true
+}
+
+export function confirmStormCircleCommit(state: GameState, commit: StormCircleCommit): boolean {
+  const applied = applyStormCommit(state.storm, commit)
+  if (applied) {
+    state.onStormUpdate?.(state.storm)
+  }
+  return applied
+}
+
+export function fallbackStormCircleCommit(state: GameState): boolean {
+  const applied = fallbackStormCommit(state.storm, state.gameId)
+  if (applied) {
+    state.onStormUpdate?.(state.storm)
+  }
+  return applied
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -1419,10 +1463,15 @@ export function renderGameToText(state: GameState): string {
     storm: {
       phase: state.storm.phase + 1,
       shrinking: state.storm.shrinking,
+      pendingCommit: state.storm.pendingCommit,
       timer: roundValue(Math.max(0, state.storm.timer)),
       radius: roundValue(state.storm.currentRadius),
       centerX: roundValue(state.storm.centerX),
       centerY: roundValue(state.storm.centerY),
+      targetRadius: roundValue(state.storm.targetRadius),
+      targetCenterX: roundValue(state.storm.targetCenterX),
+      targetCenterY: roundValue(state.storm.targetCenterY),
+      entropyHash: state.storm.entropyHash,
       damagePerTick: state.storm.damagePerTick,
       playerInStorm: isInStorm(state.storm, state.player.x, state.player.y),
     },
@@ -1437,9 +1486,11 @@ export function renderGameToText(state: GameState): string {
 // ── Minimap ─────────────────────────────────────────────────────────────────
 
 function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
-  const mSize = MINIMAP_SIZE
-  const mx = state.camera.width - mSize - MINIMAP_PADDING
-  const my = MINIMAP_PADDING
+  const compact = state.camera.width < 640
+  const mSize = compact ? 112 : MINIMAP_SIZE
+  const padding = compact ? 8 : MINIMAP_PADDING
+  const mx = state.camera.width - mSize - padding
+  const my = padding
   const scale = mSize / MAP_WIDTH
   const radius = mSize / 2
   const cx = mx + radius
@@ -1509,10 +1560,10 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
   }
 
   if (locationName) {
-    ctx.font = 'bold 10px monospace'
+    ctx.font = compact ? 'bold 9px monospace' : 'bold 10px monospace'
     const tw = ctx.measureText(locationName).width
     const lx = cx - tw / 2
-    const ly = my + mSize + MINIMAP_PADDING - 1
+    const ly = my + mSize + padding - 1
     ctx.fillStyle = 'rgba(0,0,0,0.65)'
     ctx.fillRect(lx - 5, ly - 11, tw + 10, 15)
     ctx.fillStyle = '#e8e8e8'

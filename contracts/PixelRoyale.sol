@@ -24,6 +24,12 @@ contract PixelRoyale {
     uint256 public constant MIN_PLAYERS       = 2;
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
     uint256 public constant QUEUE_TIMEOUT     = 120;          // seconds
+    uint16 public constant MAP_WIDTH          = 3200;
+    uint16 public constant MAP_HEIGHT         = 3200;
+    uint16 public constant INITIAL_STORM_X    = 1600;
+    uint16 public constant INITIAL_STORM_Y    = 1600;
+    uint16 public constant INITIAL_STORM_R    = 2240;
+    uint8 public constant STORM_PHASE_COUNT   = 6;
 
     // Reward split (out of 1000 basis points of the pool)
     uint16[5] public REWARD_BPS = [400, 250, 175, 100, 75]; // 1st–5th
@@ -72,6 +78,18 @@ contract PixelRoyale {
         uint16 metalAmount;
     }
 
+    struct StormCircleCommitData {
+        bool committed;
+        uint16 currentCenterX;
+        uint16 currentCenterY;
+        uint16 currentRadius;
+        uint16 targetCenterX;
+        uint16 targetCenterY;
+        uint16 targetRadius;
+        bytes32 entropyHash;
+        uint256 timestamp;
+    }
+
     // Per-player aggregate stats
     struct PlayerStats {
         uint256 gamesPlayed;
@@ -80,6 +98,7 @@ contract PixelRoyale {
         uint256 totalEarned;
     }
     mapping(address => PlayerStats) public stats;
+    mapping(uint256 => mapping(uint8 => StormCircleCommitData)) public stormCircles;
 
     // ──────────────────────────── Events ───────────────────────────────
     event PlayerJoinedQueue(address indexed player, uint256 queueSize);
@@ -106,6 +125,18 @@ contract PixelRoyale {
         uint16 woodAmount,
         uint16 stoneAmount,
         uint16 metalAmount,
+        uint256 timestamp
+    );
+    event StormCircleCommitted(
+        uint256 indexed gameId,
+        uint8 indexed phase,
+        uint16 currentCenterX,
+        uint16 currentCenterY,
+        uint16 currentRadius,
+        uint16 targetCenterX,
+        uint16 targetCenterY,
+        uint16 targetRadius,
+        bytes32 entropyHash,
         uint256 timestamp
     );
 
@@ -248,6 +279,67 @@ contract PixelRoyale {
         emit GameEnded(_gameId, _placements[0], _placements, pool);
     }
 
+    // ──────────────────────────── Storm Commits ────────────────────────
+
+    /// @notice Commit the next storm circle for a game using on-chain entropy.
+    /// @dev Each phase can only be committed once.
+    function commitStormCircle(uint256 _gameId, uint8 _phase) external onlyOrchestrator {
+        require(_phase < STORM_PHASE_COUNT, "INVALID_STORM_PHASE");
+
+        StormCircleCommitData storage existing = stormCircles[_gameId][_phase];
+        require(!existing.committed, "STORM_PHASE_ALREADY_COMMITTED");
+
+        uint16 currentCenterX;
+        uint16 currentCenterY;
+        uint16 currentRadius;
+
+        if (_phase == 0) {
+            currentCenterX = INITIAL_STORM_X;
+            currentCenterY = INITIAL_STORM_Y;
+            currentRadius = INITIAL_STORM_R;
+        } else {
+            StormCircleCommitData storage previous = stormCircles[_gameId][_phase - 1];
+            require(previous.committed, "PREVIOUS_STORM_PHASE_MISSING");
+            currentCenterX = previous.targetCenterX;
+            currentCenterY = previous.targetCenterY;
+            currentRadius = previous.targetRadius;
+        }
+
+        (
+            uint16 targetCenterX,
+            uint16 targetCenterY,
+            uint16 targetRadius,
+            bytes32 entropyHash
+        ) = _deriveStormCircle(_gameId, _phase, currentCenterX, currentCenterY, currentRadius);
+
+        StormCircleCommitData memory commitData = StormCircleCommitData({
+            committed: true,
+            currentCenterX: currentCenterX,
+            currentCenterY: currentCenterY,
+            currentRadius: currentRadius,
+            targetCenterX: targetCenterX,
+            targetCenterY: targetCenterY,
+            targetRadius: targetRadius,
+            entropyHash: entropyHash,
+            timestamp: block.timestamp
+        });
+
+        stormCircles[_gameId][_phase] = commitData;
+
+        emit StormCircleCommitted(
+            _gameId,
+            _phase,
+            currentCenterX,
+            currentCenterY,
+            currentRadius,
+            targetCenterX,
+            targetCenterY,
+            targetRadius,
+            entropyHash,
+            block.timestamp
+        );
+    }
+
     // ──────────────────────────── Verified Containers ───────────────────
 
     /// @notice Open a loot container with deterministic on-chain reward derivation.
@@ -371,6 +463,75 @@ contract PixelRoyale {
 
     function _slice(uint256 entropy, uint256 salt, uint256 modValue) internal pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked(entropy, salt))) % modValue;
+    }
+
+    function _deriveStormCircle(
+        uint256 _gameId,
+        uint8 _phase,
+        uint16 _currentCenterX,
+        uint16 _currentCenterY,
+        uint16 _currentRadius
+    ) internal view returns (
+        uint16 targetCenterX,
+        uint16 targetCenterY,
+        uint16 targetRadius,
+        bytes32 entropyHash
+    ) {
+        targetRadius = _stormTargetRadius(_phase);
+
+        uint256 entropy = uint256(keccak256(abi.encodePacked(
+            _gameId,
+            _phase,
+            _currentCenterX,
+            _currentCenterY,
+            _currentRadius,
+            block.prevrandao,
+            blockhash(block.number - 1),
+            address(this)
+        )));
+        entropyHash = keccak256(abi.encodePacked(entropy, block.number, block.timestamp));
+
+        uint256 shift = (uint256(_currentRadius) * 15) / 100;
+        int256 offsetX = shift == 0
+            ? int256(0)
+            : int256(_slice(entropy, 41, shift + 1)) - int256(shift / 2);
+        int256 offsetY = shift == 0
+            ? int256(0)
+            : int256(_slice(entropy, 42, shift + 1)) - int256(shift / 2);
+
+        targetCenterX = _clampStormCenter(
+            int256(uint256(_currentCenterX)) + offsetX,
+            targetRadius,
+            MAP_WIDTH
+        );
+        targetCenterY = _clampStormCenter(
+            int256(uint256(_currentCenterY)) + offsetY,
+            targetRadius,
+            MAP_HEIGHT
+        );
+    }
+
+    function _stormTargetRadius(uint8 _phase) internal pure returns (uint16) {
+        if (_phase == 0) return 1200;
+        if (_phase == 1) return 800;
+        if (_phase == 2) return 450;
+        if (_phase == 3) return 200;
+        if (_phase == 4) return 50;
+        if (_phase == 5) return 0;
+        revert("INVALID_STORM_PHASE");
+    }
+
+    function _clampStormCenter(
+        int256 proposed,
+        uint16 targetRadius,
+        uint16 mapSize
+    ) internal pure returns (uint16) {
+        int256 minBound = int256(uint256(targetRadius));
+        int256 maxBound = int256(uint256(mapSize - targetRadius));
+
+        if (proposed < minBound) return targetRadius;
+        if (proposed > maxBound) return mapSize - targetRadius;
+        return uint16(uint256(proposed));
     }
 
     function _pickWeaponCode(uint256 roll) internal pure returns (uint8) {
