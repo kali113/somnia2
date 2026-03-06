@@ -117,7 +117,7 @@ export default function MobileControls({
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-20 md:hidden"
+      className="pointer-events-none absolute inset-0 z-20"
       style={{
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',

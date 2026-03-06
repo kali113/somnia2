@@ -40,6 +40,14 @@ export default function GameHUD({
   const activeUseDuration = activeUse ? Math.max(0.001, activeUse.endsAt - activeUse.startedAt) : 1
   const activeUseProgress = activeUse ? Math.min(1, Math.max(0, (gameTime - activeUse.startedAt) / activeUseDuration)) : 0
   const activeUseRemaining = activeUse ? Math.max(0, activeUse.endsAt - gameTime) : 0
+  const touchHudBottomInset = touchControls ? 'calc(env(safe-area-inset-bottom) + 13rem)' : '1rem'
+  const showMaterials = !touchControls || player.buildMode
+  const showConsumables = !touchControls
+    || Boolean(activeUse)
+    || player.consumables.bandage > 0
+    || player.consumables.medkit > 0
+    || player.consumables.mini_shield > 0
+    || player.consumables.shield_potion > 0
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60)
@@ -78,11 +86,11 @@ export default function GameHUD({
 
       {/* Bottom section */}
       <div
-        className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 px-3"
-        style={{ paddingBottom: touchControls ? 'calc(env(safe-area-inset-bottom) + 0.75rem)' : '1rem' }}
+        className={`absolute bottom-0 left-0 right-0 flex flex-col items-center px-3 ${touchControls ? 'gap-1.5' : 'gap-2'}`}
+        style={{ paddingBottom: touchHudBottomInset }}
       >
         {/* Health & Shield bars */}
-        <div className="flex w-[min(18rem,calc(100vw-1.5rem))] flex-col gap-1 sm:w-72">
+        <div className={`flex flex-col gap-1 ${touchControls ? 'w-[min(15rem,calc(100vw-1.5rem))]' : 'w-[min(18rem,calc(100vw-1.5rem))] sm:w-72'}`}>
           {/* Shield */}
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-[#4ca6ff]" />
@@ -115,7 +123,7 @@ export default function GameHUD({
         </div>
 
         {/* Inventory slots */}
-        <div className="flex w-full max-w-[24rem] justify-center gap-1">
+        <div className={`flex w-full justify-center ${touchControls ? 'max-w-[17rem] gap-0.5' : 'max-w-[24rem] gap-1'}`}>
           {player.slots.map((slot, i) => {
             const isActive = i === player.activeSlot
             const weapon = slot ? WEAPONS[slot.weaponId] : null
@@ -128,7 +136,7 @@ export default function GameHUD({
                 type="button"
                 onClick={() => onSelectSlot?.(i)}
                 tabIndex={onSelectSlot ? 0 : -1}
-                className={`relative flex h-[3.8rem] min-w-0 flex-1 flex-col items-center justify-center rounded-lg sm:h-16 sm:max-w-16 ${onSelectSlot ? 'pointer-events-auto' : ''}`}
+                className={`relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-lg ${touchControls ? 'h-[3.35rem]' : 'h-[3.8rem] sm:h-16 sm:max-w-16'} ${onSelectSlot ? 'pointer-events-auto' : ''}`}
                 aria-label={`Select slot ${i + 1}: ${slotLabel}`}
                 style={{
                   backgroundColor: isActive ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.65)',
@@ -175,28 +183,32 @@ export default function GameHUD({
         </div>
 
         {/* Materials */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <div className="flex items-center gap-1 text-xs font-mono">
-            <TreePine className="h-3 w-3 text-[#8b5a2b]" />
-            <span className="text-[#c49a6c]">{player.wood}</span>
+        {showMaterials && (
+          <div className={`flex flex-wrap items-center justify-center ${touchControls ? 'gap-2 text-[11px]' : 'gap-3'}`}>
+            <div className="flex items-center gap-1 text-xs font-mono">
+              <TreePine className="h-3 w-3 text-[#8b5a2b]" />
+              <span className="text-[#c49a6c]">{player.wood}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-mono">
+              <Mountain className="h-3 w-3 text-[#888]" />
+              <span className="text-[#aaa]">{player.stone}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-mono">
+              <Wrench className="h-3 w-3 text-[#a0aab4]" />
+              <span className="text-[#c0cad4]">{player.metal}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1 text-xs font-mono">
-            <Mountain className="h-3 w-3 text-[#888]" />
-            <span className="text-[#aaa]">{player.stone}</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs font-mono">
-            <Wrench className="h-3 w-3 text-[#a0aab4]" />
-            <span className="text-[#c0cad4]">{player.metal}</span>
-          </div>
-        </div>
+        )}
 
         {/* Consumables */}
-        <div className="flex flex-wrap justify-center gap-2 text-[10px] font-mono">
-          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffd27a]">Bandage {player.consumables.bandage}</div>
-          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffe8b0]">Medkit {player.consumables.medkit}</div>
-          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#6dd0ff]">Mini {player.consumables.mini_shield}</div>
-          <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#4ca6ff]">Big {player.consumables.shield_potion}</div>
-        </div>
+        {showConsumables && (
+          <div className={`flex flex-wrap justify-center font-mono ${touchControls ? 'gap-1 text-[9px]' : 'gap-2 text-[10px]'}`}>
+            <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffd27a]">Bandage {player.consumables.bandage}</div>
+            <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#ffe8b0]">Medkit {player.consumables.medkit}</div>
+            <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#6dd0ff]">Mini {player.consumables.mini_shield}</div>
+            <div className="rounded bg-[rgba(0,0,0,0.55)] px-2 py-1 text-[#4ca6ff]">Big {player.consumables.shield_potion}</div>
+          </div>
+        )}
 
         {/* Consumable use */}
         {activeUse && activeUseDef && (
@@ -245,14 +257,16 @@ export default function GameHUD({
 
         {/* Build mode indicator */}
         {player.buildMode && (
-          <div className="w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] px-4 py-2 font-mono text-xs text-[#d7ffe0] sm:w-auto">
+          <div className={`rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] font-mono text-xs text-[#d7ffe0] ${touchControls ? 'w-[min(16rem,calc(100vw-1.5rem))] px-3 py-2' : 'w-[min(18rem,calc(100vw-1.5rem))] px-4 py-2 sm:w-auto'}`}>
             <div className="text-[11px] text-[#4cff4c]">
               BUILD: {activePiece.name.toUpperCase()} ({player.buildMaterial.toUpperCase()}) - {activePiece.baseCost} mats
             </div>
             <div className={canAffordPiece ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}>
-              {canAffordPiece ? activePiece.purpose : `Need ${activePiece.baseCost} ${player.buildMaterial}`}
+              {touchControls
+                ? (canAffordPiece ? 'Aim to preview, tap PLACE to build.' : `Need ${activePiece.baseCost} ${player.buildMaterial}`)
+                : (canAffordPiece ? activePiece.purpose : `Need ${activePiece.baseCost} ${player.buildMaterial}`)}
             </div>
-            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[rgba(255,255,255,0.65)]">
+            <div className={`mt-1 flex flex-wrap text-[rgba(255,255,255,0.65)] ${touchControls ? 'gap-1 text-[9px]' : 'gap-2 text-[10px]'}`}>
               {BUILD_PIECE_ORDER.map((pieceId, index) => {
                 const piece = BUILD_PIECES[pieceId]
                 const selected = pieceId === player.buildPiece
@@ -265,11 +279,6 @@ export default function GameHUD({
                 )
               })}
             </div>
-            {touchControls && (
-              <div className="mt-1 text-[10px] text-[rgba(255,255,255,0.65)]">
-                OPEN rotates | PLACE builds | BUILD exits
-              </div>
-            )}
           </div>
         )}
 
@@ -281,24 +290,17 @@ export default function GameHUD({
         )}
       </div>
 
-      {/* Controls hint */}
-      <div
-        className="absolute left-3 font-mono text-[10px] leading-relaxed text-[rgba(255,255,255,0.3)]"
-        style={{ bottom: touchControls ? 'calc(env(safe-area-inset-bottom) + 0.75rem)' : '0.75rem' }}
-      >
-        {touchControls ? (
-          <>
-            <div>LEFT PAD MOVE | RIGHT PAD AIM & SHOOT</div>
-            <div>TAP SLOTS | OPEN SEARCHES | RELOAD / HEAL / BUILD</div>
-          </>
-        ) : (
+      {!touchControls && (
+        <div
+          className="absolute left-3 bottom-3 font-mono text-[10px] leading-relaxed text-[rgba(255,255,255,0.3)]"
+        >
           <>
             <div>WASD Move | Mouse Aim & Shoot</div>
             <div>1-5 Slots | R Reload (uses reserve ammo) | E Search Container | F Heal</div>
             <div>Build: Z/X/C Piece | R Material | E Rotate | G/Wheel Cycle Piece</div>
           </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

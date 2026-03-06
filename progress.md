@@ -120,3 +120,27 @@ Original prompt: there is not a victory screen when killing everyone
     - projectiles still block on walls, trees, and player builds
     - bots still acquire threats and deal combat damage
     - harvested trees are removed from `envGrid` and no longer block movement
+
+- Current prompt: please test the game as in a phone and debug
+- Created branch `fix/mobile-game-debug`.
+- Reproduced the current mobile regression on `/game` with an iPhone 13 Playwright context.
+- Findings from `output/mobile-check/phone-debug-baseline/`:
+  - Movement and build-mode toggling still work on mobile.
+  - The bottom HUD overlaps the on-screen move/aim pads and action buttons, hiding inventory, build info, and item rows in portrait.
+- Applied a HUD layout fix in `components/game/GameHUD.tsx`:
+  - Reserve explicit vertical space above the touch controls.
+  - Hide the desktop controls hint on touch.
+  - Suppress the consumables row on touch when all counts are zero.
+  - Tighten mobile sizing for health, inventory, and build-mode panels.
+- Additional mobile bug found during retest:
+  - Rotating a phone to landscape hid the entire touch-control layer because `components/game/MobileControls.tsx` used `md:hidden`.
+  - Removed that breakpoint gate so touch controls now follow touch-device detection instead of viewport width.
+- Final mobile verification:
+  - Portrait screenshots after the fix: `output/mobile-check/phone-debug-final/portrait-initial.png`
+  - Landscape screenshots after the fix: `output/mobile-check/phone-debug-final/landscape-initial.png`
+  - Portrait touch layout now keeps the slot/build HUD above the control stack.
+  - Landscape touch layout now keeps the mobile controls visible.
+  - Touch-control smoke check confirmed movement still changes player position by ~146.7 world units and build mode still toggles.
+- Final repo verification:
+  - `pnpm lint`
+  - `pnpm build`
