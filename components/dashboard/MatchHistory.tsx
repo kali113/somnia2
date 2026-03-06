@@ -8,15 +8,25 @@ import {
 } from '@/lib/somnia/contract'
 import { History, Trophy, Skull } from 'lucide-react'
 
+type MatchHistoryGame = {
+  gameId?: bigint
+  timestamp?: bigint
+  winner?: string
+  placements?: string[]
+  prizePool?: bigint
+  playerCount?: bigint | number
+  [index: number]: unknown
+}
+
 export default function MatchHistory() {
   const { address } = useAccount()
 
-  const { data: recentGames } = useReadContract({
+  const { data: recentGames } = useReadContract<readonly MatchHistoryGame[]>({
     ...getRecentGamesArgs(20n),
     query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 30000 },
   })
 
-  const games = (recentGames as any[]) ?? []
+  const games = recentGames ?? []
 
   if (!address) {
     return (
@@ -45,7 +55,7 @@ export default function MatchHistory() {
         </div>
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto">
-          {games.map((game: any, index: number) => {
+          {games.map((game, index) => {
             const gameId = Number(game.gameId ?? game[0] ?? 0n)
             const timestamp = Number(game.timestamp ?? game[1] ?? 0n)
             const winner = (game.winner ?? game[2] ?? '') as string

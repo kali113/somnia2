@@ -9,6 +9,12 @@ import {
 import { Crown, Medal } from 'lucide-react'
 import { useMemo } from 'react'
 
+type RecentGame = {
+  winner?: string
+  placements?: string[]
+  [index: number]: unknown
+}
+
 interface LeaderboardEntry {
   address: string
   wins: number
@@ -18,14 +24,14 @@ interface LeaderboardEntry {
 export default function Leaderboard() {
   const { address } = useAccount()
 
-  const { data: recentGames } = useReadContract({
+  const { data: recentGames } = useReadContract<readonly RecentGame[]>({
     ...getRecentGamesArgs(50n),
     query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 30000 },
   })
 
   // Build leaderboard from game results
   const leaderboard = useMemo(() => {
-    const games = (recentGames as any[]) ?? []
+    const games = recentGames ?? []
     const map = new Map<string, LeaderboardEntry>()
 
     for (const game of games) {

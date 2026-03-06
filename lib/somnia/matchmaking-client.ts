@@ -49,7 +49,7 @@ export interface MatchmakingMeResponse {
 interface WsEnvelope {
   schemaVersion: number
   type: string
-  data: any
+  data: unknown
 }
 
 async function fetchJson<T>(path: string): Promise<T> {

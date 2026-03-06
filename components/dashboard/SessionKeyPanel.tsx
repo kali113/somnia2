@@ -38,7 +38,7 @@ export default function SessionKeyPanel() {
   } = useWaitForTransactionReceipt({ hash: revokeHash })
 
   // Check on-chain session validity
-  const { data: isValidOnChain, refetch: refetchSession } = useReadContract({
+  const { data: isValidOnChain, refetch: refetchSession } = useReadContract<boolean>({
     ...getIsValidSessionArgs(
       address ?? '0x0000000000000000000000000000000000000000',
       session?.address ?? '0x0000000000000000000000000000000000000000'
@@ -199,7 +199,7 @@ export default function SessionKeyPanel() {
         </div>
       ) : (
         <>
-          {(txError ?? receiptError ?? approveError?.message.split('\n')[0]) && (
+          {Boolean(txError ?? receiptError ?? approveError?.message.split('\n')[0]) && (
             <p className="text-[10px] font-mono text-[#ff4444] mb-3 break-words">
               {txError ?? receiptError ?? approveError?.message.split('\n')[0]}
             </p>

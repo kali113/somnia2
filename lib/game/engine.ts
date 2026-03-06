@@ -165,6 +165,10 @@ export interface GameState {
   onContainerOpened?: (result: ContainerRewardBundle) => void
 }
 
+type GameCanvasElement = HTMLCanvasElement & {
+  __gameCleanup?: () => void
+}
+
 // ── Initialize ──────────────────────────────────────────────────────────────
 
 export function initGame(canvas: HTMLCanvasElement, options?: {
@@ -253,7 +257,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
   }
 
   // Store cleanup on canvas for later
-  ;(canvas as any).__gameCleanup = cleanup
+  ;(canvas as GameCanvasElement).__gameCleanup = cleanup
 
   return state
 }
@@ -1065,15 +1069,19 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     | { kind: 'build'; index: number; dist: number }
 
   let best: HarvestTarget | null = null
-  const updateBest = (candidate: HarvestTarget) => {
-    if (!best || candidate.dist < best.dist) best = candidate
+  const pickBest = (current: HarvestTarget | null, candidate: HarvestTarget): HarvestTarget => {
+    if (!current || candidate.dist < current.dist) {
+      return candidate
+    }
+
+    return current
   }
 
   for (let i = 0; i < state.map.playerBuilds.length; i++) {
     const build = state.map.playerBuilds[i]
     const d = pointToAABBDistance(x, y, build)
     if (d <= 14) {
-      updateBest({ kind: 'build', index: i, dist: d })
+      best = pickBest(best, { kind: 'build', index: i, dist: d })
     }
   }
 
@@ -1081,7 +1089,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     const tree = state.map.trees[i]
     const d = distance(x, y, tree.x, tree.y)
     if (d <= 26) {
-      updateBest({ kind: 'tree', index: i, dist: d })
+      best = pickBest(best, { kind: 'tree', index: i, dist: d })
     }
   }
 
@@ -1089,7 +1097,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     const rock = state.map.rocks[i]
     const d = distance(x, y, rock.x, rock.y)
     if (d <= 28) {
-      updateBest({ kind: 'rock', index: i, dist: d })
+      best = pickBest(best, { kind: 'rock', index: i, dist: d })
     }
   }
 
@@ -1097,7 +1105,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     const car = state.map.cars[i]
     const d = distance(x, y, car.x, car.y)
     if (d <= 34) {
-      updateBest({ kind: 'car', index: i, dist: d })
+      best = pickBest(best, { kind: 'car', index: i, dist: d })
     }
   }
 
@@ -1622,6 +1630,6 @@ export function resizeGame(state: GameState, width: number, height: number) {
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 
 export function cleanupGame(canvas: HTMLCanvasElement) {
-  const cleanup = (canvas as any).__gameCleanup
+  const cleanup = (canvas as GameCanvasElement).__gameCleanup
   if (typeof cleanup === 'function') cleanup()
 }

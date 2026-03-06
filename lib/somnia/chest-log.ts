@@ -58,6 +58,20 @@ interface ContainerVerifyResponse {
   reason?: string
 }
 
+interface BrowserEthereumProvider {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>
+}
+
+type DecodableLog = {
+  data: `0x${string}`
+  topics: [] | [`0x${string}`, ...`0x${string}`[]]
+}
+
+type DecodedContainerOpenedEvent = {
+  eventName: string
+  args: Record<string, unknown>
+}
+
 function toBytes32FromString(value: string): `0x${string}` {
   return keccak256(encodePacked(['string'], [value]))
 }
@@ -65,18 +79,18 @@ function toBytes32FromString(value: string): `0x${string}` {
 function decodeContainerOpenedEvent(
   request: ContainerVerificationRequest,
   txHash: string,
-  logs: Array<{ data: `0x${string}`; topics: `0x${string}`[] }>,
+  logs: DecodableLog[],
 ): ContainerRewardBundle | null {
   for (const log of logs) {
     try {
-      const decoded = decodeEventLog({
+      const decoded: unknown = decodeEventLog({
         abi: pixelRoyaleAbi,
         data: log.data,
         topics: log.topics,
       })
-      if (decoded.eventName !== 'ContainerOpened') continue
+      if (!isContainerOpenedEvent(decoded)) continue
 
-      const args = decoded.args as Record<string, unknown>
+      const args = decoded.args
       const containerTypeCode = Number(args.containerType ?? CONTAINER_TYPE_CODE[request.containerType])
       const weaponCode = Number(args.weaponCode ?? 0)
       const rarityCode = Number(args.weaponRarity ?? 0)
@@ -110,6 +124,18 @@ function decodeContainerOpenedEvent(
   return null
 }
 
+function isContainerOpenedEvent(value: unknown): value is DecodedContainerOpenedEvent {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'eventName' in value &&
+    'args' in value &&
+    (value as { eventName?: unknown }).eventName === 'ContainerOpened' &&
+    typeof (value as { args?: unknown }).args === 'object' &&
+    (value as { args?: unknown }).args !== null,
+  )
+}
+
 export async function openContainerVerifiedOnChain(
   request: ContainerVerificationRequest,
 ): Promise<ContainerVerifyResponse> {
@@ -119,11 +145,11 @@ export async function openContainerVerifiedOnChain(
 
   const containerKey = toBytes32FromString(`${request.mapSeed}:${request.containerId}:${request.containerType}`)
   const publicClient = createPublicClient({
-    chain: SOMNIA_TESTNET as any,
+    chain: SOMNIA_TESTNET,
     transport: http(SOMNIA_RPC_URL),
   })
 
-  const ethereum = (window as any).ethereum
+  const ethereum = (window as Window & { ethereum?: BrowserEthereumProvider }).ethereum
   if (!ethereum) {
     return { txHash: null, reason: 'wallet_unavailable' }
   }
@@ -139,7 +165,7 @@ export async function openContainerVerifiedOnChain(
   }
 
   const walletClient = createWalletClient({
-    chain: SOMNIA_TESTNET as any,
+    chain: SOMNIA_TESTNET,
     transport: custom(ethereum),
   })
 
@@ -154,7 +180,7 @@ export async function openContainerVerifiedOnChain(
       address: PIXEL_ROYALE_ADDRESS,
       abi: pixelRoyaleAbi,
       functionName: 'openContainerVerified',
-      chain: SOMNIA_TESTNET as any,
+      chain: SOMNIA_TESTNET,
       account,
       args: [
         BigInt(request.gameId),
@@ -169,7 +195,7 @@ export async function openContainerVerifiedOnChain(
     const reward = decodeContainerOpenedEvent(
       request,
       txHash,
-      receipt.logs as Array<{ data: `0x${string}`; topics: `0x${string}`[] }>,
+      receipt.logs as DecodableLog[],
     )
     if (!reward) return { txHash, reason: 'event_missing' }
     return { txHash, reward }

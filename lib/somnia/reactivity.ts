@@ -145,16 +145,20 @@ export function createReactivityConnection(
 // ── Parse on-chain log to app event ─────────────────────────────────────────
 
 function handleLog(
-  log: { topics: string[]; data: string; transactionHash?: string },
+  log: {
+    topics: [] | [`0x${string}`, ...`0x${string}`[]]
+    data: `0x${string}`
+    transactionHash?: string
+  },
   onEvent: (event: SomniaEvent) => void,
 ) {
   try {
     const parsed = decodeEventLog({
       abi: pixelRoyaleAbi,
-      data: log.data as `0x${string}`,
-      topics: log.topics as `0x${string}`[],
+      data: log.data,
+      topics: log.topics,
       strict: false,
-    })
+    }) as unknown as DecodedSomniaEvent
 
     const txHash = log.transactionHash
 
@@ -285,3 +289,38 @@ function handleLog(
     // Ignore non-decoding logs
   }
 }
+
+type DecodedSomniaEvent =
+  | { eventName: 'PlayerJoinedQueue'; args: { player: string; queueSize: bigint } }
+  | { eventName: 'PlayerLeftQueue'; args: { player: string; queueSize: bigint } }
+  | { eventName: 'GameStarted'; args: { gameId: bigint; players: string[]; prizePool: bigint } }
+  | { eventName: 'GameEnded'; args: { gameId: bigint; winner: string; placements: string[]; prizePool: bigint } }
+  | {
+      eventName: 'StormCircleCommitted'
+      args: {
+        gameId: bigint
+        phase: bigint
+        currentCenterX: bigint
+        currentCenterY: bigint
+        currentRadius: bigint
+        targetCenterX: bigint
+        targetCenterY: bigint
+        targetRadius: bigint
+        entropyHash: string
+        timestamp: bigint
+      }
+    }
+  | { eventName: 'RewardClaimed'; args: { player: string; amount: bigint } }
+  | { eventName: 'SessionKeyApproved'; args: { player: string; sessionKey: string; expiry: bigint } }
+  | { eventName: 'SessionKeyRevoked'; args: { player: string; sessionKey: string } }
+  | {
+      eventName: 'ContainerOpened'
+      args: {
+        gameId: bigint
+        player: string
+        containerType: bigint
+        weaponCode?: bigint
+        consumableCode?: bigint
+        ammoAmount?: bigint
+      }
+    }

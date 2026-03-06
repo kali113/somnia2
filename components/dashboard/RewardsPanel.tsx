@@ -11,15 +11,23 @@ import {
 import { Gift, Loader2, Coins } from 'lucide-react'
 import { useCallback, useEffect } from 'react'
 
+type PlayerStats = {
+  gamesPlayed?: bigint
+  wins?: bigint
+  kills?: bigint
+  totalEarned?: bigint
+  [index: number]: unknown
+}
+
 export default function RewardsPanel() {
   const { address } = useAccount()
 
-  const { data: pendingRewards, refetch: refetchRewards } = useReadContract({
+  const { data: pendingRewards, refetch: refetchRewards } = useReadContract<bigint>({
     ...getPendingRewardsArgs(address ?? '0x0000000000000000000000000000000000000000'),
     query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 10000 },
   })
 
-  const { data: rawStats } = useReadContract({
+  const { data: rawStats } = useReadContract<PlayerStats>({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
     query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 15000 },
   })
@@ -42,7 +50,7 @@ export default function RewardsPanel() {
   }, [claim])
 
   const pending = typeof pendingRewards === 'bigint' ? pendingRewards : 0n
-  const stats = rawStats as any
+  const stats = rawStats
   const totalEarned = stats ? (stats.totalEarned ?? stats[3] ?? 0n) : 0n
   const hasPending = pending > 0n
   const isBusy = isClaiming || claimConfirming

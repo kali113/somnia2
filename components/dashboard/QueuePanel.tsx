@@ -28,6 +28,8 @@ import { Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
 import { useEffect, useCallback, useState } from 'react'
 import { formatEther, type Address } from 'viem'
 
+type QueuePlayersResult = readonly string[]
+
 export default function QueuePanel() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
@@ -71,22 +73,22 @@ export default function QueuePanel() {
   }, [])
 
   // ── Read contract state ───────────────────────────────────────────────
-  const { data: queueSize, refetch: refetchQueueSize } = useReadContract({
+  const { data: queueSize, refetch: refetchQueueSize } = useReadContract<bigint>({
     ...getQueueSizeArgs(),
     query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
   })
 
-  const { data: queuePlayers, refetch: refetchQueuePlayers } = useReadContract({
+  const { data: queuePlayers, refetch: refetchQueuePlayers } = useReadContract<QueuePlayersResult>({
     ...getQueuePlayersArgs(),
     query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
   })
 
-  const { data: isInQueue, refetch: refetchInQueue } = useReadContract({
+  const { data: isInQueue, refetch: refetchInQueue } = useReadContract<boolean>({
     ...getInQueueArgs(address ?? '0x0000000000000000000000000000000000000000'),
     query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
   })
 
-  const { data: isValidSession } = useReadContract({
+  const { data: isValidSession } = useReadContract<boolean>({
     ...getIsValidSessionArgs(
       address ?? '0x0000000000000000000000000000000000000000',
       sessionAddress ?? '0x0000000000000000000000000000000000000000'
@@ -193,13 +195,13 @@ export default function QueuePanel() {
       </div>
 
       {/* Queued Players List */}
-      {queuePlayers && (queuePlayers as string[]).length > 0 && (
+      {Array.isArray(queuePlayers) && queuePlayers.length > 0 && (
         <div className="mb-4 max-h-32 overflow-y-auto rounded-lg bg-[rgba(0,0,0,0.3)] p-3">
           <span className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] uppercase mb-2 block">
             Queued Players
           </span>
           <div className="space-y-1">
-            {(queuePlayers as string[]).map((player, i) => (
+            {queuePlayers.map((player) => (
               <div
                 key={player}
                 className={`flex items-center gap-2 text-xs font-mono ${

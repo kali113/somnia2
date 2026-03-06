@@ -1,4 +1,4 @@
-import { formatEther, parseEther, type Address } from 'viem'
+import { formatEther, parseEther, type Abi, type Address } from 'viem'
 import PIXEL_ROYALE_ABI from '@/contracts/abi.json'
 import {
   GAME_CONTRACT_ADDRESS,
@@ -28,7 +28,7 @@ function assertContractConfigured(): void {
 }
 
 // ── ABI Export ──────────────────────────────────────────────────────────────
-export const pixelRoyaleAbi = PIXEL_ROYALE_ABI as any
+export const pixelRoyaleAbi = PIXEL_ROYALE_ABI as Abi
 
 // ── Types ───────────────────────────────────────────────────────────────────
 export interface PlayerStats {

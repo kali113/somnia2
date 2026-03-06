@@ -1,9 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import type { Abi } from 'abitype'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, formatUnits, http } from 'viem'
+import { createPublicClient, formatUnits, http, type Abi } from 'viem'
 import { defineChain, getContract, prepareContractCall } from 'thirdweb'
 import {
   useActiveAccount as useThirdwebActiveAccount,
@@ -23,6 +22,13 @@ type QueryConfig = {
   enabled?: boolean
   refetchInterval?: number
   retry?: number
+}
+
+interface BalanceData {
+  value: bigint
+  decimals: number
+  symbol: string
+  formatted: string
 }
 
 type ReadContractInput = {
@@ -52,7 +58,7 @@ const METAMASK_CONNECTOR = {
 }
 
 const somniaPublicClient = createPublicClient({
-  chain: SOMNIA_TESTNET as any,
+  chain: SOMNIA_TESTNET,
   transport: http(SOMNIA_TESTNET.rpcUrls.default.http[0]),
 })
 
@@ -65,15 +71,22 @@ function resolveChain(chainId?: number) {
 }
 
 function resolveMethod(abi: readonly unknown[], functionName: string) {
-  const method = (abi as any[]).find(
-    (item) => item?.type === 'function' && item?.name === functionName,
+  const method = (abi as readonly unknown[]).find(
+    (item) => {
+      if (!item || typeof item !== 'object') {
+        return false
+      }
+
+      const candidate = item as { type?: unknown; name?: unknown }
+      return candidate.type === 'function' && candidate.name === functionName
+    },
   )
 
   if (!method) {
     throw new Error(`Function \"${functionName}\" not found in contract ABI.`)
   }
 
-  return method
+  return functionName
 }
 
 function serializeQueryValue(value: unknown): string {
@@ -178,7 +191,7 @@ export function useBalance({
 }) {
   const enabled = query?.enabled ?? !!address
 
-  const result = useQuery({
+  const result = useQuery<BalanceData>({
     queryKey: ['somnia-native-balance', address?.toLowerCase(), chainId ?? SOMNIA_TESTNET.id],
     queryFn: async () => {
       if (!address) {
@@ -208,10 +221,10 @@ export function useBalance({
   }
 }
 
-export function useReadContract(config: ReadContractInput) {
+export function useReadContract<T = unknown>(config: ReadContractInput) {
   const enabled = config.query?.enabled ?? true
 
-  const result = useQuery({
+  const result = useQuery<T>({
     queryKey: [
       'somnia-read-contract',
       config.address.toLowerCase(),
@@ -224,7 +237,7 @@ export function useReadContract(config: ReadContractInput) {
         abi: config.abi as Abi,
         functionName: config.functionName as never,
         args: (config.args ?? []) as readonly never[],
-      }),
+      }) as Promise<T>,
     enabled,
     refetchInterval: config.query?.refetchInterval,
     retry: config.query?.retry,

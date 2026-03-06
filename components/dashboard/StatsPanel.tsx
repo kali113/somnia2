@@ -8,15 +8,23 @@ import {
 } from '@/lib/somnia/contract'
 import { Trophy, Crosshair, Gamepad2, TrendingUp } from 'lucide-react'
 
+type PlayerStats = {
+  gamesPlayed?: bigint
+  wins?: bigint
+  kills?: bigint
+  totalEarned?: bigint
+  [index: number]: unknown
+}
+
 export default function StatsPanel() {
   const { address } = useAccount()
 
-  const { data: rawStats } = useReadContract({
+  const { data: rawStats } = useReadContract<PlayerStats>({
     ...getPlayerStatsArgs(address ?? '0x0000000000000000000000000000000000000000'),
     query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 15000 },
   })
 
-  const stats = rawStats as any
+  const stats = rawStats
 
   const gamesPlayed = stats ? Number(stats.gamesPlayed ?? stats[0] ?? 0n) : 0
   const wins = stats ? Number(stats.wins ?? stats[1] ?? 0n) : 0
