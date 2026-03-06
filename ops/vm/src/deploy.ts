@@ -263,7 +263,7 @@ export async function main(args: string[]): Promise<void> {
     await runCommand('pnpm', ['install', '--frozen-lockfile'], { cwd: path.join(releaseDir, 'server'), logStream })
     await runCommand('pnpm', ['build'], { cwd: path.join(releaseDir, 'server'), logStream })
 
-    await runCommand('rsync', ['-a', '--delete', `${releaseDir}/out/`, `${context.liveWebRoot}/`], { logStream })
+    await runCommand('rsync', ['-a', '--delete', '--exclude=/status', `${releaseDir}/out/`, `${context.liveWebRoot}/`], { logStream })
     await fs.copyFile(path.join(releaseDir, 'out', 'status', 'index.html'), context.statusIndexPath)
     await forceSymlink(context.statusRoot, path.join(context.liveWebRoot, 'status'))
     await forceSymlink(releaseDir, context.currentLink)
