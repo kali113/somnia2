@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm build:web && pnpm build:ops-vm",
+    "build:web": "next build",
+    "build:ops-vm": "tsc -p ops/vm/tsconfig.scripts.json",
     "start": "next start",
     "lint": "eslint .",
     "deploy:somnia": "node scripts/deploy-somnia.mjs"

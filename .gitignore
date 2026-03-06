@@ -17,3 +17,4 @@ tsconfig.tsbuildinfo
 .amp/
 .playwright-cli/
 output/
+ops/vm/dist/

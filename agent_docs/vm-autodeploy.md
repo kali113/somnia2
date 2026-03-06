@@ -3,17 +3,19 @@
 Use this when working on the VM deployment pipeline and status page.
 
 ## Layout
-- Installer and deploy scripts: `ops/vm/`
-- Status site source: `ops/vm/status-site/`
+- TypeScript deploy sources: `ops/vm/src/`
+- Shell bootstrap wrappers: `ops/vm/*.sh`
+- Status page route: `app/status/page.tsx`
 - VM install root: `/opt/somnia2-deployer`
 - Live status site root: `/var/www/somnia2-status`
 
 ## Runtime
 - `systemd` timer `somnia2-deploy.timer` runs every minute.
-- `deploy.sh` fetches `origin/main`, skips if unchanged, otherwise builds a new release under `releases/`.
+- `deploy.ts` fetches `origin/main`, skips if unchanged, otherwise builds a new release under `releases/`.
 - Frontend export syncs to `/var/www/somnia2`.
-- Backend restarts through PM2 using `ecosystem.config.cjs` and the stable `current` symlink.
+- Installer generates `ecosystem.config.cjs`, and backend restarts through PM2 using the stable `current` symlink.
 - Status files are written to `/var/www/somnia2-status/data/`.
+- The exported Next `/status` page is copied into `/var/www/somnia2-status/index.html` during deploy.
 - Status page can trigger a manual redeploy through `POST /api/admin/redeploy` when `REDEPLOY_TOKEN` is configured on the backend.
 
 ## Verification
