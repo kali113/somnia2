@@ -69,7 +69,7 @@ const ORCHESTRATOR_KEY = (
   process.env.ORCHESTRATOR_PRIVATE_KEY ||
   process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
 ) as `0x${string}` | undefined
-const REDEPLOY_TOKEN = (process.env.REDEPLOY_TOKEN || '').trim()
+const REDEPLOY_PASSWORD = (process.env.REDEPLOY_PASSWORD || '').trim()
 const REDEPLOY_SERVICE = (process.env.REDEPLOY_SERVICE || 'somnia2-deploy.service').trim()
 const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
@@ -161,14 +161,14 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.post('/api/admin/redeploy', async (req, res) => {
-  if (!REDEPLOY_TOKEN) {
+  if (!REDEPLOY_PASSWORD) {
     res.status(503).json({ error: 'Redeploy endpoint is not configured.' })
     return
   }
 
-  const providedToken = String(req.header('x-redeploy-token') || req.body?.token || '').trim()
-  if (providedToken !== REDEPLOY_TOKEN) {
-    res.status(401).json({ error: 'Invalid redeploy token.' })
+  const providedPassword = String(req.header('x-redeploy-password') || req.body?.password || '').trim()
+  if (providedPassword !== REDEPLOY_PASSWORD) {
+    res.status(401).json({ error: 'Invalid redeploy password.' })
     return
   }
 

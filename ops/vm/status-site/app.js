@@ -4,7 +4,7 @@ const logEl = document.getElementById("log");
 const refreshButton = document.getElementById("refresh");
 const redeployButton = document.getElementById("redeploy");
 const actionStatusEl = document.getElementById("action-status");
-const REDEPLOY_TOKEN_KEY = "somnia2-redeploy-token";
+const REDEPLOY_PASSWORD_KEY = "somnia2-redeploy-password";
 
 function formatValue(value) {
   return value || "n/a";
@@ -94,13 +94,13 @@ refreshButton.addEventListener("click", () => {
 });
 
 redeployButton.addEventListener("click", async () => {
-  const savedToken = window.localStorage.getItem(REDEPLOY_TOKEN_KEY) || "";
-  const providedToken = window.prompt("Redeploy token", savedToken);
-  if (!providedToken) {
+  const savedPassword = window.localStorage.getItem(REDEPLOY_PASSWORD_KEY) || "";
+  const providedPassword = window.prompt("Redeploy password", savedPassword);
+  if (!providedPassword) {
     return;
   }
 
-  window.localStorage.setItem(REDEPLOY_TOKEN_KEY, providedToken);
+  window.localStorage.setItem(REDEPLOY_PASSWORD_KEY, providedPassword);
   redeployButton.disabled = true;
   setActionStatus("Triggering redeploy...");
 
@@ -109,9 +109,9 @@ redeployButton.addEventListener("click", async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-redeploy-token": providedToken,
+        "x-redeploy-password": providedPassword,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ password: providedPassword }),
     });
 
     const payload = await response.json().catch(() => ({}));
