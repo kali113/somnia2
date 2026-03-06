@@ -5,6 +5,7 @@ const refreshButton = document.getElementById("refresh");
 const redeployButton = document.getElementById("redeploy");
 const actionStatusEl = document.getElementById("action-status");
 const REDEPLOY_PASSWORD_KEY = "somnia2-redeploy-password";
+let pollTimer = null;
 
 function formatValue(value) {
   return value || "n/a";
@@ -85,6 +86,37 @@ async function load() {
   renderSummary(status);
   renderHistory(history);
   logEl.textContent = log || "No log output yet.";
+  return status;
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    window.clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = window.setInterval(async () => {
+    try {
+      const status = await load();
+      if (status.status === "running") {
+        setActionStatus("Redeploy in progress...");
+        return;
+      }
+
+      if (status.status === "success") {
+        setActionStatus("Redeploy completed.");
+      } else if (status.status === "failed") {
+        setActionStatus(`Redeploy failed: ${status.message || "unknown error"}`);
+      }
+      stopPolling();
+    } catch (error) {
+      setActionStatus(`Status refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+      stopPolling();
+    }
+  }, 2000);
 }
 
 refreshButton.addEventListener("click", () => {
@@ -119,8 +151,8 @@ redeployButton.addEventListener("click", async () => {
       throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
     }
 
-    setActionStatus("Redeploy requested. Refreshing status...");
-    await load();
+    setActionStatus("Redeploy requested. Waiting for deploy status...");
+    startPolling();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setActionStatus(`Redeploy failed: ${message}`);

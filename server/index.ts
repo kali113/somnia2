@@ -70,7 +70,7 @@ const ORCHESTRATOR_KEY = (
   process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
 ) as `0x${string}` | undefined
 const REDEPLOY_PASSWORD = (process.env.REDEPLOY_PASSWORD || '').trim()
-const REDEPLOY_SERVICE = (process.env.REDEPLOY_SERVICE || 'somnia2-deploy.service').trim()
+const REDEPLOY_SERVICE = (process.env.REDEPLOY_SERVICE || 'somnia2-force-deploy.service').trim()
 const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map((value) => value.trim())

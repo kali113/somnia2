@@ -40,6 +40,21 @@ Environment=USER=root
 ExecStart=$REMOTE_ROOT/bin/check.sh
 EOF
 
+cat > /etc/systemd/system/somnia2-force-deploy.service <<EOF
+[Unit]
+Description=Somnia2 forced deployment
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$REMOTE_ROOT
+Environment=HOME=/root
+Environment=PM2_HOME=/root/.pm2
+Environment=USER=root
+ExecStart=$REMOTE_ROOT/bin/deploy.sh --force
+EOF
+
 cat > /etc/systemd/system/somnia2-deploy.timer <<EOF
 [Unit]
 Description=Run Somnia2 deployment check every minute
