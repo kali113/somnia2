@@ -18,3 +18,4 @@ tsconfig.tsbuildinfo
 .playwright-cli/
 output/
 ops/vm/dist/
+scripts/dist/

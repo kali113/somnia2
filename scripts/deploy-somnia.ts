@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+
 import dotenv from 'dotenv'
 import solc from 'solc'
 import {
@@ -41,7 +42,7 @@ const somniaShannon = defineChain({
   testnet: true,
 })
 
-function requirePrivateKey() {
+function requirePrivateKey(): `0x${string}` {
   const key = (
     process.env.SOMNIA_DEPLOYER_PRIVATE_KEY ||
     process.env.DEPLOYER_PRIVATE_KEY ||
@@ -49,16 +50,14 @@ function requirePrivateKey() {
     ''
   ).trim()
 
-  if (!/^0x[a-fA-F0-9]{64}$/.test(key)) {
-    throw new Error(
-      'Missing deployer key. Set SOMNIA_DEPLOYER_PRIVATE_KEY (0x-prefixed, 64 hex chars).'
-    )
+  if (!/^0x[a-fA-F0-9]{64}$/u.test(key)) {
+    throw new Error('Missing deployer key. Set SOMNIA_DEPLOYER_PRIVATE_KEY (0x-prefixed, 64 hex chars).')
   }
 
-  return key
+  return key as `0x${string}`
 }
 
-function getOrchestratorAddress(fallbackAddress) {
+function getOrchestratorAddress(fallbackAddress: `0x${string}`): `0x${string}` {
   const orchestrator = (process.env.SOMNIA_ORCHESTRATOR_ADDRESS || '').trim()
 
   if (!orchestrator) {
@@ -72,7 +71,7 @@ function getOrchestratorAddress(fallbackAddress) {
   return orchestrator
 }
 
-async function compilePixelRoyale(projectRoot) {
+async function compilePixelRoyale(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
   const contractPath = path.join(projectRoot, 'contracts', 'PixelRoyale.sol')
   const source = await readFile(contractPath, 'utf8')
 
@@ -91,28 +90,31 @@ async function compilePixelRoyale(projectRoot) {
     },
   }
 
-  const output = JSON.parse(solc.compile(JSON.stringify(input)))
+  const output = JSON.parse(solc.compile(JSON.stringify(input))) as {
+    errors?: Array<{ severity?: string; formattedMessage?: string; message?: string }>
+    contracts?: Record<string, Record<string, { abi?: unknown[]; evm?: { bytecode?: { object?: string } } }>>
+  }
 
   if (Array.isArray(output.errors) && output.errors.length > 0) {
-    const fatal = output.errors.filter((e) => e.severity === 'error')
+    const fatal = output.errors.filter((error) => error.severity === 'error')
     if (fatal.length > 0) {
-      const message = fatal.map((e) => e.formattedMessage || e.message).join('\n')
+      const message = fatal.map((error) => error.formattedMessage || error.message || 'Unknown Solidity error').join('\n')
       throw new Error(`Solidity compile failed:\n${message}`)
     }
   }
 
-  const contract = output.contracts?.['PixelRoyale.sol']?.['PixelRoyale']
-  if (!contract?.evm?.bytecode?.object) {
+  const contract = output.contracts?.['PixelRoyale.sol']?.PixelRoyale
+  if (!contract?.evm?.bytecode?.object || !contract.abi) {
     throw new Error('Could not find compiled PixelRoyale bytecode.')
   }
 
-  const abi = contract.abi
-  const bytecode = `0x${contract.evm.bytecode.object}`
-
-  return { abi, bytecode }
+  return {
+    abi: contract.abi,
+    bytecode: `0x${contract.evm.bytecode.object}`,
+  }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const projectRoot = process.cwd()
   const rpcUrl = (process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network').trim()
   const privateKey = requirePrivateKey()
@@ -132,9 +134,7 @@ async function main() {
 
   const balance = await publicClient.getBalance({ address: account.address })
   if (balance === 0n) {
-    throw new Error(
-      `Deployer ${account.address} has 0 STT. Fund it from faucet first: https://cloud.google.com/application/web3/faucet/somnia/shannon`
-    )
+    throw new Error(`Deployer ${account.address} has 0 STT. Fund it from faucet first: https://cloud.google.com/application/web3/faucet/somnia/shannon`)
   }
 
   const { abi, bytecode } = await compilePixelRoyale(projectRoot)
@@ -191,9 +191,7 @@ async function main() {
 
   const contractAddress = receipt.contractAddress
   console.log(`Contract deployed at: ${contractAddress}`)
-  console.log(
-    `Explorer: https://shannon-explorer.somnia.network/address/${contractAddress}`
-  )
+  console.log(`Explorer: https://shannon-explorer.somnia.network/address/${contractAddress}`)
 
   const abiPath = path.join(projectRoot, 'contracts', 'abi.json')
   await writeFile(abiPath, `${JSON.stringify(abi, null, 2)}\n`, 'utf8')
@@ -203,25 +201,21 @@ async function main() {
   const deploymentPath = path.join(deploymentsDir, 'somnia-shannon-50312.json')
   await writeFile(
     deploymentPath,
-    `${JSON.stringify(
-      {
-        chainId: 50312,
-        chainName: 'Somnia Testnet',
-        rpcUrl,
-        deployer: account.address,
-        orchestrator: orchestratorAddress,
-        contract: {
-          name: 'PixelRoyale',
-          address: contractAddress,
-          txHash: hash,
-          deployedAtBlock: Number(receipt.blockNumber),
-        },
-        deployedAt: new Date().toISOString(),
+    `${JSON.stringify({
+      chainId: 50312,
+      chainName: 'Somnia Testnet',
+      rpcUrl,
+      deployer: account.address,
+      orchestrator: orchestratorAddress,
+      contract: {
+        name: 'PixelRoyale',
+        address: contractAddress,
+        txHash: hash,
+        deployedAtBlock: Number(receipt.blockNumber),
       },
-      null,
-      2
-    )}\n`,
-    'utf8'
+      deployedAt: new Date().toISOString(),
+    }, null, 2)}\n`,
+    'utf8',
   )
 
   console.log('\nSet these env values now:')
@@ -229,8 +223,9 @@ async function main() {
   console.log(`GAME_CONTRACT_ADDRESS=${contractAddress}`)
 }
 
-main().catch((error) => {
+void main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
   console.error('\nDeploy failed:')
-  console.error(error.message || error)
+  console.error(message)
   process.exit(1)
 })

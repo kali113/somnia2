@@ -9,7 +9,8 @@
     "build:ops-vm": "tsc -p ops/vm/tsconfig.scripts.json",
     "start": "next start",
     "lint": "eslint .",
-    "deploy:somnia": "node scripts/deploy-somnia.mjs"
+    "build:scripts": "tsc -p scripts/tsconfig.json",
+    "deploy:somnia": "pnpm build:scripts && node scripts/dist/deploy-somnia.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

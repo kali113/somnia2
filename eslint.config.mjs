@@ -10,6 +10,7 @@ const config = [
       'node_modules/**',
       'tsconfig.tsbuildinfo',
       'ops/vm/dist/**',
+      'scripts/dist/**',
     ],
   },
 ]
