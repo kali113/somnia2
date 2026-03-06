@@ -305,55 +305,57 @@ function GamePageInner() {
     }
 
     resultSubmittedRef.current = true
-    setResultSubmitting(true)
+    const task = window.setTimeout(() => {
+      void (async () => {
+        setResultSubmitting(true)
 
-    const state = gameStateRef.current
-    if (!state) {
-      setResultSubmitting(false)
-      setResultError('Game state unavailable')
-      return
-    }
-
-    // Build participant list: player + bots
-    const participants: { address: string; placement: number; kills: number }[] = []
-
-    // Player entry
-    participants.push({
-      address: walletAddress,
-      placement: state.placement,
-      kills: state.player.kills,
-    })
-
-    // Bot entries
-    state.bots.forEach((bot, i) => {
-      participants.push({
-        address: botPlaceholderAddress(state.gameId, i),
-        // Bots still alive at game end (placement === 0) survived = placement 1
-        placement: bot.placement === 0 ? 1 : bot.placement,
-        kills: bot.kills,
-      })
-    })
-
-    // Sort by placement ascending (1 = winner first)
-    participants.sort((a, b) => a.placement - b.placement)
-
-    const placements = participants.map((p) => p.address)
-    const kills = participants.map((p) => p.kills)
-
-    submitGameResult({ gameId: state.gameId, placements, kills })
-      .then((response) => {
-        if (response.success) {
+        const state = gameStateRef.current
+        if (!state) {
           setResultSubmitting(false)
-          setResultTxHash(response.txHash)
-        } else {
-          setResultSubmitting(false)
-          setResultError(response.error ?? 'Unknown error')
+          setResultError('Game state unavailable')
+          return
         }
-      })
-      .catch((err) => {
-        setResultSubmitting(false)
-        setResultError(err instanceof Error ? err.message : 'Unknown error')
-      })
+
+        const participants: { address: string; placement: number; kills: number }[] = []
+
+        participants.push({
+          address: walletAddress,
+          placement: state.placement,
+          kills: state.player.kills,
+        })
+
+        state.bots.forEach((bot, i) => {
+          participants.push({
+            address: botPlaceholderAddress(state.gameId, i),
+            placement: bot.placement === 0 ? 1 : bot.placement,
+            kills: bot.kills,
+          })
+        })
+
+        participants.sort((a, b) => a.placement - b.placement)
+
+        const placements = participants.map((participant) => participant.address)
+        const kills = participants.map((participant) => participant.kills)
+
+        try {
+          const response = await submitGameResult({ gameId: state.gameId, placements, kills })
+          if (response.success) {
+            setResultSubmitting(false)
+            setResultTxHash(response.txHash)
+          } else {
+            setResultSubmitting(false)
+            setResultError(response.error ?? 'Unknown error')
+          }
+        } catch (err) {
+          setResultSubmitting(false)
+          setResultError(err instanceof Error ? err.message : 'Unknown error')
+        }
+      })()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(task)
+    }
   }, [phase, isMatchMode, walletAddress])
 
   useEffect(() => {
