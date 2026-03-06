@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { WebSocketServer, WebSocket } from 'ws'
 import http from 'http'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import path from 'node:path'
@@ -173,7 +173,11 @@ app.post('/api/admin/redeploy', async (req, res) => {
   }
 
   try {
-    await execFileAsync('systemctl', ['start', REDEPLOY_SERVICE])
+    const child = spawn('systemctl', ['start', REDEPLOY_SERVICE], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
     res.json({
       ok: true,
       message: 'Redeploy triggered.',
