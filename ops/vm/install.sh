@@ -65,20 +65,21 @@ status_block = """
     }
 
     location = /status/ {
-        rewrite ^ /status/index.html break;
+        return 302 /status/index.html;
     }
 """.strip()
 
-if "location = /status" not in text:
-    marker = "    location / {\n        try_files $uri $uri/ $uri.html /index.html;\n    }\n"
-    if marker not in text:
-        raise SystemExit("Expected nginx location block not found.")
-    text = text.replace(marker, status_block + "\n\n" + marker)
-    path.write_text(text)
-elif "location ^~ /status/data/" in text:
+marker = "    location / {\n        try_files $uri $uri/ $uri.html /index.html;\n    }\n"
+if marker not in text:
+    raise SystemExit("Expected nginx location block not found.")
+
+if "location = /status" in text:
     start = text.index("location = /status")
     end = text.index("    location / {", start)
     text = text[:start] + status_block + "\n\n" + text[end:]
+    path.write_text(text)
+else:
+    text = text.replace(marker, status_block + "\n\n" + marker)
     path.write_text(text)
 PY
 

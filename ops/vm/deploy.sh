@@ -205,6 +205,7 @@ pnpm build
 popd >/dev/null
 
 rsync -a --delete "$RELEASE_DIR/out/" "$LIVE_WEB_ROOT/"
+ln -sfn "$STATUS_ROOT" "$LIVE_WEB_ROOT/status"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 pm2 startOrReload "$ECOSYSTEM_FILE" --update-env
 pm2 save

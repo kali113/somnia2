@@ -2,7 +2,9 @@ import express from 'express'
 import cors from 'cors'
 import { WebSocketServer, WebSocket } from 'ws'
 import http from 'http'
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
@@ -37,6 +39,7 @@ dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
 const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
+const execFileAsync = promisify(execFile)
 
 function readDeploymentContractAddress(): string {
   try {
@@ -66,6 +69,8 @@ const ORCHESTRATOR_KEY = (
   process.env.ORCHESTRATOR_PRIVATE_KEY ||
   process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
 ) as `0x${string}` | undefined
+const REDEPLOY_TOKEN = (process.env.REDEPLOY_TOKEN || '').trim()
+const REDEPLOY_SERVICE = (process.env.REDEPLOY_SERVICE || 'somnia2-deploy.service').trim()
 const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map((value) => value.trim())
@@ -79,6 +84,7 @@ const CORS_ORIGINS = configuredCorsOrigins.length > 0
       'http://127.0.0.1:3002',
       'http://188.166.47.230',
       'https://188.166.47.230',
+      'https://kali113.github.io',
     ]
 
 // ── Somnia chain definition ─────────────────────────────────────────────────
@@ -152,6 +158,35 @@ app.get('/api/health', (_req, res) => {
     contractAddress: CONTRACT_CONFIGURED ? CONTRACT_ADDRESS : null,
     orchestrator: orchestratorAccount?.address ?? null,
   })
+})
+
+app.post('/api/admin/redeploy', async (req, res) => {
+  if (!REDEPLOY_TOKEN) {
+    res.status(503).json({ error: 'Redeploy endpoint is not configured.' })
+    return
+  }
+
+  const providedToken = String(req.header('x-redeploy-token') || req.body?.token || '').trim()
+  if (providedToken !== REDEPLOY_TOKEN) {
+    res.status(401).json({ error: 'Invalid redeploy token.' })
+    return
+  }
+
+  try {
+    await execFileAsync('systemctl', ['start', REDEPLOY_SERVICE])
+    res.json({
+      ok: true,
+      message: 'Redeploy triggered.',
+      service: REDEPLOY_SERVICE,
+      requestedAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    res.status(500).json({
+      error: 'Failed to trigger redeploy.',
+      message,
+    })
+  }
 })
 
 // ── HTTP + WebSocket server ─────────────────────────────────────────────────

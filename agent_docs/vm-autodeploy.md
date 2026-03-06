@@ -14,6 +14,7 @@ Use this when working on the VM deployment pipeline and status page.
 - Frontend export syncs to `/var/www/somnia2`.
 - Backend restarts through PM2 using `ecosystem.config.cjs` and the stable `current` symlink.
 - Status files are written to `/var/www/somnia2-status/data/`.
+- Status page can trigger a manual redeploy through `POST /api/admin/redeploy` when `REDEPLOY_TOKEN` is configured on the backend.
 
 ## Verification
 - Local repo: `pnpm lint && pnpm build`

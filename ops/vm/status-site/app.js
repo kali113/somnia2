@@ -2,6 +2,9 @@ const summaryEl = document.getElementById("summary");
 const historyEl = document.getElementById("history");
 const logEl = document.getElementById("log");
 const refreshButton = document.getElementById("refresh");
+const redeployButton = document.getElementById("redeploy");
+const actionStatusEl = document.getElementById("action-status");
+const REDEPLOY_TOKEN_KEY = "somnia2-redeploy-token";
 
 function formatValue(value) {
   return value || "n/a";
@@ -64,6 +67,10 @@ function renderHistory(history) {
     .join("");
 }
 
+function setActionStatus(message) {
+  actionStatusEl.textContent = message;
+}
+
 async function load() {
   const [statusRes, historyRes, logRes] = await Promise.all([
     fetch("/status/data/status.json", { cache: "no-store" }),
@@ -84,6 +91,42 @@ refreshButton.addEventListener("click", () => {
   load().catch((error) => {
     logEl.textContent = `Failed to load status: ${error.message}`;
   });
+});
+
+redeployButton.addEventListener("click", async () => {
+  const savedToken = window.localStorage.getItem(REDEPLOY_TOKEN_KEY) || "";
+  const providedToken = window.prompt("Redeploy token", savedToken);
+  if (!providedToken) {
+    return;
+  }
+
+  window.localStorage.setItem(REDEPLOY_TOKEN_KEY, providedToken);
+  redeployButton.disabled = true;
+  setActionStatus("Triggering redeploy...");
+
+  try {
+    const response = await fetch("/api/admin/redeploy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-redeploy-token": providedToken,
+      },
+      body: JSON.stringify({}),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
+    }
+
+    setActionStatus("Redeploy requested. Refreshing status...");
+    await load();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setActionStatus(`Redeploy failed: ${message}`);
+  } finally {
+    redeployButton.disabled = false;
+  }
 });
 
 load().catch((error) => {
