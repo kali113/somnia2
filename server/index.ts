@@ -159,7 +159,6 @@ const app = express()
 app.disable('x-powered-by')
 app.locals.orchestratorApiToken = ORCHESTRATOR_API_TOKEN
 app.use(helmet({
-  contentSecurityPolicy: false,
   crossOriginResourcePolicy: false,
 }))
 app.use(cors({

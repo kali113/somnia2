@@ -134,8 +134,23 @@ function hasPrivilegedAccess(req: Request): boolean {
   const expectedToken = String(req.app.locals.orchestratorApiToken || '').trim()
   if (!expectedToken) return false
 
-  const bearerMatch = req.header('authorization')?.match(/^Bearer\s+(.+)$/i)
-  const presentedToken = String(req.header('x-orchestrator-token') || bearerMatch?.[1] || '').trim()
+  const authorizationHeader = req.header('authorization') || ''
+  let bearerToken = ''
+  if (authorizationHeader.slice(0, 6).toLowerCase() === 'bearer') {
+    let whitespaceIndex = 6
+    while (
+      whitespaceIndex < authorizationHeader.length
+      && (authorizationHeader[whitespaceIndex] === ' ' || authorizationHeader[whitespaceIndex] === '\t')
+    ) {
+      whitespaceIndex += 1
+    }
+
+    if (whitespaceIndex > 6) {
+      bearerToken = authorizationHeader.slice(whitespaceIndex).trim()
+    }
+  }
+
+  const presentedToken = String(req.header('x-orchestrator-token') || bearerToken || '').trim()
   if (!presentedToken) return false
 
   const expectedBuffer = Buffer.from(expectedToken, 'utf8')

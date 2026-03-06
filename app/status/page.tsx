@@ -43,8 +43,6 @@ interface SummaryRow {
   value: ReactNode
 }
 
-const REDEPLOY_PASSWORD_KEY = 'somnia2-redeploy-password'
-
 function formatValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') {
     return 'n/a'
@@ -196,13 +194,11 @@ export default function StatusPage() {
   }
 
   const handleRedeploy = async () => {
-    const savedPassword = window.localStorage.getItem(REDEPLOY_PASSWORD_KEY) || ''
-    const providedPassword = window.prompt('Redeploy password', savedPassword)
+    const providedPassword = window.prompt('Redeploy password')
     if (!providedPassword) {
       return
     }
 
-    window.localStorage.setItem(REDEPLOY_PASSWORD_KEY, providedPassword)
     setRedeploying(true)
     setActionStatus('Triggering redeploy...')
 
