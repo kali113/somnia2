@@ -151,6 +151,8 @@ export interface GameState {
   searchContainerProgress: number
   searchNonce: number
   aimAssistBotIdx: number   // index into bots[], -1 if no target
+  /** Counts down from totalPlayers as entities are eliminated. */
+  nextPlacement: number
 
   // Callbacks for React UI
   onKillFeedUpdate?: (feed: KillFeedEntry[]) => void
@@ -254,6 +256,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
     searchContainerProgress: 0,
     searchNonce: 0,
     aimAssistBotIdx: -1,
+    nextPlacement: botCount + 1, // total participants (player + bots)
   }
 
   // Store cleanup on canvas for later
@@ -812,7 +815,8 @@ export function updateGame(state: GameState, dt: number) {
           addKillFeed(state, shooterBot.name, state.player.name, p.weaponId)
           state.aliveCount--
           state.aliveTeams--
-          state.placement = state.aliveCount
+          state.placement = state.nextPlacement
+          state.nextPlacement--
           state.phase = 'eliminated'
           state.onPhaseChange?.('eliminated')
         }
@@ -837,6 +841,12 @@ export function updateGame(state: GameState, dt: number) {
           playElim()
           state.aliveCount--
           state.onAliveCountUpdate?.(state.aliveCount)
+
+          // Assign placement to eliminated bot
+          if ('placement' in entity && typeof entity.placement === 'number') {
+            entity.placement = state.nextPlacement
+          }
+          state.nextPlacement--
 
           const killerName = p.ownerId === -1
             ? state.player.name
@@ -955,7 +965,8 @@ export function updateGame(state: GameState, dt: number) {
       playEliminated()
       state.aliveCount--
       state.aliveTeams--
-      state.placement = state.aliveCount
+      state.placement = state.nextPlacement
+      state.nextPlacement--
       state.phase = 'eliminated'
       state.onPhaseChange?.('eliminated')
     }
@@ -987,6 +998,10 @@ export function updateGame(state: GameState, dt: number) {
       emitElimination(state.particles, bot.x, bot.y)
       state.aliveCount--
       addKillFeed(state, 'The Storm', bot.name, 'storm')
+
+      // Assign placement to eliminated bot
+      bot.placement = state.nextPlacement
+      state.nextPlacement--
 
       if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
         state.aliveTeams--
@@ -1041,6 +1056,10 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
           state.player.kills++
         }
         addKillFeed(state, attacker.name, bot.name, 'pickaxe')
+
+        // Assign placement to eliminated bot
+        bot.placement = state.nextPlacement
+        state.nextPlacement--
 
         if (bot.teamId !== 0 && !isBotTeamAlive(state, bot.teamId)) {
           state.aliveTeams--

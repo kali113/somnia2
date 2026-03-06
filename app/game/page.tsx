@@ -19,6 +19,7 @@ import { fetchMatchById, type MatchRecord } from '@/lib/somnia/matchmaking-clien
 import { isBackendConfigured, backendConfigError } from '@/lib/somnia/runtime-config'
 import { openContainerVerifiedOnChain } from '@/lib/somnia/chest-log'
 import { commitStormCircleOnChain } from '@/lib/somnia/storm-log'
+import { submitGameResult, botPlaceholderAddress } from '@/lib/somnia/game-result'
 import GameHUD from '@/components/game/GameHUD'
 import KillFeed from '@/components/game/KillFeed'
 import VictoryScreen from '@/components/game/VictoryScreen'
@@ -51,6 +52,7 @@ function GamePageInner() {
   const router = useRouter()
   const gameStateRef = useRef<GameState | null>(null)
   const reactivityRef = useRef<ReturnType<typeof createReactivityConnection> | null>(null)
+  const resultSubmittedRef = useRef(false)
 
   const matchIdParam = searchParams.get('matchId')
   const parsedMatchId = matchIdParam ? Number(matchIdParam) : NaN
@@ -81,6 +83,9 @@ function GamePageInner() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [containerTxToast, setContainerTxToast] = useState<ContainerTxToast | null>(null)
+  const [resultSubmitting, setResultSubmitting] = useState(false)
+  const [resultTxHash, setResultTxHash] = useState<string | null>(null)
+  const [resultError, setResultError] = useState<string | null>(null)
 
   // Audio
   const [muted, setMutedState] = useState(() => isMuted())
@@ -288,6 +293,69 @@ function GamePageInner() {
     })
   }, [pushSystemEvent])
 
+  // Submit game result on-chain when a match-mode game ends
+  useEffect(() => {
+    if (
+      (phase !== 'victory' && phase !== 'eliminated') ||
+      !isMatchMode ||
+      !walletAddress ||
+      resultSubmittedRef.current
+    ) {
+      return
+    }
+
+    resultSubmittedRef.current = true
+    setResultSubmitting(true)
+
+    const state = gameStateRef.current
+    if (!state) {
+      setResultSubmitting(false)
+      setResultError('Game state unavailable')
+      return
+    }
+
+    // Build participant list: player + bots
+    const participants: { address: string; placement: number; kills: number }[] = []
+
+    // Player entry
+    participants.push({
+      address: walletAddress,
+      placement: state.placement,
+      kills: state.player.kills,
+    })
+
+    // Bot entries
+    state.bots.forEach((bot, i) => {
+      participants.push({
+        address: botPlaceholderAddress(state.gameId, i),
+        // Bots still alive at game end (placement === 0) survived = placement 1
+        placement: bot.placement === 0 ? 1 : bot.placement,
+        kills: bot.kills,
+      })
+    })
+
+    // Sort by placement ascending (1 = winner first)
+    participants.sort((a, b) => a.placement - b.placement)
+
+    const placements = participants.map((p) => p.address)
+    const kills = participants.map((p) => p.kills)
+
+    submitGameResult({ gameId: state.gameId, placements, kills })
+      .then((response) => {
+        if (response.success) {
+          setResultSubmitting(false)
+          setResultTxHash(response.txHash)
+        } else {
+          setResultSubmitting(false)
+          setResultError(response.error ?? 'Unknown error')
+        }
+      })
+      .catch((err) => {
+        setResultSubmitting(false)
+        setResultError(err instanceof Error ? err.message : 'Unknown error')
+      })
+  }, [phase, isMatchMode, walletAddress])
+
   useEffect(() => {
     if (!containerTxToast || containerTxToast.kind === 'pending') return
     const timer = setTimeout(() => setContainerTxToast(null), 4200)
@@ -412,6 +480,10 @@ function GamePageInner() {
             mode={gameMode}
             onPlayAgain={handlePlayAgain}
             onBackToMenu={handleBackToMenu}
+            isMatchMode={isMatchMode}
+            resultSubmitting={resultSubmitting}
+            resultTxHash={resultTxHash}
+            resultError={resultError}
           />
         </>
       ) : (

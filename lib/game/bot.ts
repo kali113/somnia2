@@ -34,6 +34,8 @@ export interface Bot extends Player {
   aggressiveness: number
   sightRange: number
   targetEntityId: number
+  /** Final placement position (1 = winner). 0 means still alive / unset. */
+  placement: number
 }
 
 export function createBot(id: number, x: number, y: number, teamId: number = 0): Bot {
@@ -87,6 +89,7 @@ export function createBot(id: number, x: number, y: number, teamId: number = 0):
     aggressiveness: 0.3 + Math.random() * 0.6,
     sightRange: 300 + Math.random() * 200,
     targetEntityId: -1,
+    placement: 0,
   }
 }
 

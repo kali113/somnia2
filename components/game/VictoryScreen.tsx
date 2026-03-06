@@ -13,10 +13,15 @@ interface VictoryScreenProps {
   mode?: GameMode
   onPlayAgain: () => void
   onBackToMenu: () => void
+  isMatchMode?: boolean
+  resultSubmitting?: boolean
+  resultTxHash?: string | null
+  resultError?: string | null
 }
 
 export default function VictoryScreen({
   phase, player, placement, gameTime, mode, onPlayAgain, onBackToMenu,
+  isMatchMode = false, resultSubmitting = false, resultTxHash = null, resultError = null,
 }: VictoryScreenProps) {
   if (phase !== 'victory' && phase !== 'eliminated') return null
   const isVictory = phase === 'victory'
@@ -75,6 +80,55 @@ export default function VictoryScreen({
               <span className="text-2xl font-mono font-bold text-white">{player.damageDealt}</span>
               <span className="text-xs font-mono text-[rgba(255,255,255,0.5)]">Damage</span>
             </div>
+          </div>
+        )}
+
+        {/* On-chain status */}
+        {isMatchMode && resultSubmitting && (
+          <div
+            className="rounded-lg border px-4 py-2.5 text-center font-mono text-xs backdrop-blur-sm"
+            style={{
+              backgroundColor: 'rgba(58, 232, 255, 0.08)',
+              borderColor: 'rgba(58, 232, 255, 0.3)',
+              color: '#3ae8ff',
+            }}
+          >
+            <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-[#3ae8ff]" />
+            Recording result on-chain...
+          </div>
+        )}
+        {isMatchMode && !resultSubmitting && resultTxHash && (
+          <div
+            className="rounded-lg border px-4 py-2.5 text-center font-mono text-xs backdrop-blur-sm"
+            style={{
+              backgroundColor: 'rgba(76, 255, 76, 0.08)',
+              borderColor: 'rgba(76, 255, 76, 0.3)',
+              color: '#4cff4c',
+            }}
+          >
+            Result recorded on-chain{' '}
+            <a
+              href={`https://shannon-explorer.somnia.network/tx/${resultTxHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:brightness-125"
+              style={{ color: '#4cff4c' }}
+            >
+              {resultTxHash.slice(0, 10)}...
+            </a>
+          </div>
+        )}
+        {isMatchMode && !resultSubmitting && !resultTxHash && resultError && (
+          <div
+            className="rounded-lg border px-4 py-2.5 text-center font-mono text-xs backdrop-blur-sm"
+            style={{
+              backgroundColor: 'rgba(255, 68, 68, 0.08)',
+              borderColor: 'rgba(255, 68, 68, 0.3)',
+              color: '#ff4444',
+            }}
+          >
+            Failed to record result &mdash;{' '}
+            <span className="text-[rgba(255,255,255,0.5)]">{resultError}</span>
           </div>
         )}
 
