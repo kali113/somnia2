@@ -1,9 +1,13 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import { WebSocketServer, WebSocket } from 'ws'
 import http from 'http'
 import { execFile, spawn } from 'node:child_process'
+import { timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import type { Duplex } from 'node:stream'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,8 +73,10 @@ const ORCHESTRATOR_KEY = (
   process.env.ORCHESTRATOR_PRIVATE_KEY ||
   process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
 ) as `0x${string}` | undefined
+const ORCHESTRATOR_API_TOKEN = (process.env.ORCHESTRATOR_API_TOKEN || '').trim()
 const REDEPLOY_PASSWORD = (process.env.REDEPLOY_PASSWORD || '').trim()
 const REDEPLOY_SERVICE = (process.env.REDEPLOY_SERVICE || 'somnia2-force-deploy.service').trim()
+const MAX_WS_CLIENTS = parseInt(process.env.MAX_WS_CLIENTS || '100', 10)
 const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map((value) => value.trim())
@@ -122,18 +128,56 @@ if (!CONTRACT_CONFIGURED) {
 // ── In-memory data store ────────────────────────────────────────────────────
 const store = new GameStore()
 
+function tokensMatch(expected: string, presented: string): boolean {
+  if (!expected || !presented) return false
+
+  const expectedBuffer = Buffer.from(expected, 'utf8')
+  const presentedBuffer = Buffer.from(presented, 'utf8')
+  if (expectedBuffer.length !== presentedBuffer.length) {
+    return false
+  }
+
+  return timingSafeEqual(expectedBuffer, presentedBuffer)
+}
+
+function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  return Boolean(origin && CORS_ORIGINS.includes(origin))
+}
+
+function rejectUpgrade(socket: Duplex, statusCode: number, message: string): void {
+  if (!socket.writable) {
+    socket.destroy()
+    return
+  }
+
+  socket.write(`HTTP/1.1 ${statusCode} ${message}\r\nConnection: close\r\n\r\n`)
+  socket.destroy()
+}
+
 // ── Express app ─────────────────────────────────────────────────────────────
 const app = express()
+app.disable('x-powered-by')
+app.locals.orchestratorApiToken = ORCHESTRATOR_API_TOKEN
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false,
+}))
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || CORS_ORIGINS.includes(origin)) {
+    if (!origin || isAllowedCorsOrigin(origin)) {
       callback(null, true)
       return
     }
     callback(new Error(`Origin ${origin} not allowed by CORS`))
   },
 }))
-app.use(express.json())
+app.use(rateLimit({
+  windowMs: 60_000,
+  limit: 180,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}))
+app.use(express.json({ limit: '32kb' }))
 
 // Attach shared state to request
 app.use((req, _res, next) => {
@@ -160,14 +204,19 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
-app.post('/api/admin/redeploy', async (req, res) => {
+app.post('/api/admin/redeploy', rateLimit({
+  windowMs: 60_000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+}), async (req, res) => {
   if (!REDEPLOY_PASSWORD) {
     res.status(503).json({ error: 'Redeploy endpoint is not configured.' })
     return
   }
 
   const providedPassword = String(req.header('x-redeploy-password') || req.body?.password || '').trim()
-  if (providedPassword !== REDEPLOY_PASSWORD) {
+  if (!tokensMatch(REDEPLOY_PASSWORD, providedPassword)) {
     res.status(401).json({ error: 'Invalid redeploy password.' })
     return
   }
@@ -188,20 +237,36 @@ app.post('/api/admin/redeploy', async (req, res) => {
     const message = error instanceof Error ? error.message : String(error)
     res.status(500).json({
       error: 'Failed to trigger redeploy.',
-      message,
+      message: 'Internal server error.',
     })
   }
 })
 
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not found' })
+})
+
+app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('not allowed by CORS')) {
+    res.status(403).json({ error: 'Origin not allowed' })
+    return
+  }
+
+  console.error(`[server] Unhandled error: ${message}`)
+  res.status(500).json({ error: 'Internal server error' })
+})
+
 // ── HTTP + WebSocket server ─────────────────────────────────────────────────
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws/queue' })
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 
 type WsMessageType = 'queue_update' | 'match_assigned' | 'match_updated' | 'orchestrator_status' | 'game_event'
 
 interface WsClient {
   ws: WebSocket
   address: string | null
+  isAlive: boolean
 }
 
 const wsClients = new Set<WsClient>()
@@ -286,7 +351,7 @@ wss.on('connection', (ws, req) => {
   const rawAddress = requestUrl.searchParams.get('address')
   const address = rawAddress && isAddress(rawAddress) ? rawAddress.toLowerCase() : null
 
-  const client: WsClient = { ws, address }
+  const client: WsClient = { ws, address, isAlive: true }
   wsClients.add(client)
 
   console.log(`[ws] Client connected (${wsClients.size} total)`) 
@@ -304,10 +369,62 @@ wss.on('connection', (ws, req) => {
     }
   }
 
+  ws.on('pong', () => {
+    client.isAlive = true
+  })
+
   ws.on('close', () => {
     wsClients.delete(client)
     console.log(`[ws] Client disconnected (${wsClients.size} total)`)
   })
+
+  ws.on('error', () => {
+    wsClients.delete(client)
+  })
+})
+
+server.on('upgrade', (request, socket, head) => {
+  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
+  if (requestUrl.pathname !== '/ws/queue') {
+    rejectUpgrade(socket, 404, 'Not Found')
+    return
+  }
+
+  if (!isAllowedCorsOrigin(request.headers.origin)) {
+    rejectUpgrade(socket, 403, 'Forbidden')
+    return
+  }
+
+  if (wsClients.size >= MAX_WS_CLIENTS) {
+    rejectUpgrade(socket, 503, 'Server Busy')
+    return
+  }
+
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request)
+  })
+})
+
+const wsHeartbeat = setInterval(() => {
+  for (const client of wsClients) {
+    if (client.ws.readyState !== WebSocket.OPEN) {
+      wsClients.delete(client)
+      continue
+    }
+
+    if (!client.isAlive) {
+      client.ws.terminate()
+      wsClients.delete(client)
+      continue
+    }
+
+    client.isAlive = false
+    client.ws.ping()
+  }
+}, 30_000)
+
+server.on('close', () => {
+  clearInterval(wsHeartbeat)
 })
 
 // Make broadcast functions available for existing routes

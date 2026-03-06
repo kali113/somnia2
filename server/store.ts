@@ -134,9 +134,12 @@ export class GameStore {
       const mode = this.playerModes.get(p.toLowerCase())
       if (mode) votes[mode]++
     }
-    if (votes.squad >= votes.duo && votes.squad >= votes.solo) return 'squad'
-    if (votes.duo >= votes.solo) return 'duo'
-    return 'solo'
+
+    // Default to solo when no stored preference exists.
+    if (votes.solo === 0 && votes.duo === 0 && votes.squad === 0) return 'solo'
+    if (votes.solo >= votes.duo && votes.solo >= votes.squad) return 'solo'
+    if (votes.duo >= votes.squad) return 'duo'
+    return 'squad'
   }
 
   // ── Matchmaking lifecycle ────────────────────────────────────────────────

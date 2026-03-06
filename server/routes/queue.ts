@@ -34,21 +34,10 @@ queueRouter.post('/leave', (_req, res) => {
 
 /**
  * POST /api/queue/mode
- * Solo is the only supported matchmaking mode right now.
- * Body: { address: string, mode?: 'solo' }
+ * Deprecated: solo queue is fixed in the current release.
  */
-queueRouter.post('/mode', (req, res) => {
-  const store = (req as any).store as GameStore
-  const { address, mode } = req.body as { address?: string; mode?: string }
-
-  if (!address || typeof address !== 'string') {
-    return res.status(400).json({ error: 'address is required' })
-  }
-
-  if (mode && mode !== 'solo') {
-    return res.status(410).json({ error: 'Only solo queue is currently supported' })
-  }
-
-  store.setPlayerMode(address, 'solo')
-  return res.json({ ok: true, address: address.toLowerCase(), mode: 'solo' })
+queueRouter.post('/mode', (_req, res) => {
+  return res.status(410).json({
+    error: 'Queue mode preferences are disabled. Solo queue is the only supported mode.',
+  })
 })

@@ -9,6 +9,7 @@ import {
 } from '@/lib/somnia/contract'
 import {
   createSessionWallet,
+  DEFAULT_SESSION_DURATION_MS,
   restoreSessionWallet,
   destroySessionWallet,
   getSessionExpirySolidity,
@@ -40,10 +41,20 @@ export default function SessionKeyPanel() {
   const { data: isValidOnChain, refetch: refetchSession } = useReadContract({
     ...getIsValidSessionArgs(
       address ?? '0x0000000000000000000000000000000000000000',
-      session?.account.address ?? '0x0000000000000000000000000000000000000000'
+      session?.address ?? '0x0000000000000000000000000000000000000000'
     ),
     query: { enabled: !!address && !!session && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 10000 },
   })
+
+  useEffect(() => {
+    if (!address && session) {
+      const timer = window.setTimeout(() => {
+        destroySessionWallet()
+        setSession(null)
+      }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [address, session])
 
   // Countdown timer
   useEffect(() => {
@@ -75,7 +86,7 @@ export default function SessionKeyPanel() {
 
     let newSession
     try {
-      newSession = createSessionWallet(3600_000) // 1 hour
+      newSession = createSessionWallet(DEFAULT_SESSION_DURATION_MS)
     } catch (e) {
       setTxError(e instanceof Error ? e.message : 'Failed to create session wallet')
       return
@@ -87,7 +98,7 @@ export default function SessionKeyPanel() {
     if (address) {
       approveKey(
         approveSessionKeyArgs(
-          newSession.account.address,
+          newSession.address,
           getSessionExpirySolidity(newSession)
         )
       )
@@ -96,7 +107,7 @@ export default function SessionKeyPanel() {
 
   const handleRevokeSession = useCallback(() => {
     if (session && address) {
-      revokeKey(revokeSessionKeyArgs(session.account.address))
+      revokeKey(revokeSessionKeyArgs(session.address))
       destroySessionWallet()
       setSession(null)
     }
@@ -141,7 +152,7 @@ export default function SessionKeyPanel() {
 
       <p className="text-[11px] font-mono text-[rgba(255,255,255,0.35)] mb-4 leading-relaxed">
         Session keys let you play without signing every in-game transaction.
-        A temporary wallet is created in your browser and approved on-chain.
+        A short-lived session address is approved on-chain, but the browser does not persist the signer key.
       </p>
 
       {session ? (
@@ -204,7 +215,7 @@ export default function SessionKeyPanel() {
               Approving...
             </span>
           ) : (
-            'Create Session Key (1 hour)'
+            'Create Session Key (15 min)'
           )}
           </button>
         </>

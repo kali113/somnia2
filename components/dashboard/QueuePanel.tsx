@@ -49,7 +49,7 @@ export default function QueuePanel() {
   })
 
   const [sessionAddress, setSessionAddress] = useState<Address | null>(
-    () => restoreSessionWallet()?.account.address ?? null,
+    () => restoreSessionWallet()?.address ?? null,
   )
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function QueuePanel() {
   useEffect(() => {
     const handleSessionChanged = () => {
       const session = restoreSessionWallet()
-      setSessionAddress(session?.account.address ?? null)
+      setSessionAddress(session?.address ?? null)
     }
 
     window.addEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)

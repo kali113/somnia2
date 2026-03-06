@@ -1,35 +1,17 @@
-import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
-import { createWalletClient, defineChain, http, formatEther, parseEther, type WalletClient } from 'viem'
-import { SOMNIA_RPC_URL, SOMNIA_TESTNET } from '@/lib/somnia/config'
-
-const somniaSessionChain = defineChain({
-  id: SOMNIA_TESTNET.id,
-  name: SOMNIA_TESTNET.name,
-  nativeCurrency: SOMNIA_TESTNET.nativeCurrency,
-  rpcUrls: {
-    default: {
-      http: [SOMNIA_RPC_URL],
-      webSocket: SOMNIA_TESTNET.rpcUrls.default.webSocket,
-    },
-  },
-  blockExplorers: {
-    default: SOMNIA_TESTNET.blockExplorers.default,
-  },
-  testnet: SOMNIA_TESTNET.testnet,
-})
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { formatEther, isAddress, parseEther, type Address } from 'viem'
 
 const SESSION_KEY = 'pixel_royale_session'
 export const SESSION_UPDATED_EVENT = 'pixel-royale-session-updated'
+export const DEFAULT_SESSION_DURATION_MS = 15 * 60_000
 
 export interface SessionWallet {
-  account: PrivateKeyAccount
-  client: WalletClient
-  privateKey: `0x${string}`
-  expiry: number // unix timestamp
+  address: Address
+  expiry: number // unix timestamp in ms
 }
 
 interface StoredSession {
-  privateKey: string
+  address: string
   expiry: number
 }
 
@@ -40,33 +22,32 @@ function notifySessionUpdated(): void {
 }
 
 /**
- * Create a new session wallet.
- * Generates an ephemeral private key stored in sessionStorage.
- * The session lasts for `durationMs` (default 1 hour).
+ * Create a short-lived session approval address.
+ *
+ * The signer key is not persisted in browser storage. Only the approved
+ * address and expiry are stored so the UI can track the session state.
  */
-export function createSessionWallet(durationMs: number = 3600_000): SessionWallet {
-  const privateKey = generatePrivateKey()
-  const account = privateKeyToAccount(privateKey)
-  const expiry = Date.now() + durationMs
+export function createSessionWallet(durationMs: number = DEFAULT_SESSION_DURATION_MS): SessionWallet {
+  const account = privateKeyToAccount(generatePrivateKey())
+  const session: SessionWallet = {
+    address: account.address,
+    expiry: Date.now() + durationMs,
+  }
 
-  const client = createWalletClient({
-    account,
-    chain: somniaSessionChain,
-    transport: http(SOMNIA_RPC_URL),
-  })
-
-  // Store in sessionStorage (cleared when tab closes)
   if (typeof window !== 'undefined') {
-    const stored: StoredSession = { privateKey, expiry }
+    const stored: StoredSession = {
+      address: session.address,
+      expiry: session.expiry,
+    }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored))
     notifySessionUpdated()
   }
 
-  return { account, client, privateKey, expiry }
+  return session
 }
 
 /**
- * Restore a session wallet from sessionStorage if it exists and hasn't expired.
+ * Restore the short-lived session approval state if it still exists.
  */
 export function restoreSessionWallet(): SessionWallet | null {
   if (typeof window === 'undefined') return null
@@ -76,21 +57,15 @@ export function restoreSessionWallet(): SessionWallet | null {
 
   try {
     const stored: StoredSession = JSON.parse(raw)
-
-    if (Date.now() >= stored.expiry) {
+    if (!isAddress(stored.address) || Date.now() >= stored.expiry) {
       destroySessionWallet()
       return null
     }
 
-    const privateKey = stored.privateKey as `0x${string}`
-    const account = privateKeyToAccount(privateKey)
-    const client = createWalletClient({
-      account,
-      chain: somniaSessionChain,
-      transport: http(SOMNIA_RPC_URL),
-    })
-
-    return { account, client, privateKey, expiry: stored.expiry }
+    return {
+      address: stored.address,
+      expiry: stored.expiry,
+    }
   } catch {
     destroySessionWallet()
     return null
@@ -98,7 +73,7 @@ export function restoreSessionWallet(): SessionWallet | null {
 }
 
 /**
- * Destroy the session wallet (clears sessionStorage).
+ * Destroy the stored session approval state.
  */
 export function destroySessionWallet(): void {
   if (typeof window !== 'undefined') {
@@ -109,7 +84,7 @@ export function destroySessionWallet(): void {
 
 /**
  * Get the session expiry timestamp for on-chain approval.
- * Returns a Unix timestamp in seconds (for Solidity).
+ * Returns a Unix timestamp in seconds.
  */
 export function getSessionExpirySolidity(session: SessionWallet): bigint {
   return BigInt(Math.floor(session.expiry / 1000))

@@ -50,6 +50,12 @@ contract PixelRoyale {
     // Rewards ledger
     mapping(address => uint256) public pendingRewards;
     mapping(address => uint256) public totalEarned;
+    uint256 private queuedDeposits;
+    uint256 private totalPendingRewards;
+    uint256 private totalUnsettledPrizePools;
+    mapping(uint256 => uint256) private unsettledPrizePools;
+    mapping(uint256 => uint8) private activeGamePlayerCounts;
+    mapping(uint256 => mapping(address => bool)) private activeGamePlayers;
 
     // Per-game results (for history queries)
     struct GameResult {
@@ -65,6 +71,7 @@ contract PixelRoyale {
 
     // Verified container open history
     mapping(address => mapping(bytes32 => bool)) public playerContainerOpened;
+    mapping(uint256 => mapping(bytes32 => bool)) private openedContainers;
 
     struct ContainerReward {
         uint8 weaponCode;
@@ -170,6 +177,7 @@ contract PixelRoyale {
 
         queue.push(msg.sender);
         inQueue[msg.sender] = true;
+        queuedDeposits += ENTRY_FEE;
 
         emit PlayerJoinedQueue(msg.sender, queue.length);
 
@@ -182,6 +190,7 @@ contract PixelRoyale {
     function leaveQueue() external {
         require(inQueue[msg.sender], "NOT_IN_QUEUE");
         _removeFromQueue(msg.sender);
+        queuedDeposits -= ENTRY_FEE;
         emit PlayerLeftQueue(msg.sender, queue.length);
         // Refund
         (bool ok, ) = msg.sender.call{value: ENTRY_FEE}("");
@@ -239,44 +248,25 @@ contract PixelRoyale {
     ) external onlyOrchestrator {
         require(_placements.length > 0, "EMPTY_PLACEMENTS");
         require(_placements.length == _kills.length, "LENGTH_MISMATCH");
+        uint256 pool = _consumeActiveGame(_gameId, _placements);
 
-        uint256 pool = ENTRY_FEE * _placements.length;
         // 10% of pool kept as protocol fee
         uint256 distributable = (pool * 900) / 1000;
 
         // Distribute rewards to top 5 (or fewer if less than 5 players)
         uint256 rewardSlots = _placements.length < 5 ? _placements.length : 5;
-        uint256 totalDistributed = 0;
 
         for (uint256 i = 0; i < rewardSlots; i++) {
             uint256 reward = (distributable * REWARD_BPS[i]) / 1000;
             pendingRewards[_placements[i]] += reward;
+            totalPendingRewards += reward;
             totalEarned[_placements[i]] += reward;
             stats[_placements[i]].totalEarned += reward;
-            totalDistributed += reward;
         }
 
         // Remainder stays in contract as protocol revenue
-        // Update stats
-        for (uint256 i = 0; i < _placements.length; i++) {
-            stats[_placements[i]].gamesPlayed += 1;
-            stats[_placements[i]].kills += _kills[i];
-            playerGames[_placements[i]].push(_gameId);
-        }
-        stats[_placements[0]].wins += 1;
-
-        // Store result
-        GameResult memory result = GameResult({
-            gameId: _gameId,
-            timestamp: block.timestamp,
-            winner: _placements[0],
-            placements: _placements,
-            prizePool: pool,
-            playerCount: uint8(_placements.length)
-        });
-        gameHistory.push(result);
-
-        emit GameEnded(_gameId, _placements[0], _placements, pool);
+        _recordPlayerStats(_gameId, _placements, _kills);
+        _storeGameResult(_gameId, _placements, pool);
     }
 
     // ──────────────────────────── Storm Commits ────────────────────────
@@ -353,11 +343,15 @@ contract PixelRoyale {
     ) external {
         require(_containerKey != bytes32(0), "INVALID_CONTAINER_KEY");
         require(_containerType <= 2, "INVALID_CONTAINER_TYPE");
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        require(activeGamePlayers[_gameId][msg.sender], "PLAYER_NOT_IN_GAME");
+        require(!openedContainers[_gameId][_containerKey], "CONTAINER_ALREADY_OPENED");
         require(!playerContainerOpened[msg.sender][_containerKey], "CONTAINER_ALREADY_OPENED");
 
         uint16 roll = _deriveRoll(_gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
         ContainerReward memory reward = _deriveContainerReward(_containerType, roll, _playerNonce);
 
+        openedContainers[_gameId][_containerKey] = true;
         playerContainerOpened[msg.sender][_containerKey] = true;
 
         emit ContainerOpened(
@@ -590,6 +584,7 @@ contract PixelRoyale {
         uint256 amount = pendingRewards[msg.sender];
         require(amount > 0, "NO_REWARDS");
         pendingRewards[msg.sender] = 0;
+        totalPendingRewards -= amount;
         (bool ok, ) = msg.sender.call{value: amount}("");
         require(ok, "CLAIM_FAILED");
         emit RewardClaimed(msg.sender, amount);
@@ -632,6 +627,7 @@ contract PixelRoyale {
 
     /// @notice Withdraw protocol fees.
     function withdrawFees(uint256 _amount) external onlyOwner {
+        require(_amount <= _availableProtocolFees(), "INSUFFICIENT_AVAILABLE_FEES");
         (bool ok, ) = owner.call{value: _amount}("");
         require(ok, "WITHDRAW_FAILED");
     }
@@ -642,10 +638,15 @@ contract PixelRoyale {
         uint256 gameId = nextGameId++;
         address[] memory players = queue;
         uint256 pool = ENTRY_FEE * players.length;
+        queuedDeposits -= pool;
+        totalUnsettledPrizePools += pool;
+        unsettledPrizePools[gameId] = pool;
+        activeGamePlayerCounts[gameId] = uint8(players.length);
 
         // Clear queue
         for (uint256 i = 0; i < players.length; i++) {
             inQueue[players[i]] = false;
+            activeGamePlayers[gameId][players[i]] = true;
         }
         delete queue;
         queueOpenedAt = 0;
@@ -663,6 +664,86 @@ contract PixelRoyale {
                 return;
             }
         }
+    }
+
+    function _consumeActiveGame(
+        uint256 _gameId,
+        address[] calldata _placements
+    ) internal returns (uint256 pool) {
+        uint8 recordedPlayerCount = activeGamePlayerCounts[_gameId];
+        pool = unsettledPrizePools[_gameId];
+        require(recordedPlayerCount > 0 && pool > 0, "GAME_NOT_ACTIVE");
+        _validatePlacements(_gameId, _placements, recordedPlayerCount);
+
+        delete unsettledPrizePools[_gameId];
+        totalUnsettledPrizePools -= pool;
+        delete activeGamePlayerCounts[_gameId];
+
+        for (uint256 i = 0; i < _placements.length; i++) {
+            delete activeGamePlayers[_gameId][_placements[i]];
+        }
+    }
+
+    function _validatePlacements(
+        uint256 _gameId,
+        address[] calldata _placements,
+        uint8 recordedPlayerCount
+    ) internal view {
+        require(_placements.length >= MIN_PLAYERS, "NOT_ENOUGH_PLAYERS");
+        require(_placements.length <= MAX_PLAYERS, "TOO_MANY_PLAYERS");
+        require(_placements.length == recordedPlayerCount, "PLAYER_COUNT_MISMATCH");
+
+        for (uint256 i = 0; i < _placements.length; i++) {
+            address player = _placements[i];
+            require(activeGamePlayers[_gameId][player], "PLAYER_NOT_IN_GAME");
+            for (uint256 j = 0; j < i; j++) {
+                require(_placements[j] != player, "DUPLICATE_PLAYER");
+            }
+        }
+    }
+
+    function _recordPlayerStats(
+        uint256 _gameId,
+        address[] calldata _placements,
+        uint256[] calldata _kills
+    ) internal {
+        for (uint256 i = 0; i < _placements.length; i++) {
+            stats[_placements[i]].gamesPlayed += 1;
+            stats[_placements[i]].kills += _kills[i];
+            playerGames[_placements[i]].push(_gameId);
+        }
+        stats[_placements[0]].wins += 1;
+    }
+
+    function _storeGameResult(
+        uint256 _gameId,
+        address[] calldata _placements,
+        uint256 pool
+    ) internal {
+        GameResult memory result = GameResult({
+            gameId: _gameId,
+            timestamp: block.timestamp,
+            winner: _placements[0],
+            placements: _placements,
+            prizePool: pool,
+            playerCount: uint8(_placements.length)
+        });
+        gameHistory.push(result);
+
+        emit GameEnded(_gameId, _placements[0], _placements, pool);
+    }
+
+    function _reservedLiabilities() internal view returns (uint256) {
+        return queuedDeposits + totalPendingRewards + totalUnsettledPrizePools;
+    }
+
+    function _availableProtocolFees() internal view returns (uint256) {
+        uint256 reserved = _reservedLiabilities();
+        uint256 balance = address(this).balance;
+        if (balance <= reserved) {
+            return 0;
+        }
+        return balance - reserved;
     }
 
     receive() external payable {}

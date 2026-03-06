@@ -10,12 +10,36 @@ function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
-function isHttpUrl(value: string): boolean {
-  return /^https?:\/\//.test(value)
+function isLocalHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1'
+}
+
+function validateBackendUrl(value: string): string | null {
+  if (!value) return null
+
+  try {
+    const parsed = new URL(value)
+    const pathname = parsed.pathname.replace(/\/+$/, '')
+    const normalized = `${parsed.origin}${pathname === '/' ? '' : pathname}`
+
+    if (parsed.protocol === 'https:') {
+      return normalized
+    }
+
+    if (parsed.protocol === 'http:' && isLocalHostname(parsed.hostname)) {
+      return normalized
+    }
+
+    return null
+  } catch {
+    return null
+  }
 }
 
 function toWsUrl(httpUrl: string): string {
-  return httpUrl.replace(/^http/i, 'ws')
+  return httpUrl.startsWith('https://')
+    ? httpUrl.replace(/^https/i, 'wss')
+    : httpUrl.replace(/^http/i, 'ws')
 }
 
 function detectLocalBackendUrl(): string {
@@ -50,15 +74,16 @@ export const configuredContractAddress: Address | null = isContractConfigured
 export const contractAddressOrFallback: Address = configuredContractAddress || FALLBACK_DEAD_ADDRESS
 
 const backendEnv = normalizeUrl((process.env.NEXT_PUBLIC_BACKEND_URL || detectLocalBackendUrl()).trim())
-const backendValid = backendEnv.length > 0 && isHttpUrl(backendEnv)
+const validatedBackendEnv = validateBackendUrl(backendEnv)
+const backendValid = validatedBackendEnv !== null
 
 export const isBackendConfigured = backendValid
 export const backendConfigError = isBackendConfigured
   ? null
-  : 'Missing NEXT_PUBLIC_BACKEND_URL (must start with http:// or https://).'
+  : 'Missing NEXT_PUBLIC_BACKEND_URL. Use https:// for non-local backends; http:// is allowed only for localhost.'
 
-export const backendHttpUrl: string | null = isBackendConfigured ? backendEnv : null
-export const backendWsUrl: string | null = isBackendConfigured ? `${toWsUrl(backendEnv)}/ws/queue` : null
+export const backendHttpUrl: string | null = validatedBackendEnv
+export const backendWsUrl: string | null = validatedBackendEnv ? `${toWsUrl(validatedBackendEnv)}/ws/queue` : null
 
 export function buildBackendApiUrl(path: string): string | null {
   if (!backendHttpUrl) return null
