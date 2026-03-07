@@ -215,7 +215,7 @@ export default function SessionKeyPanel() {
               Approving...
             </span>
           ) : (
-            'Create Session Key (15 min)'
+            'Create Session Key (1 hour)'
           )}
           </button>
         </>

@@ -15,6 +15,8 @@ import {
   getQueueSizeArgs,
   getQueuePlayersArgs,
   getInQueueArgs,
+  getQueueOpenedAtArgs,
+  getQueueTimeoutArgs,
   joinQueueArgs,
   leaveQueueArgs,
   ENTRY_FEE,
@@ -24,7 +26,7 @@ import {
   SOMNIA_FAUCET_URL,
 } from '@/lib/somnia/contract'
 import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
-import { restoreSessionWallet, SESSION_UPDATED_EVENT } from '@/lib/somnia/session-wallet'
+import { restoreSessionWallet, SESSION_UPDATED_EVENT, SESSION_MIN_REMAINING_MS } from '@/lib/somnia/session-wallet'
 import { Loader2, AlertTriangle, ExternalLink, Swords, Timer } from 'lucide-react'
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { formatEther, type Address } from 'viem'
@@ -75,56 +77,17 @@ export default function QueuePanel() {
   const [sessionAddress, setSessionAddress] = useState<Address | null>(
     () => restoreSessionWallet()?.address ?? null,
   )
+  const [sessionExpiry, setSessionExpiry] = useState<number | null>(
+    () => restoreSessionWallet()?.expiry ?? null,
+  )
 
   // ── Matchmaking WebSocket for countdown timer ─────────────────────────
   const { queue: wsQueue } = useMatchmaking(address ?? undefined)
 
-  // ── Countdown timer ────────────────────────────────────────────────────
-  // We track the deadline in a ref and let a 1-second interval push updates
-  // into state via the interval callback (not synchronously in the effect body).
+  // ── Countdown timer state (hooks must be declared unconditionally) ─────
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownDeadlineRef = useRef<number | null>(null)
-
-  // Compute whether the timer should be active
-  const timerActive = !!(wsQueue?.openedAt && wsQueue.size >= wsQueue.minPlayers)
-
-  useEffect(() => {
-    // Clear any existing timer
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current)
-      countdownRef.current = null
-    }
-
-    if (!timerActive || !wsQueue?.openedAt) {
-      countdownDeadlineRef.current = null
-      return
-    }
-
-    const deadline = wsQueue.openedAt + wsQueue.timeoutSec
-    countdownDeadlineRef.current = deadline
-
-    // The interval callback updates state (this is allowed — it's async, not synchronous in the effect body)
-    const tick = () => {
-      const d = countdownDeadlineRef.current
-      if (d === null) return
-      const now = Math.floor(Date.now() / 1000)
-      setCountdown(Math.max(0, d - now))
-    }
-
-    tick() // immediate first tick (runs in microtask via setInterval(fn, 0) below)
-    countdownRef.current = setInterval(tick, 1000)
-
-    return () => {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current)
-        countdownRef.current = null
-      }
-    }
-  }, [timerActive, wsQueue?.openedAt, wsQueue?.timeoutSec])
-
-  // Reset countdown when timer becomes inactive (derived, not in effect)
-  const displayCountdown = timerActive ? countdown : null
 
   // ── Optimistic join flag (prevents double-join race) ──────────────────
   const [optimisticJoinedRaw, setOptimisticJoined] = useState(false)
@@ -139,6 +102,7 @@ export default function QueuePanel() {
     const handleSessionChanged = () => {
       const session = restoreSessionWallet()
       setSessionAddress(session?.address ?? null)
+      setSessionExpiry(session?.expiry ?? null)
     }
 
     window.addEventListener(SESSION_UPDATED_EVENT, handleSessionChanged)
@@ -172,6 +136,17 @@ export default function QueuePanel() {
       enabled: !!address && !!sessionAddress && IS_PIXEL_ROYALE_CONFIGURED,
       refetchInterval: 5_000,
     },
+  })
+
+  // On-chain queue timer fallback (used when WebSocket is unavailable)
+  const { data: onChainOpenedAt } = useReadContract<bigint>({
+    ...getQueueOpenedAtArgs(),
+    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5_000 },
+  })
+
+  const { data: onChainTimeout } = useReadContract<bigint>({
+    ...getQueueTimeoutArgs(),
+    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED },
   })
 
   // Derive optimistic flag: auto-clear when on-chain state resolves
@@ -225,11 +200,73 @@ export default function QueuePanel() {
   const hasEnoughBalance = balance ? balance.value >= MIN_QUEUE_BALANCE : false
   const hasSessionWallet = !!sessionAddress
   const hasSessionConfigured = hasSessionWallet && isValidSession === true
+  const [sessionExpiringSoon, setSessionExpiringSoon] = useState(false)
+
+  // Check session expiry periodically (Date.now() is impure, so we use an interval)
+  useEffect(() => {
+    if (!sessionExpiry) {
+      const t = setTimeout(() => setSessionExpiringSoon(false), 0)
+      return () => clearTimeout(t)
+    }
+    const check = () => setSessionExpiringSoon((sessionExpiry - Date.now()) < SESSION_MIN_REMAINING_MS)
+    const t = setTimeout(check, 0)
+    const interval = setInterval(check, 10_000)
+    return () => { clearTimeout(t); clearInterval(interval) }
+  }, [sessionExpiry])
+
   const playerInQueue = isInQueue === true || optimisticJoined
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
 
   // Queue progress percentage
   const queueProgress = (currentQueueSize / 20) * 100
+
+  // ── Countdown timer logic ──────────────────────────────────────────────
+  // Resolve timer source: prefer WebSocket, fall back to on-chain reads
+  const resolvedOpenedAt: number | null = wsQueue?.openedAt
+    ?? (onChainOpenedAt && Number(onChainOpenedAt) > 0 ? Number(onChainOpenedAt) : null)
+  const resolvedTimeoutSec: number = wsQueue?.timeoutSec
+    ?? (onChainTimeout ? Number(onChainTimeout) : 120)
+  const resolvedMinPlayers: number = wsQueue?.minPlayers ?? 2
+
+  // Compute whether the timer should be active
+  const timerActive = !!(resolvedOpenedAt && currentQueueSize >= resolvedMinPlayers)
+
+  useEffect(() => {
+    // Clear any existing timer
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+
+    if (!timerActive || !resolvedOpenedAt) {
+      countdownDeadlineRef.current = null
+      return
+    }
+
+    const deadline = resolvedOpenedAt + resolvedTimeoutSec
+    countdownDeadlineRef.current = deadline
+
+    // The interval callback updates state (async, not synchronous in the effect body)
+    const tick = () => {
+      const d = countdownDeadlineRef.current
+      if (d === null) return
+      const now = Math.floor(Date.now() / 1000)
+      setCountdown(Math.max(0, d - now))
+    }
+
+    tick() // immediate first tick
+    countdownRef.current = setInterval(tick, 1000)
+
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current)
+        countdownRef.current = null
+      }
+    }
+  }, [timerActive, resolvedOpenedAt, resolvedTimeoutSec])
+
+  // Reset countdown when timer becomes inactive (derived, not in effect)
+  const displayCountdown = timerActive ? countdown : null
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleJoinQueue = useCallback(() => {
@@ -238,9 +275,10 @@ export default function QueuePanel() {
     if (!hasSessionConfigured) return
     if (!hasEnoughBalance) return
     if (playerInQueue) return // prevent double-join
+    if (sessionExpiringSoon) return // session key expires too soon
     setOptimisticJoined(true)
     joinQueue(joinQueueArgs())
-  }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance, playerInQueue])
+  }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance, playerInQueue, sessionExpiringSoon])
 
   const handleLeaveQueue = useCallback(() => {
     if (!IS_PIXEL_ROYALE_CONFIGURED) return
@@ -325,7 +363,7 @@ export default function QueuePanel() {
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#3ae8ff] to-[#7b2dff] transition-all duration-1000"
                   style={{
-                    width: `${Math.max(0, 100 - (displayCountdown / (wsQueue?.timeoutSec ?? 120)) * 100)}%`,
+                    width: `${Math.max(0, 100 - (displayCountdown / resolvedTimeoutSec) * 100)}%`,
                   }}
                 />
               </div>
@@ -471,10 +509,25 @@ export default function QueuePanel() {
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
+      ) : sessionExpiringSoon ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg bg-[rgba(255,140,0,0.12)] border border-[rgba(255,140,0,0.25)] p-3">
+            <AlertTriangle className="h-4 w-4 text-[#ffb347] flex-shrink-0" />
+            <p className="text-xs font-mono text-[#ffb347]">
+              Session key expires too soon (less than 20 min remaining). Create a new session key before joining.
+            </p>
+          </div>
+          <button
+            disabled
+            className="w-full rounded-lg bg-[rgba(255,255,255,0.05)] px-4 py-3 font-mono font-bold text-sm text-[rgba(255,255,255,0.3)] cursor-not-allowed"
+          >
+            Queue Locked: Session Expiring Soon
+          </button>
+        </div>
       ) : (
         <button
           onClick={handleJoinQueue}
-          disabled={isBusy || currentQueueSize >= 20 || !isOnSomnia || !hasSessionConfigured || !hasEnoughBalance}
+          disabled={isBusy || currentQueueSize >= 20 || !isOnSomnia || !hasSessionConfigured || !hasEnoughBalance || sessionExpiringSoon}
           className="group relative w-full"
         >
           <div className="absolute -inset-0.5 rounded-xl bg-[#ffd700] opacity-20 blur group-hover:opacity-40 transition-opacity" />
