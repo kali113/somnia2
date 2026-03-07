@@ -147,8 +147,8 @@ async function main() {
   )
   const backend = createManagedProcess(
     'backend',
-    'pnpm',
-    ['start'],
+    process.execPath,
+    ['dist/index.js'],
     {
       cwd: path.join(repoRoot, 'server'),
       env: {
