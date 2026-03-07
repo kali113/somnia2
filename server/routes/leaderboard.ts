@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from 'express'
-import type { GameStore } from '../store.js'
+import { getServerLocals } from '../http.js'
 
 export const leaderboardRouter: ExpressRouter = Router()
 
@@ -8,7 +8,7 @@ export const leaderboardRouter: ExpressRouter = Router()
  * Returns the global leaderboard sorted by wins (default), kills, or earned.
  */
 leaderboardRouter.get('/', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const sortBy = (req.query.sort as 'wins' | 'kills' | 'earned') || 'wins'
   const limit = parseInt(req.query.limit as string) || 20
 

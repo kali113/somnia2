@@ -4,7 +4,7 @@ import {
   type Address,
   type PublicClient,
 } from 'viem'
-import { GameStore } from './store.js'
+import type { GameStore } from './store.js'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
@@ -99,13 +99,13 @@ export class Indexer {
   }
 
   async start() {
-    if (this.running) return
+    if (this.running) {return}
     this.running = true
 
     console.log('[indexer] Starting event indexer...')
     console.log(`[indexer] Watching contract: ${this.contractAddress}`)
 
-    if (String(this.contractAddress).toLowerCase() === ZERO_ADDRESS) {
+    if (this.contractAddress.toLowerCase() === ZERO_ADDRESS) {
       console.log('[indexer] Placeholder contract address — running without on-chain indexing')
       this.running = false
       return
@@ -115,9 +115,9 @@ export class Indexer {
     await this.syncQueueState()
 
     let lastBlock = await this.client.getBlockNumber()
-    console.log(`[indexer] Starting from block ${lastBlock}`)
+    console.log(`[indexer] Starting from block ${lastBlock.toString()}`)
 
-    this.polling = setInterval(async () => {
+    const poll = async (): Promise<void> => {
       try {
         const currentBlock = await this.client.getBlockNumber()
         if (currentBlock > lastBlock) {
@@ -139,6 +139,10 @@ export class Indexer {
         const message = error instanceof Error ? error.message : String(error)
         console.warn(`[indexer] Poll failed: ${message}`)
       }
+    }
+
+    this.polling = setInterval(() => {
+      void poll()
     }, 5000)
   }
 
@@ -156,17 +160,17 @@ export class Indexer {
         address: this.contractAddress,
         abi: INDEXER_ABI,
         functionName: 'MAX_PLAYERS',
-      }) as Promise<bigint>,
+      }),
       this.client.readContract({
         address: this.contractAddress,
         abi: INDEXER_ABI,
         functionName: 'MIN_PLAYERS',
-      }) as Promise<bigint>,
+      }),
       this.client.readContract({
         address: this.contractAddress,
         abi: INDEXER_ABI,
         functionName: 'QUEUE_TIMEOUT',
-      }) as Promise<bigint>,
+      }),
     ])
 
     this.store.setQueueConfig({
@@ -187,7 +191,7 @@ export class Indexer {
         address: this.contractAddress,
         abi: INDEXER_ABI,
         functionName: 'queueOpenedAt',
-      }) as Promise<bigint>,
+      }),
     ])
 
     const players = playersRaw.map((p) => p.toLowerCase())
@@ -212,7 +216,7 @@ export class Indexer {
     transactionHash: `0x${string}` | null
   }): Promise<void> {
     try {
-      if (log.topics.length === 0) return
+      if (log.topics.length === 0) {return}
 
       const parsed = decodeEventLog({
         abi: INDEXER_ABI,
@@ -323,14 +327,12 @@ export class Indexer {
         return
       }
 
-      if (parsed.eventName === 'SessionKeyRevoked') {
-        this.onEvent({
-          type: 'session_revoked',
-          player: parsed.args.player.toLowerCase(),
-          sessionKey: parsed.args.sessionKey.toLowerCase(),
-          txHash,
-        })
-      }
+      this.onEvent({
+        type: 'session_revoked',
+        player: parsed.args.player.toLowerCase(),
+        sessionKey: parsed.args.sessionKey.toLowerCase(),
+        txHash,
+      })
     } catch {
       // Ignore unknown log payloads from the same contract
     }

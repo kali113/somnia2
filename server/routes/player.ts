@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from 'express'
-import type { GameStore } from '../store.js'
+import { getServerLocals } from '../http.js'
 
 export const playerRouter: ExpressRouter = Router()
 
@@ -8,7 +8,7 @@ export const playerRouter: ExpressRouter = Router()
  * Returns player stats from the in-memory store.
  */
 playerRouter.get('/:address/stats', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const { address } = req.params
 
   if (!address || !address.startsWith('0x')) {
@@ -36,7 +36,7 @@ playerRouter.get('/:address/stats', (req, res) => {
  * Returns recent match history for a player.
  */
 playerRouter.get('/:address/history', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const { address } = req.params
   const limit = parseInt(req.query.limit as string) || 20
 

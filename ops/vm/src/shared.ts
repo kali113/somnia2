@@ -13,7 +13,7 @@ export interface RunOptions {
 export async function runCommand(command: string, args: string[], options: RunOptions = {}): Promise<{ stdout: string; stderr: string }> {
   const { cwd, env, logStream, streamOutput = true } = options
 
-  return new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },

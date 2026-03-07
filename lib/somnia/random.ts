@@ -19,10 +19,10 @@ function normalizeSeed(rawHex: string): number {
 
 export async function fetchSomniaRandomSeed(timeoutMs = 2200): Promise<number> {
   const rpcUrl = SOMNIA_TESTNET.rpcUrls.default.http[0]
-  if (!rpcUrl) return fallbackSeed()
+  if (!rpcUrl) {return fallbackSeed()}
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const timer = setTimeout(() => { controller.abort(); }, timeoutMs)
 
   try {
     const res = await fetch(rpcUrl, {
@@ -38,7 +38,7 @@ export async function fetchSomniaRandomSeed(timeoutMs = 2200): Promise<number> {
       cache: 'no-store',
     })
 
-    if (!res.ok) return fallbackSeed()
+    if (!res.ok) {return fallbackSeed()}
     const payload = await res.json() as { result?: RpcBlockPayload }
     const block = payload.result
     const entropyHex = block?.mixHash || block?.hash || null

@@ -4,17 +4,17 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { WebSocketServer, WebSocket } from 'ws'
 import http from 'http'
-import { execFile, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { Duplex } from 'node:stream'
-import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import {
   createPublicClient,
   createWalletClient,
+  defineChain,
   http as viemHttp,
   isAddress,
   parseAbi,
@@ -26,6 +26,7 @@ import { queueRouter } from './routes/queue.js'
 import { gameRouter } from './routes/game.js'
 import { leaderboardRouter } from './routes/leaderboard.js'
 import { matchmakingRouter } from './routes/matchmaking.js'
+import { asyncHandler, setServerLocals } from './http.js'
 import { Indexer, type IndexedEvent } from './indexer.js'
 import { GameStore } from './store.js'
 
@@ -40,10 +41,9 @@ dotenv.config({ path: path.join(projectRoot, '.env.local'), override: true, quie
 dotenv.config({ path: path.join(serverRoot, '.env'), override: true, quiet: true })
 dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet: true })
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
 const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
-const execFileAsync = promisify(execFile)
 
 function readDeploymentContractAddress(): string {
   try {
@@ -67,7 +67,7 @@ const rawContractAddress = (
   DEPLOYED_CONTRACT_ADDRESS ||
   ZERO_ADDRESS
 ).trim()
-const CONTRACT_ADDRESS = (isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS) as Address
+const CONTRACT_ADDRESS: Address = isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
 const ORCHESTRATOR_KEY = (
   process.env.ORCHESTRATOR_PRIVATE_KEY ||
@@ -94,18 +94,18 @@ const CORS_ORIGINS = configuredCorsOrigins.length > 0
     ]
 
 // ── Somnia chain definition ─────────────────────────────────────────────────
-const somniaTestnet = {
+const somniaTestnet = defineChain({
   id: 50312,
   name: 'Somnia Testnet',
   nativeCurrency: { name: 'Somnia Test Token', symbol: 'STT', decimals: 18 },
   rpcUrls: { default: { http: [SOMNIA_RPC] } },
   blockExplorers: { default: { name: 'Somnia Shannon Explorer', url: 'https://shannon-explorer.somnia.network/' } },
   testnet: true,
-} as const
+})
 
 // ── Viem clients ────────────────────────────────────────────────────────────
 const publicClient = createPublicClient({
-  chain: somniaTestnet as any,
+  chain: somniaTestnet,
   transport: viemHttp(SOMNIA_RPC),
 })
 
@@ -115,7 +115,7 @@ if (ORCHESTRATOR_KEY && ORCHESTRATOR_KEY !== ZERO_PRIVATE_KEY) {
   orchestratorAccount = privateKeyToAccount(ORCHESTRATOR_KEY)
   orchestratorClient = createWalletClient({
     account: orchestratorAccount,
-    chain: somniaTestnet as any,
+    chain: somniaTestnet,
     transport: viemHttp(SOMNIA_RPC),
   })
   console.log(`[orchestrator] Wallet: ${orchestratorAccount.address}`)
@@ -129,7 +129,7 @@ if (!CONTRACT_CONFIGURED) {
 const store = new GameStore()
 
 function tokensMatch(expected: string, presented: string): boolean {
-  if (!expected || !presented) return false
+  if (!expected || !presented) {return false}
 
   const expectedBuffer = Buffer.from(expected, 'utf8')
   const presentedBuffer = Buffer.from(presented, 'utf8')
@@ -157,7 +157,13 @@ function rejectUpgrade(socket: Duplex, statusCode: number, message: string): voi
 // ── Express app ─────────────────────────────────────────────────────────────
 const app = express()
 app.disable('x-powered-by')
-app.locals.orchestratorApiToken = ORCHESTRATOR_API_TOKEN
+setServerLocals(app, {
+  contractAddress: CONTRACT_ADDRESS,
+  orchestratorApiToken: ORCHESTRATOR_API_TOKEN,
+  orchestratorClient,
+  publicClient,
+  store,
+})
 app.use(helmet({
   crossOriginResourcePolicy: false,
 }))
@@ -177,15 +183,6 @@ app.use(rateLimit({
   legacyHeaders: false,
 }))
 app.use(express.json({ limit: '32kb' }))
-
-// Attach shared state to request
-app.use((req, _res, next) => {
-  ;(req as any).store = store
-  ;(req as any).publicClient = publicClient
-  ;(req as any).orchestratorClient = orchestratorClient
-  ;(req as any).contractAddress = CONTRACT_ADDRESS
-  next()
-})
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/player', playerRouter)
@@ -208,13 +205,15 @@ app.post('/api/admin/redeploy', rateLimit({
   limit: 5,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-}), async (req, res) => {
+}), asyncHandler((req, res): undefined => {
   if (!REDEPLOY_PASSWORD) {
     res.status(503).json({ error: 'Redeploy endpoint is not configured.' })
     return
   }
 
-  const providedPassword = String(req.header('x-redeploy-password') || req.body?.password || '').trim()
+  const body = req.body as { password?: unknown } | undefined
+  const passwordFromBody = typeof body?.password === 'string' ? body.password : ''
+  const providedPassword = (req.header('x-redeploy-password') ?? passwordFromBody).trim()
   if (!tokensMatch(REDEPLOY_PASSWORD, providedPassword)) {
     res.status(401).json({ error: 'Invalid redeploy password.' })
     return
@@ -232,14 +231,15 @@ app.post('/api/admin/redeploy', rateLimit({
       service: REDEPLOY_SERVICE,
       requestedAt: new Date().toISOString(),
     })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+  } catch (_error) {
     res.status(500).json({
       error: 'Failed to trigger redeploy.',
       message: 'Internal server error.',
     })
   }
-})
+
+  return undefined
+}))
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
@@ -271,7 +271,7 @@ interface WsClient {
 const wsClients = new Set<WsClient>()
 
 function sendWs(client: WsClient, type: WsMessageType, data: unknown) {
-  if (client.ws.readyState !== WebSocket.OPEN) return
+  if (client.ws.readyState !== WebSocket.OPEN) {return}
   client.ws.send(JSON.stringify({ schemaVersion: 1, type, data }))
 }
 
@@ -287,13 +287,13 @@ function broadcastQueueUpdate() {
 
 function broadcastMatchUpdated(matchId: number) {
   const match = store.getMatch(matchId)
-  if (!match) return
+  if (!match) {return}
   broadcast('match_updated', match)
 }
 
 function broadcastMatchAssignments(matchId: number) {
   const match = store.getMatch(matchId)
-  if (!match) return
+  if (!match) {return}
 
   for (const player of match.players) {
     const payload = {
@@ -353,7 +353,7 @@ wss.on('connection', (ws, req) => {
   const client: WsClient = { ws, address, isAlive: true }
   wsClients.add(client)
 
-  console.log(`[ws] Client connected (${wsClients.size} total)`) 
+  console.log(`[ws] Client connected (${String(wsClients.size)} total)`)
   sendWs(client, 'queue_update', store.getQueueState())
 
   if (address) {
@@ -374,7 +374,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     wsClients.delete(client)
-    console.log(`[ws] Client disconnected (${wsClients.size} total)`)
+    console.log(`[ws] Client disconnected (${String(wsClients.size)} total)`)
   })
 
   ws.on('error', () => {
@@ -426,29 +426,25 @@ server.on('close', () => {
   clearInterval(wsHeartbeat)
 })
 
-// Make broadcast functions available for existing routes
-;(app as any).broadcastQueueUpdate = broadcastQueueUpdate
-;(app as any).broadcastGameEvent = broadcastGameEvent
-
 // ── Chain Event Indexer ─────────────────────────────────────────────────────
-const indexer = new Indexer(publicClient as any, CONTRACT_ADDRESS, store, handleIndexedEvent)
+const indexer = new Indexer(publicClient, CONTRACT_ADDRESS, store, handleIndexedEvent)
 
 // ── Timeout matchmaking orchestrator ───────────────────────────────────────
 let forceStartInFlight = false
 let forceStartTimer: ReturnType<typeof setInterval> | null = null
 
 function startForceStartLoop() {
-  if (forceStartTimer || !orchestratorClient || !orchestratorAccount || !CONTRACT_CONFIGURED) return
+  if (forceStartTimer || !orchestratorClient || !orchestratorAccount || !CONTRACT_CONFIGURED) {return}
 
-  forceStartTimer = setInterval(async () => {
-    if (forceStartInFlight || !orchestratorClient || !orchestratorAccount) return
-    if (!store.canForceStart()) return
+  const tickForceStart = async (): Promise<void> => {
+    if (forceStartInFlight || !orchestratorClient || !orchestratorAccount) {return}
+    if (!store.canForceStart()) {return}
 
     forceStartInFlight = true
     try {
       const txHash = await orchestratorClient.writeContract({
         account: orchestratorAccount,
-        chain: somniaTestnet as any,
+        chain: somniaTestnet,
         address: CONTRACT_ADDRESS,
         abi: FORCE_START_ABI,
         functionName: 'forceStartGame',
@@ -471,6 +467,10 @@ function startForceStartLoop() {
     } finally {
       forceStartInFlight = false
     }
+  }
+
+  forceStartTimer = setInterval(() => {
+    void tickForceStart()
   }, 5000)
 }
 
@@ -487,7 +487,7 @@ server.listen(PORT, () => {
 ╚══════════════════════════════════════════════════════╝
   `)
 
-  indexer.start().catch((error) => {
+  indexer.start().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[indexer] failed to start: ${message}`)
   })

@@ -10,7 +10,7 @@ import {
 export { SOMNIA_FAUCET_URL }
 
 // ── Contract Address ────────────────────────────────────────────────────────
-export const PIXEL_ROYALE_ADDRESS = GAME_CONTRACT_ADDRESS as Address
+export const PIXEL_ROYALE_ADDRESS = GAME_CONTRACT_ADDRESS
 export const IS_PIXEL_ROYALE_CONFIGURED = IS_GAME_CONTRACT_CONFIGURED
 
 export const CONTRACT_CONFIG_ERROR_MESSAGE =
@@ -199,7 +199,7 @@ export function claimRewardsArgs() {
 export function formatSTT(wei: bigint, decimals: number = 4): string {
   const str = formatEther(wei)
   const parts = str.split('.')
-  if (parts.length === 1) return str
+  if (parts.length === 1) {return str}
   return `${parts[0]}.${parts[1].slice(0, decimals)}`
 }
 

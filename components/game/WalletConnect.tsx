@@ -78,7 +78,7 @@ export default function WalletConnect({
       ) : (
         <div className="flex flex-col items-end gap-1">
           <button
-            onClick={handleConnect}
+            onClick={() => { void handleConnect() }}
             disabled={isConnecting}
             className="flex items-center gap-2 rounded-lg bg-[rgba(255,255,255,0.08)] px-3 py-1.5 text-[11px] font-mono text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.15)] transition-colors border border-[rgba(255,255,255,0.1)] disabled:opacity-50"
           >

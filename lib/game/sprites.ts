@@ -17,7 +17,7 @@ export function drawPlayer(
   name: string,
   isAlive: boolean,
 ) {
-  if (!isAlive) return
+  if (!isAlive) {return}
   ctx.save()
   ctx.translate(x, y)
 

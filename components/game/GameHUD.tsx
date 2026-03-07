@@ -17,8 +17,8 @@ interface GameHUDProps {
 }
 
 function containerLabel(type: ContainerPromptState['containerType']): string {
-  if (type === 'rare_chest') return 'RARE CHEST'
-  if (type === 'ammo_box') return 'AMMO BOX'
+  if (type === 'rare_chest') {return 'RARE CHEST'}
+  if (type === 'ammo_box') {return 'AMMO BOX'}
   return 'CHEST'
 }
 
@@ -31,7 +31,7 @@ export default function GameHUD({
   touchControls = false,
   onSelectSlot,
 }: GameHUDProps) {
-  if (!player) return null
+  if (!player) {return null}
 
   const activePiece = BUILD_PIECES[player.buildPiece]
   const canAffordPiece = player[player.buildMaterial] >= activePiece.baseCost

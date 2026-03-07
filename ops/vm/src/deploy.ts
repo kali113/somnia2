@@ -83,7 +83,7 @@ function createContext(): DeployContext {
     throw new Error(`Missing config file: ${configFile}`)
   }
 
-  const config = parseEnvFile(readFileSync(configFile, 'utf8')) as Record<string, string>
+  const config = parseEnvFile(readFileSync(configFile, 'utf8'))
   const deployRoot = getRequired(config, 'DEPLOY_ROOT')
   const statusRoot = getRequired(config, 'STATUS_ROOT')
   getRequired(config, 'APP_NAME')
@@ -215,7 +215,7 @@ export async function main(args: string[]): Promise<void> {
   }
 
   const logStream = createWriteStream(context.logPath, { flags: 'w' })
-  let startedAt = isoNow()
+  const startedAt = isoNow()
   let targetCommit = ''
   let currentCommit = ''
   let releaseDir = ''

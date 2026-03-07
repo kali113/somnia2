@@ -1,11 +1,15 @@
 import { timingSafeEqual } from 'node:crypto'
 import { Router, type Request, type Response } from 'express'
 import rateLimit from 'express-rate-limit'
-import { decodeEventLog, isAddress } from 'viem'
-import type { GameStore } from '../store.js'
+import { decodeEventLog, isAddress, type Address } from 'viem'
+import {
+  asyncHandler,
+  getServerLocals,
+  type ServerAppLocals,
+} from '../http.js'
 
 export const gameRouter = Router()
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 const privilegedWriteLimiter = rateLimit({
   windowMs: 60_000,
   limit: 10,
@@ -97,7 +101,7 @@ function normalizeStormCircleRecord(
   const tupleRecord: StormCircleTuple | null = Array.isArray(raw) ? (raw as StormCircleTuple) : null
   const objectRecord: StormCircleObject | null = tupleRecord ? null : (raw as StormCircleObject)
   const committed = Boolean(tupleRecord ? tupleRecord[0] : objectRecord?.committed)
-  if (!committed) return null
+  if (!committed) {return null}
 
   return {
     gameId,
@@ -115,8 +119,8 @@ function normalizeStormCircleRecord(
 }
 
 async function readExistingStormCommit(
-  publicClient: any,
-  contractAddress: any,
+  publicClient: ServerAppLocals['publicClient'],
+  contractAddress: ServerAppLocals['contractAddress'],
   gameId: number,
   phase: number,
 ) {
@@ -131,8 +135,8 @@ async function readExistingStormCommit(
 }
 
 function hasPrivilegedAccess(req: Request): boolean {
-  const expectedToken = String(req.app.locals.orchestratorApiToken || '').trim()
-  if (!expectedToken) return false
+  const expectedToken = getServerLocals(req).orchestratorApiToken.trim()
+  if (!expectedToken) {return false}
 
   const authorizationHeader = req.header('authorization') || ''
   let bearerToken = ''
@@ -150,8 +154,8 @@ function hasPrivilegedAccess(req: Request): boolean {
     }
   }
 
-  const presentedToken = String(req.header('x-orchestrator-token') || bearerToken || '').trim()
-  if (!presentedToken) return false
+  const presentedToken = (req.header('x-orchestrator-token') ?? bearerToken).trim()
+  if (!presentedToken) {return false}
 
   const expectedBuffer = Buffer.from(expectedToken, 'utf8')
   const presentedBuffer = Buffer.from(presentedToken, 'utf8')
@@ -169,13 +173,13 @@ function rejectPrivilegedAccess(res: Response): Response {
   })
 }
 
-function normalizePlacements(rawPlacements: unknown): string[] | null {
+function normalizePlacements(rawPlacements: unknown): Address[] | null {
   if (!Array.isArray(rawPlacements) || rawPlacements.length < 2 || rawPlacements.length > 20) {
     return null
   }
 
   const seen = new Set<string>()
-  const placements: string[] = []
+  const placements: Address[] = []
   for (const entry of rawPlacements) {
     if (typeof entry !== 'string' || !isAddress(entry)) {
       return null
@@ -187,7 +191,7 @@ function normalizePlacements(rawPlacements: unknown): string[] | null {
     }
 
     seen.add(address)
-    placements.push(address)
+    placements.push(address as Address)
   }
 
   return placements
@@ -214,10 +218,12 @@ function normalizeKills(rawKills: unknown, expectedLength: number): number[] | n
  * POST /api/game/result
  * Submit a validated game result from a privileged orchestrator caller.
  */
-gameRouter.post('/result', privilegedWriteLimiter, async (req, res) => {
-  const store = (req as any).store as GameStore
-  const orchestratorClient = (req as any).orchestratorClient
-  const contractAddress = (req as any).contractAddress
+gameRouter.post('/result', privilegedWriteLimiter, asyncHandler(async (req, res) => {
+  const {
+    store,
+    orchestratorClient,
+    contractAddress,
+  } = getServerLocals(req)
 
   if (!hasPrivilegedAccess(req)) {
     return rejectPrivilegedAccess(res)
@@ -258,7 +264,11 @@ gameRouter.post('/result', privilegedWriteLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Placements include players outside the active match', reason: 'roster_mismatch' })
   }
 
-  if (!orchestratorClient || String(contractAddress).toLowerCase() === ZERO_ADDRESS) {
+  if (!orchestratorClient || contractAddress.toLowerCase() === ZERO_ADDRESS) {
+    return res.status(503).json({ error: 'On-chain result submission unavailable', reason: 'orchestrator_unavailable' })
+  }
+  const orchestratorAccount = orchestratorClient.account
+  if (!orchestratorAccount) {
     return res.status(503).json({ error: 'On-chain result submission unavailable', reason: 'orchestrator_unavailable' })
   }
 
@@ -276,6 +286,8 @@ gameRouter.post('/result', privilegedWriteLimiter, async (req, res) => {
     }] as const
 
     const txHash = await orchestratorClient.writeContract({
+      account: orchestratorAccount,
+      chain: orchestratorClient.chain,
       address: contractAddress,
       abi,
       functionName: 'submitGameResult',
@@ -292,16 +304,22 @@ gameRouter.post('/result', privilegedWriteLimiter, async (req, res) => {
       reason: 'tx_failed',
     })
   }
-})
+}))
 
-gameRouter.post('/storm', privilegedWriteLimiter, async (req, res) => {
-  const store = (req as any).store as GameStore
-  const publicClient = (req as any).publicClient
-  const orchestratorClient = (req as any).orchestratorClient
-  const contractAddress = (req as any).contractAddress
+gameRouter.post('/storm', privilegedWriteLimiter, asyncHandler(async (req, res) => {
+  const {
+    store,
+    publicClient,
+    orchestratorClient,
+    contractAddress,
+  } = getServerLocals(req)
+  const body = req.body as {
+    gameId?: unknown
+    phase?: unknown
+  }
 
-  const gameId = Number(req.body?.gameId)
-  const phase = Number(req.body?.phase)
+  const gameId = Number(body.gameId)
+  const phase = Number(body.phase)
 
   if (!Number.isInteger(gameId) || gameId < 0) {
     return res.status(400).json({ error: 'Invalid gameId', reason: 'invalid_game_id' })
@@ -315,7 +333,11 @@ gameRouter.post('/storm', privilegedWriteLimiter, async (req, res) => {
     return res.status(404).json({ error: 'Active match not found', reason: 'match_not_found' })
   }
 
-  if (!orchestratorClient || String(contractAddress).toLowerCase() === '0x0000000000000000000000000000000000000000') {
+  if (!orchestratorClient || contractAddress.toLowerCase() === ZERO_ADDRESS) {
+    return res.status(503).json({ error: 'On-chain storm commits unavailable', reason: 'orchestrator_unavailable' })
+  }
+  const stormOrchestratorAccount = orchestratorClient.account
+  if (!stormOrchestratorAccount) {
     return res.status(503).json({ error: 'On-chain storm commits unavailable', reason: 'orchestrator_unavailable' })
   }
 
@@ -338,6 +360,8 @@ gameRouter.post('/storm', privilegedWriteLimiter, async (req, res) => {
 
   try {
     const txHash = await orchestratorClient.writeContract({
+      account: stormOrchestratorAccount,
+      chain: orchestratorClient.chain,
       address: contractAddress,
       abi: STORM_ABI,
       functionName: 'commitStormCircle',
@@ -356,23 +380,21 @@ gameRouter.post('/storm', privilegedWriteLimiter, async (req, res) => {
           data: log.data,
           topics: log.topics,
         })
-        if (decoded.eventName !== 'StormCircleCommitted') continue
-
-        const args = decoded.args as Record<string, unknown>
+        const args = decoded.args
         return res.json({
           success: true,
           txHash,
           commit: {
-            gameId: Number(args.gameId ?? gameId),
-            phase: Number(args.phase ?? phase),
-            currentCenterX: Number(args.currentCenterX ?? 0),
-            currentCenterY: Number(args.currentCenterY ?? 0),
-            currentRadius: Number(args.currentRadius ?? 0),
-            targetCenterX: Number(args.targetCenterX ?? 0),
-            targetCenterY: Number(args.targetCenterY ?? 0),
-            targetRadius: Number(args.targetRadius ?? 0),
-            entropyHash: String(args.entropyHash ?? ''),
-            committedAt: Number(args.timestamp ?? 0),
+            gameId: args.gameId,
+            phase: args.phase,
+            currentCenterX: args.currentCenterX,
+            currentCenterY: args.currentCenterY,
+            currentRadius: args.currentRadius,
+            targetCenterX: args.targetCenterX,
+            targetCenterY: args.targetCenterY,
+            targetRadius: args.targetRadius,
+            entropyHash: args.entropyHash,
+            committedAt: Number(args.timestamp),
             txHash,
           },
         })
@@ -416,14 +438,14 @@ gameRouter.post('/storm', privilegedWriteLimiter, async (req, res) => {
       reason: 'tx_failed',
     })
   }
-})
+}))
 
 /**
  * GET /api/game/recent
  * Get recent game results.
  */
 gameRouter.get('/recent', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const limit = parseInt(req.query.limit as string) || 20
   const games = store.getRecentGames(limit)
   res.json({ games })
@@ -434,7 +456,7 @@ gameRouter.get('/recent', (req, res) => {
  * Get a specific game result.
  */
 gameRouter.get('/:id', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const gameId = parseInt(req.params.id)
   const game = store.getGame(gameId)
 

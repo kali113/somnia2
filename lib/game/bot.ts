@@ -171,13 +171,13 @@ function pickStormRetreatPoint(bot: Bot, zone: BotNavigationZone): { x: number; 
 
 function getStormPressure(x: number, y: number, zone: BotNavigationZone): number {
   const safeRadius = getBotNavigationRadius(zone.radius)
-  if (safeRadius <= 0) return 1
+  if (safeRadius <= 0) {return 1}
 
   const distFromCenter = distance(x, y, zone.centerX, zone.centerY)
-  if (distFromCenter >= safeRadius) return 1
+  if (distFromCenter >= safeRadius) {return 1}
 
   const warningRadius = Math.max(0, safeRadius - Math.max(100, safeRadius * 0.15))
-  if (distFromCenter <= warningRadius) return 0
+  if (distFromCenter <= warningRadius) {return 0}
 
   return (distFromCenter - warningRadius) / Math.max(1, safeRadius - warningRadius)
 }
@@ -191,9 +191,9 @@ export function updateBot(
   map: GameMap,
   dt: number,
   now: number,
-  ps: ParticleSystem,
+  _ps: ParticleSystem,
 ): { fired: boolean; targetX: number; targetY: number } {
-  if (!bot.alive) return { fired: false, targetX: 0, targetY: 0 }
+  if (!bot.alive) {return { fired: false, targetX: 0, targetY: 0 }}
 
   let fired = false
   bot.aiTimer -= dt
@@ -209,8 +209,8 @@ export function updateBot(
   let nearestDist = Infinity
 
   for (const entity of entityGrid.query(bot.x, bot.y, bot.sightRange)) {
-    if (entity === bot || !entity.alive) continue
-    if (entity.teamId === bot.teamId) continue
+    if (entity === bot || !entity.alive) {continue}
+    if (entity.teamId === bot.teamId) {continue}
     const d = distance(bot.x, bot.y, entity.x, entity.y)
     if (d < bot.sightRange && d < nearestDist) {
       nearestThreat = entity
@@ -250,6 +250,7 @@ export function updateBot(
 
   switch (bot.mode) {
     case 'move_to_zone':
+    case 'build':
     case 'loot': {
       const distToTarget = distance(bot.x, bot.y, bot.targetX, bot.targetY)
       if (distToTarget > 20) {
@@ -270,9 +271,9 @@ export function updateBot(
 
       // Pick up nearby floor loot
       for (const loot of map.floorLoot) {
-        if (loot.picked) continue
+        if (loot.picked) {continue}
         if (distance(bot.x, bot.y, loot.x, loot.y) < 30) {
-          if (loot.kind !== 'weapon') continue
+          if (loot.kind !== 'weapon') {continue}
           loot.picked = true
           // Equip if better
           const slot = bot.slots[1]
@@ -306,8 +307,8 @@ export function updateBot(
         // Smooth aim tracking — bots don't instantly snap to the target
         const turnSpeed = 1.0 + bot.accuracy * 2.5 // rad/s; more accurate = faster tracking
         let aimDiff = trueAngle - bot.fireAngle
-        while (aimDiff > Math.PI) aimDiff -= 2 * Math.PI
-        while (aimDiff < -Math.PI) aimDiff += 2 * Math.PI
+        while (aimDiff > Math.PI) {aimDiff -= 2 * Math.PI}
+        while (aimDiff < -Math.PI) {aimDiff += 2 * Math.PI}
         const maxTurn = turnSpeed * dt
         bot.fireAngle += Math.sign(aimDiff) * Math.min(Math.abs(aimDiff), maxTurn)
 
@@ -368,10 +369,10 @@ export function updateBot(
   const structureColliders = getStructureColliders(map, bot.x, bot.y, 260)
   for (const c of [...envColliders, ...structureColliders]) {
     const testX: AABB = { x: bot.x - pSize, y: prevY - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
-    if (aabbOverlap(testX, c)) bot.x = prevX
+    if (aabbOverlap(testX, c)) {bot.x = prevX}
 
     const testY: AABB = { x: prevX - pSize, y: bot.y - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
-    if (aabbOverlap(testY, c)) bot.y = prevY
+    if (aabbOverlap(testY, c)) {bot.y = prevY}
   }
 
   // Clamp position
@@ -382,7 +383,7 @@ export function updateBot(
   if (isInStorm(storm, bot.x, bot.y)) {
     const dmg = storm.damagePerTick * dt * 2
     bot.health = Math.max(0, bot.health - dmg)
-    if (bot.health <= 0) bot.alive = false
+    if (bot.health <= 0) {bot.alive = false}
   }
 
   return {
@@ -400,8 +401,8 @@ export function processBotHit(
   ps: ParticleSystem,
 ): boolean {
   const { shieldDmg, healthDmg } = takeDamage(target, damage)
-  if (shieldDmg > 0) emitHitMarker(ps, target.x, target.y, shieldDmg, true)
-  if (healthDmg > 0) emitHitMarker(ps, target.x, target.y, healthDmg, false)
+  if (shieldDmg > 0) {emitHitMarker(ps, target.x, target.y, shieldDmg, true)}
+  if (healthDmg > 0) {emitHitMarker(ps, target.x, target.y, healthDmg, false)}
   if (!target.alive) {
     emitElimination(ps, target.x, target.y)
     return true

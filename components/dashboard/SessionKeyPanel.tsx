@@ -26,7 +26,7 @@ export default function SessionKeyPanel() {
   const [txError, setTxError] = useState<string | null>(null)
 
   const { writeContract: approveKey, data: approveHash, isPending: isApproving, error: approveError } = useWriteContract()
-  const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking, error: revokeError } = useWriteContract()
+  const { writeContract: revokeKey, data: revokeHash, isPending: isRevoking } = useWriteContract()
 
   const {
     data: approveReceipt,
@@ -52,13 +52,13 @@ export default function SessionKeyPanel() {
         destroySessionWallet()
         setSession(null)
       }, 0)
-      return () => window.clearTimeout(timer)
+      return () => { window.clearTimeout(timer); }
     }
   }, [address, session])
 
   // Countdown timer
   useEffect(() => {
-    if (!session) return
+    if (!session) {return}
 
     const interval = setInterval(() => {
       const now = Date.now()
@@ -70,18 +70,18 @@ export default function SessionKeyPanel() {
       setNowMs(now)
     }, 1000)
 
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); }
   }, [session])
 
   // Refetch on-chain session after approve/revoke confirms
   useEffect(() => {
     if (approveReceipt?.status === 'success' || revokeReceipt?.status === 'success') {
-      refetchSession()
+      void refetchSession()
     }
   }, [approveReceipt?.status, revokeReceipt?.status, refetchSession])
 
   const handleCreateSession = useCallback(() => {
-    if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    if (!IS_PIXEL_ROYALE_CONFIGURED) {return}
     setTxError(null)
 
     let newSession
@@ -122,7 +122,7 @@ export default function SessionKeyPanel() {
   const timeLeft = session
     ? (() => {
       const remaining = session.expiry - nowMs
-      if (remaining <= 0) return 'Expired'
+      if (remaining <= 0) {return 'Expired'}
       const mins = Math.floor(remaining / 60000)
       const secs = Math.floor((remaining % 60000) / 1000)
       return `${mins}m ${secs}s`

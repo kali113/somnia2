@@ -9,15 +9,15 @@ interface KillFeedProps {
 }
 
 export default function KillFeed({ entries, gameTime, touchControls = false }: KillFeedProps) {
-  if (touchControls) return null
-  if (entries.length === 0) return null
+  if (touchControls) {return null}
+  if (entries.length === 0) {return null}
 
   return (
     <div className="absolute right-3 top-[184px] z-10 flex flex-col gap-1 pointer-events-none">
-      {entries.slice(0, 6).map((entry, i) => {
+      {entries.slice(0, 6).map((entry) => {
         const age = gameTime - entry.time
         const opacity = Math.max(0, 1 - age / 8)
-        if (opacity <= 0) return null
+        if (opacity <= 0) {return null}
 
         const isPlayer = entry.killer === 'You' || entry.victim === 'You'
 
