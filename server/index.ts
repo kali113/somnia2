@@ -231,7 +231,8 @@ app.post('/api/admin/redeploy', rateLimit({
       service: REDEPLOY_SERVICE,
       requestedAt: new Date().toISOString(),
     })
-  } catch (_error) {
+  } catch (error) {
+    console.error('[redeploy] Failed to trigger:', error)
     res.status(500).json({
       error: 'Failed to trigger redeploy.',
       message: 'Internal server error.',

@@ -91,6 +91,33 @@ interface StormCircleObject {
 }
 
 type RawStormCircleRecord = StormCircleTuple | StormCircleObject
+type StormCircleEventArgs = {
+  gameId: number | bigint
+  phase: number | bigint
+  currentCenterX: number | bigint
+  currentCenterY: number | bigint
+  currentRadius: number | bigint
+  targetCenterX: number | bigint
+  targetCenterY: number | bigint
+  targetRadius: number | bigint
+  entropyHash: string | bigint
+  timestamp: number | bigint
+}
+
+function normalizeStormCircleEventArgs(args: StormCircleEventArgs) {
+  return {
+    gameId: typeof args.gameId === 'bigint' ? Number(args.gameId) : args.gameId,
+    phase: typeof args.phase === 'bigint' ? Number(args.phase) : args.phase,
+    currentCenterX: typeof args.currentCenterX === 'bigint' ? Number(args.currentCenterX) : args.currentCenterX,
+    currentCenterY: typeof args.currentCenterY === 'bigint' ? Number(args.currentCenterY) : args.currentCenterY,
+    currentRadius: typeof args.currentRadius === 'bigint' ? Number(args.currentRadius) : args.currentRadius,
+    targetCenterX: typeof args.targetCenterX === 'bigint' ? Number(args.targetCenterX) : args.targetCenterX,
+    targetCenterY: typeof args.targetCenterY === 'bigint' ? Number(args.targetCenterY) : args.targetCenterY,
+    targetRadius: typeof args.targetRadius === 'bigint' ? Number(args.targetRadius) : args.targetRadius,
+    entropyHash: typeof args.entropyHash === 'bigint' ? args.entropyHash.toString() : args.entropyHash,
+    committedAt: typeof args.timestamp === 'bigint' ? Number(args.timestamp) : args.timestamp,
+  }
+}
 
 function normalizeStormCircleRecord(
   gameId: number,
@@ -380,7 +407,7 @@ gameRouter.post('/storm', privilegedWriteLimiter, asyncHandler(async (req, res) 
           data: log.data,
           topics: log.topics,
         })
-        const args = decoded.args
+        const args = normalizeStormCircleEventArgs(decoded.args as StormCircleEventArgs)
         return res.json({
           success: true,
           txHash,
@@ -394,7 +421,7 @@ gameRouter.post('/storm', privilegedWriteLimiter, asyncHandler(async (req, res) 
             targetCenterY: args.targetCenterY,
             targetRadius: args.targetRadius,
             entropyHash: args.entropyHash,
-            committedAt: Number(args.timestamp),
+            committedAt: args.committedAt,
             txHash,
           },
         })
