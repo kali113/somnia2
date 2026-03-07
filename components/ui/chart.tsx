@@ -104,12 +104,38 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-type ChartTooltipValue = number | string | Array<number | string>
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>
 type ChartTooltipName = number | string
-type ChartTooltipProps = RechartsPrimitive.TooltipProps<
-  ChartTooltipValue,
-  ChartTooltipName
->
+type ChartTooltipPayloadEntry = {
+  color?: string
+  dataKey?: string | number
+  fill?: string
+  name?: ChartTooltipName
+  payload?: {
+    fill?: string
+    [key: string]: unknown
+  }
+  value?: ChartTooltipValue
+}
+
+type ChartTooltipProps = React.ComponentProps<'div'> & {
+  active?: boolean
+  color?: string
+  formatter?: (
+    value: ChartTooltipValue | undefined,
+    name: ChartTooltipName | undefined,
+    item: ChartTooltipPayloadEntry,
+    index: number,
+    payload: ReadonlyArray<ChartTooltipPayloadEntry>,
+  ) => React.ReactNode | [React.ReactNode, React.ReactNode]
+  label?: React.ReactNode
+  labelClassName?: string
+  labelFormatter?: (
+    label: React.ReactNode,
+    payload: ReadonlyArray<ChartTooltipPayloadEntry>,
+  ) => React.ReactNode
+  payload?: ReadonlyArray<ChartTooltipPayloadEntry>
+}
 
 function ChartTooltipContent({
   active,
@@ -125,13 +151,13 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: ChartTooltipProps & React.ComponentProps<'div'> & {
-    hideLabel?: boolean
-    hideIndicator?: boolean
-    indicator?: 'line' | 'dot' | 'dashed'
-    nameKey?: string
-    labelKey?: string
-  }) {
+}: ChartTooltipProps & {
+  hideLabel?: boolean
+  hideIndicator?: boolean
+  indicator?: 'line' | 'dot' | 'dashed'
+  nameKey?: string
+  labelKey?: string
+}) {
   const { config } = useChart()
 
   const tooltipLabel = React.useMemo(() => {
@@ -188,7 +214,7 @@ function ChartTooltipContent({
         {payload.map((item, index) => {
           const key = `${nameKey || item.name || item.dataKey || 'value'}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
-          const indicatorColor = color || item.payload.fill || item.color
+          const indicatorColor = color || item.payload?.fill || item.color
 
           return (
             <div
@@ -199,7 +225,7 @@ function ChartTooltipContent({
               )}
             >
               {formatter && item?.value !== undefined && item.name ? (
-                formatter(item.value, item.name, item, index, item.payload)
+                formatter(item.value, item.name, item, index, payload)
               ) : (
                 <>
                   {itemConfig?.icon ? (
