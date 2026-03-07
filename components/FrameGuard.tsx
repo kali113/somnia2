@@ -4,12 +4,13 @@ import { useEffect } from 'react'
 
 export default function FrameGuard() {
   useEffect(() => {
-    if (window.top === window.self) {
+    const parentWindow = window.top
+    if (!parentWindow || parentWindow === window.self) {
       return
     }
 
     try {
-      window.top!.location.href = window.location.href
+      parentWindow.location.href = window.location.href
     } catch {
       window.location.href = window.location.href
     }

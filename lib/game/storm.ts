@@ -123,8 +123,8 @@ export function createStorm(options?: { seed?: number; verified?: boolean }): St
 }
 
 export function applyStormCommit(storm: StormState, commit: StormCircleCommit): boolean {
-  if (commit.phase !== storm.phase) return false
-  if (storm.shrinking && !storm.pendingCommit) return false
+  if (commit.phase !== storm.phase) {return false}
+  if (storm.shrinking && !storm.pendingCommit) {return false}
 
   const phaseDef = STORM_PHASES[storm.phase]
   storm.pendingCommit = false

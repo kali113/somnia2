@@ -71,7 +71,7 @@ function resolveChain(chainId?: number) {
 }
 
 function resolveMethod(abi: readonly unknown[], functionName: string) {
-  const method = (abi as readonly unknown[]).find(
+  const method = (abi).find(
     (item) => {
       if (!item || typeof item !== 'object') {
         return false
@@ -90,7 +90,7 @@ function resolveMethod(abi: readonly unknown[], functionName: string) {
 }
 
 function serializeQueryValue(value: unknown): string {
-  return JSON.stringify(value, (_key, nestedValue) => {
+  return JSON.stringify(value, (_key, nestedValue: unknown) => {
     if (typeof nestedValue === 'bigint') {
       return { __type: 'bigint', value: nestedValue.toString() }
     }
@@ -149,7 +149,7 @@ export function useDisconnect() {
   const { disconnect: disconnectWallet } = useThirdwebDisconnect()
 
   const disconnect = useCallback(() => {
-    if (!wallet) return
+    if (!wallet) {return}
     disconnectWallet(wallet)
   }, [wallet, disconnectWallet])
 
@@ -232,12 +232,12 @@ export function useReadContract<T = unknown>(config: ReadContractInput) {
       serializeQueryValue(config.args ?? []),
     ],
     queryFn: async () =>
-      somniaPublicClient.readContract({
+      await (somniaPublicClient.readContract({
         address: config.address,
         abi: config.abi as Abi,
         functionName: config.functionName as never,
         args: (config.args ?? []) as readonly never[],
-      }) as Promise<T>,
+      }) as Promise<T>),
     enabled,
     refetchInterval: config.query?.refetchInterval,
     retry: config.query?.retry,
@@ -269,13 +269,13 @@ export function useWriteContract() {
         const prepared = prepareContractCall({
           contract,
           method: resolveMethod(config.abi, config.functionName),
-          params: (config.args ?? []) as readonly unknown[],
+          params: (config.args ?? []),
           ...(typeof config.value === 'bigint' ? { value: config.value } : {}),
         })
 
         transaction.mutate(prepared, {
           onSuccess: (result) => {
-            setHash(result.transactionHash as `0x${string}`)
+            setHash(result.transactionHash)
           },
         })
       } catch (error) {

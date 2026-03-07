@@ -275,7 +275,7 @@ function weightedPick<T>(options: Array<{ value: T; weight: number }>): T {
   let roll = Math.random() * total
   for (const option of options) {
     roll -= option.weight
-    if (roll <= 0) return option.value
+    if (roll <= 0) {return option.value}
   }
   return options[options.length - 1].value
 }
@@ -284,9 +284,9 @@ function getNearbyContainer(state: GameState): ContainerObj | null {
   let nearest: ContainerObj | null = null
   let nearestDist = Infinity
   for (const container of state.map.containers) {
-    if (container.opened || container.pendingVerification) continue
+    if (container.opened || container.pendingVerification) {continue}
     const d = distance(state.player.x, state.player.y, container.x, container.y)
-    if (d > CONTAINER_GLOW_RANGE || d >= nearestDist) continue
+    if (d > CONTAINER_GLOW_RANGE || d >= nearestDist) {continue}
     nearest = container
     nearestDist = d
   }
@@ -479,18 +479,18 @@ function openContainerLocally(state: GameState, container: ContainerObj) {
 
 function actionCancelsConsumableUse(state: GameState): boolean {
   const { input, player } = state
-  if (input.mouseDown) return true
-  if (input.justPressed.has('r')) return true
-  if (input.justPressed.has('e')) return true
-  if (input.scrollDelta !== 0) return true
+  if (input.mouseDown) {return true}
+  if (input.justPressed.has('r')) {return true}
+  if (input.justPressed.has('e')) {return true}
+  if (input.scrollDelta !== 0) {return true}
   for (let i = 1; i <= 5; i++) {
-    if (input.justPressed.has(String(i))) return true
+    if (input.justPressed.has(String(i))) {return true}
   }
-  if (input.justPressed.has('b') || input.justPressed.has('q')) return true
-  if (!player.buildMode) return false
-  if (input.justClicked) return true
-  if (input.justPressed.has('e') || input.justPressed.has('g')) return true
-  if (input.justPressed.has('z') || input.justPressed.has('x') || input.justPressed.has('c')) return true
+  if (input.justPressed.has('b') || input.justPressed.has('q')) {return true}
+  if (!player.buildMode) {return false}
+  if (input.justClicked) {return true}
+  if (input.justPressed.has('e') || input.justPressed.has('g')) {return true}
+  if (input.justPressed.has('z') || input.justPressed.has('x') || input.justPressed.has('c')) {return true}
   return false
 }
 
@@ -506,7 +506,7 @@ function isBotTeamAlive(state: GameState, teamId: number): boolean {
 function computeAimAssist(
   state: GameState,
 ): { worldX: number; worldY: number; botIdx: number } | null {
-  if (!state.player.alive || state.player.buildMode) return null
+  if (!state.player.alive || state.player.buildMode) {return null}
 
   const { input, camera: cam, player, bots } = state
   let bestIdx = -1
@@ -514,7 +514,7 @@ function computeAimAssist(
 
   for (let i = 0; i < bots.length; i++) {
     const bot = bots[i]
-    if (!bot.alive || bot.teamId === player.teamId) continue
+    if (!bot.alive || bot.teamId === player.teamId) {continue}
     // Convert bot world position to screen space and compare to cursor
     const sx = bot.x - cam.x
     const sy = bot.y - cam.y
@@ -527,7 +527,7 @@ function computeAimAssist(
     }
   }
 
-  if (bestIdx < 0) return null
+  if (bestIdx < 0) {return null}
 
   const target = bots[bestIdx]
   return {
@@ -546,7 +546,7 @@ function rebuildEntityGrid(state: GameState, grid?: SpatialGridRef<Player>): Spa
   }
 
   for (const bot of state.bots) {
-    if (!bot.alive) continue
+    if (!bot.alive) {continue}
     entityGrid.insertPoint(bot, bot.x, bot.y, PLAYER_SIZE / 2)
   }
 
@@ -556,7 +556,7 @@ function rebuildEntityGrid(state: GameState, grid?: SpatialGridRef<Player>): Spa
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
-  if (state.phase !== 'playing') return
+  if (state.phase !== 'playing') {return}
 
   state.time += dt
   const now = state.time
@@ -600,7 +600,7 @@ export function updateGame(state: GameState, dt: number) {
     state.player, state.input, dt, now, state.map, allColliders,
   )
 
-  if (buildPlaced) playBuild()
+  if (buildPlaced) {playBuild()}
 
   // ── Player shooting ──────────────────────────────────────────────────
   if (fired) {
@@ -633,7 +633,7 @@ export function updateGame(state: GameState, dt: number) {
 
   // ── Pickup floor loot / chests ────────────────────────────────────────
   for (const loot of state.map.floorLoot) {
-    if (loot.picked) continue
+    if (loot.picked) {continue}
     if (distance(state.player.x, state.player.y, loot.x, loot.y) < 30) {
       const picked = loot.kind === 'weapon'
         ? tryPickupWeapon(state.player, loot.weaponId, loot.rarity)
@@ -722,7 +722,7 @@ export function updateGame(state: GameState, dt: number) {
 
   // ── Pickup supply drops ──────────────────────────────────────────────
   for (const drop of state.supplyDrops) {
-    if (drop.opened || drop.falling) continue
+    if (drop.opened || drop.falling) {continue}
     if (distance(state.player.x, state.player.y, drop.x, drop.y) < 30) {
       drop.opened = true
       playChestOpen()
@@ -737,12 +737,12 @@ export function updateGame(state: GameState, dt: number) {
     }
   }
 
-  let entityGrid = rebuildEntityGrid(state)
+  const entityGrid = rebuildEntityGrid(state)
 
   // ── Update bots ──────────────────────────────────────────────────────
   for (let i = 0; i < state.bots.length; i++) {
     const bot = state.bots[i]
-    if (!bot.alive) continue
+    if (!bot.alive) {continue}
 
     const prevBotX = bot.x
     const prevBotY = bot.y
@@ -759,7 +759,6 @@ export function updateGame(state: GameState, dt: number) {
         if (wep && !wep.isMelee) {
           const inaccuracy = (1 - bot.accuracy) * 0.5
           const spread = (Math.random() - 0.5) * (wep.spread + inaccuracy) * 2
-          const angle = bot.fireAngle + spread
           const burstCount = wep.burstCount ?? 1
           for (let b = 0; b < burstCount; b++) {
             const bSpread = spread + (Math.random() - 0.5) * wep.spread
@@ -800,8 +799,8 @@ export function updateGame(state: GameState, dt: number) {
       const shooterBot = state.bots[p.ownerId]
       if (shooterBot && shooterBot.teamId !== state.player.teamId && circleOverlap(p.x, p.y, 4, state.player.x, state.player.y, PLAYER_SIZE / 2)) {
         const { shieldDmg, healthDmg } = takeDamage(state.player, p.damage)
-        if (shieldDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, shieldDmg, true)
-        if (healthDmg > 0) emitHitMarker(state.particles, state.player.x, state.player.y, healthDmg, false)
+        if (shieldDmg > 0) {emitHitMarker(state.particles, state.player.x, state.player.y, shieldDmg, true)}
+        if (healthDmg > 0) {emitHitMarker(state.particles, state.player.x, state.player.y, healthDmg, false)}
         if (shieldDmg > 0 || healthDmg > 0) {
           cancelConsumableUse(state.player)
         }
@@ -829,8 +828,8 @@ export function updateGame(state: GameState, dt: number) {
     let projectileRemoved = false
     const shooterEntity = p.ownerId === -1 ? state.player : state.bots[p.ownerId]
     for (const entity of entityCandidates ?? []) {
-      if (entity === state.player || entity === shooterEntity || !entity.alive) continue
-      if (entity.teamId === shooterTeamId) continue
+      if (entity === state.player || entity === shooterEntity || !entity.alive) {continue}
+      if (entity.teamId === shooterTeamId) {continue}
       if (circleOverlap(p.x, p.y, 4, entity.x, entity.y, PLAYER_SIZE / 2)) {
         playHit()
         const eliminated = processBotHit(entity, p.damage, state.particles)
@@ -877,13 +876,13 @@ export function updateGame(state: GameState, dt: number) {
         break
       }
     }
-    if (projectileRemoved) continue
+    if (projectileRemoved) {continue}
 
     // Hit world structures
     const structureCandidates = state.map.structureGrid.queryPoint(p.x, p.y)
     let blockedByWall = false
     for (const item of structureCandidates ?? []) {
-      if ('health' in item) continue
+      if ('health' in item) {continue}
       if (pointInAABB(p.x, p.y, item)) {
         emitSparks(state.particles, p.x, p.y, 2, '#7b6a5a')
         state.projectiles.splice(i, 1)
@@ -891,11 +890,11 @@ export function updateGame(state: GameState, dt: number) {
         break
       }
     }
-    if (blockedByWall) continue
+    if (blockedByWall) {continue}
 
     let blockedByBuild = false
     for (const item of structureCandidates ?? []) {
-      if (!('health' in item) || !item.blocksProjectiles || item.health <= 0) continue
+      if (!('health' in item) || !item.blocksProjectiles || item.health <= 0) {continue}
       if (pointInAABB(p.x, p.y, item)) {
         item.health -= p.damage
         emitSparks(state.particles, p.x, p.y, 3, '#aaa')
@@ -904,18 +903,18 @@ export function updateGame(state: GameState, dt: number) {
         if (item.health <= 0) {
           state.map.structureGrid.removeAABB(item, item)
           const buildIndex = state.map.playerBuilds.indexOf(item)
-          if (buildIndex >= 0) state.map.playerBuilds.splice(buildIndex, 1)
+          if (buildIndex >= 0) {state.map.playerBuilds.splice(buildIndex, 1)}
         }
         break
       }
     }
-    if (blockedByBuild) continue
+    if (blockedByBuild) {continue}
 
     // Hit trees
     let blockedByTree = false
     const envCandidates = state.map.envGrid.queryPoint(p.x, p.y)
     for (const obj of envCandidates ?? []) {
-      if (obj.kind !== 'tree' || obj.health <= 0) continue
+      if (obj.kind !== 'tree' || obj.health <= 0) {continue}
       if (pointInAABB(p.x, p.y, getEnvironmentCollider(obj))) {
         emitSparks(state.particles, p.x, p.y, 3, '#6b4226')
         state.projectiles.splice(i, 1)
@@ -923,11 +922,11 @@ export function updateGame(state: GameState, dt: number) {
         break
       }
     }
-    if (blockedByTree) continue
+    if (blockedByTree) {continue}
 
     // Hit rocks
     for (const obj of envCandidates ?? []) {
-      if (obj.kind !== 'rock' || obj.health <= 0) continue
+      if (obj.kind !== 'rock' || obj.health <= 0) {continue}
       if (pointInAABB(p.x, p.y, getEnvironmentCollider(obj))) {
         emitSparks(state.particles, p.x, p.y, 3, '#888')
         state.projectiles.splice(i, 1)
@@ -992,7 +991,7 @@ export function updateGame(state: GameState, dt: number) {
 
   // ── Bot-on-bot kills (storm deaths etc.) ─────────────────────────────
   for (const bot of state.bots) {
-    if (!bot.alive) continue
+    if (!bot.alive) {continue}
     if (bot.health <= 0) {
       bot.alive = false
       emitElimination(state.particles, bot.x, bot.y)
@@ -1028,14 +1027,14 @@ export function updateGame(state: GameState, dt: number) {
 
 function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) {
   const weapon = getActiveWeapon(attacker)
-  if (!weapon) return
+  if (!weapon) {return}
 
   // Check bots in melee range
   const attackerTeamId = attackerId === -1 ? state.player.teamId : (state.bots[attackerId]?.teamId ?? -1)
   for (let i = 0; i < state.bots.length; i++) {
     const bot = state.bots[i]
-    if (!bot.alive) continue
-    if (bot.teamId === attackerTeamId) continue  // no friendly fire
+    if (!bot.alive) {continue}
+    if (bot.teamId === attackerTeamId) {continue}  // no friendly fire
     const d = distance(attacker.x, attacker.y, bot.x, bot.y)
     const angle = angleBetween(attacker.x, attacker.y, bot.x, bot.y)
     const angleDiff = Math.abs(angle - attacker.angle)
@@ -1128,11 +1127,11 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
     }
   }
 
-  if (!best) return
+  if (!best) {return}
 
   if (best.kind === 'tree') {
     const tree = state.map.trees[best.index]
-    if (!tree) return
+    if (!tree) {return}
     tree.health -= 40
     grantMaterials(player, { wood: 6, stone: 0, metal: 0 })
     emitSparks(state.particles, tree.x, tree.y, 4, '#6b4226')
@@ -1147,7 +1146,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
 
   if (best.kind === 'rock') {
     const rock = state.map.rocks[best.index]
-    if (!rock) return
+    if (!rock) {return}
     rock.health -= 45
     grantMaterials(player, { wood: 0, stone: 6, metal: 0 })
     emitSparks(state.particles, rock.x, rock.y, 4, '#888')
@@ -1162,7 +1161,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
 
   if (best.kind === 'car') {
     const car = state.map.cars[best.index]
-    if (!car) return
+    if (!car) {return}
     car.health -= 45
     grantMaterials(player, { wood: 0, stone: 0, metal: 5 })
     emitSparks(state.particles, car.x, car.y, 5, '#8f9aa6')
@@ -1176,7 +1175,7 @@ function harvestNearby(state: GameState, x: number, y: number, player: Player) {
   }
 
   const build = state.map.playerBuilds[best.index]
-  if (!build) return
+  if (!build) {return}
   build.health -= 50
   grantMaterials(player, materialToReward(build.material, 2))
   emitSparks(state.particles, x, y, 4, '#b9c0c8')
@@ -1215,7 +1214,7 @@ function grantMaterials(player: Player, reward: { wood: number; stone: number; m
 function addKillFeed(state: GameState, killer: string, victim: string, weapon: string) {
   const entry: KillFeedEntry = { killer, victim, weapon, time: state.time }
   state.killFeed.unshift(entry)
-  if (state.killFeed.length > 8) state.killFeed.pop()
+  if (state.killFeed.length > 8) {state.killFeed.pop()}
   state.onKillFeedUpdate?.([...state.killFeed])
 }
 
@@ -1290,10 +1289,10 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // ── Floor loot ────────────────────────────────────────────────────────
   for (const loot of map.floorLoot) {
-    if (loot.picked) continue
+    if (loot.picked) {continue}
     const sx = loot.x - cam.x
     const sy = loot.y - cam.y
-    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
+    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) {continue}
     if (loot.kind === 'ammo') {
       drawAmmoPack(ctx, sx, sy, state.time)
       continue
@@ -1303,19 +1302,19 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // ── Supply drops ──────────────────────────────────────────────────────
   for (const drop of supplyDrops) {
-    if (drop.opened) continue
+    if (drop.opened) {continue}
     const sx = drop.x - cam.x
     const sy = drop.y - cam.y
-    if (sx < -30 || sx > cam.width + 30 || sy < -50 || sy > cam.height + 50) continue
+    if (sx < -30 || sx > cam.width + 30 || sy < -50 || sy > cam.height + 50) {continue}
     drawSupplyDrop(ctx, sx, sy, state.time, drop.falling)
   }
 
   // ── Bots ──────────────────────────────────────────────────────────────
   for (const bot of bots) {
-    if (!bot.alive) continue
+    if (!bot.alive) {continue}
     const sx = bot.x - cam.x
     const sy = bot.y - cam.y
-    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
+    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) {continue}
     drawPlayer(ctx, sx, sy, bot.angle, COLORS.bot, COLORS.botOutline, PLAYER_SIZE, bot.health, bot.shield, bot.name, bot.alive)
   }
 
@@ -1359,7 +1358,7 @@ export function renderGame(ctx: CanvasRenderingContext2D, state: GameState) {
   for (const p of projectiles) {
     const sx = p.x - cam.x
     const sy = p.y - cam.y
-    if (sx < -10 || sx > cam.width + 10 || sy < -10 || sy > cam.height + 10) continue
+    if (sx < -10 || sx > cam.width + 10 || sy < -10 || sy > cam.height + 10) {continue}
     drawBullet(ctx, sx, sy, p.angle)
   }
 
@@ -1589,13 +1588,13 @@ function renderMinimap(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // Supply drops
   for (const drop of state.supplyDrops) {
-    if (drop.opened) continue
+    if (drop.opened) {continue}
     drawMinimapDot(ctx, mx + drop.x * scale, my + drop.y * scale, COLORS.supplyDrop, 3)
   }
 
   // Enemies (red dots, slightly larger than before so they read well)
   for (const bot of state.bots) {
-    if (!bot.alive) continue
+    if (!bot.alive) {continue}
     drawMinimapDot(ctx, mx + bot.x * scale, my + bot.y * scale, COLORS.bot, 2)
   }
 
@@ -1650,5 +1649,5 @@ export function resizeGame(state: GameState, width: number, height: number) {
 
 export function cleanupGame(canvas: HTMLCanvasElement) {
   const cleanup = (canvas as GameCanvasElement).__gameCleanup
-  if (typeof cleanup === 'function') cleanup()
+  if (typeof cleanup === 'function') {cleanup()}
 }

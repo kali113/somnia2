@@ -88,7 +88,7 @@ function decodeContainerOpenedEvent(
         data: log.data,
         topics: log.topics,
       })
-      if (!isContainerOpenedEvent(decoded)) continue
+      if (!isContainerOpenedEvent(decoded)) {continue}
 
       const args = decoded.args
       const containerTypeCode = Number(args.containerType ?? CONTAINER_TYPE_CODE[request.containerType])
@@ -197,7 +197,7 @@ export async function openContainerVerifiedOnChain(
       txHash,
       receipt.logs as DecodableLog[],
     )
-    if (!reward) return { txHash, reason: 'event_missing' }
+    if (!reward) {return { txHash, reason: 'event_missing' }}
     return { txHash, reward }
   } catch {
     return { txHash: null, reason: 'tx_failed' }

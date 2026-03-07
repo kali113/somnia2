@@ -90,8 +90,8 @@ export function setupInput(canvas: HTMLCanvasElement, state: InputState) {
     state.scrollDelta += Math.sign(e.deltaY)
   }
 
-  const onContextMenu = (e: Event) => e.preventDefault()
-  const onBlur = () => resetInputState()
+  const onContextMenu = (e: Event) => { e.preventDefault(); }
+  const onBlur = () => { resetInputState(); }
 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
@@ -154,7 +154,7 @@ function normalizeKey(key: string): string {
 
 function clampAxis(x: number, y: number): { x: number; y: number } {
   const length = Math.hypot(x, y)
-  if (length <= 1 || length === 0) return { x, y }
+  if (length <= 1 || length === 0) {return { x, y }}
   return { x: x / length, y: y / length }
 }
 
@@ -199,7 +199,7 @@ export function setVirtualKeyHeld(state: InputState, key: string, held: boolean)
 }
 
 export function addVirtualScroll(state: InputState, delta: number) {
-  if (delta === 0) return
+  if (delta === 0) {return}
   state.scrollDelta += Math.sign(delta)
 }
 

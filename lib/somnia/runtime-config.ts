@@ -15,7 +15,7 @@ function isLocalHostname(hostname: string): boolean {
 }
 
 function validateBackendUrl(value: string): string | null {
-  if (!value) return null
+  if (!value) {return null}
 
   try {
     const parsed = new URL(value)
@@ -43,7 +43,7 @@ function toWsUrl(httpUrl: string): string {
 }
 
 function detectLocalBackendUrl(): string {
-  if (typeof window === 'undefined') return ''
+  if (typeof window === 'undefined') {return ''}
   const host = window.location.hostname
   if (host === 'localhost' || host === '127.0.0.1') {
     return `http://${host}:3001`
@@ -86,7 +86,7 @@ export const backendHttpUrl: string | null = validatedBackendEnv
 export const backendWsUrl: string | null = validatedBackendEnv ? `${toWsUrl(validatedBackendEnv)}/ws/queue` : null
 
 export function buildBackendApiUrl(path: string): string | null {
-  if (!backendHttpUrl) return null
+  if (!backendHttpUrl) {return null}
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `${backendHttpUrl}${normalizedPath}`
 }

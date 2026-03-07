@@ -63,15 +63,15 @@ async function fetchJson<T>(path: string): Promise<T> {
     throw new Error(`HTTP ${res.status}`)
   }
 
-  return res.json() as Promise<T>
+  return await (res.json() as Promise<T>)
 }
 
 export async function fetchQueueSnapshot(): Promise<QueueSnapshot> {
-  return fetchJson<QueueSnapshot>('/api/matchmaking/queue')
+  return await fetchJson<QueueSnapshot>('/api/matchmaking/queue')
 }
 
 export async function fetchMatchmakingMe(address: string): Promise<MatchmakingMeResponse> {
-  return fetchJson<MatchmakingMeResponse>(`/api/matchmaking/me/${address.toLowerCase()}`)
+  return await fetchJson<MatchmakingMeResponse>(`/api/matchmaking/me/${address.toLowerCase()}`)
 }
 
 export async function fetchMatchById(matchId: number): Promise<MatchRecord> {
@@ -120,7 +120,7 @@ export function useMatchmaking(address?: string) {
   useEffect(() => {
     let cancelled = false
     const runRefresh = async () => {
-      if (cancelled) return
+      if (cancelled) {return}
       await refresh()
     }
 
@@ -170,6 +170,10 @@ export function useMatchmaking(address?: string) {
 
     ws.onmessage = (evt) => {
       try {
+        if (typeof evt.data !== 'string') {
+          return
+        }
+
         const envelope = JSON.parse(evt.data) as WsEnvelope
 
         if (envelope.type === 'queue_update') {
@@ -180,8 +184,8 @@ export function useMatchmaking(address?: string) {
         if (envelope.type === 'match_updated') {
           const match = envelope.data as MatchRecord
           setActiveMatch((prev) => {
-            if (!prev) return match
-            if (prev.matchId !== match.matchId) return prev
+            if (!prev) {return match}
+            if (prev.matchId !== match.matchId) {return prev}
             return match
           })
           return
@@ -195,7 +199,7 @@ export function useMatchmaking(address?: string) {
             status: 'active' | 'ended'
           }
 
-          if (address && payload.address.toLowerCase() !== address.toLowerCase()) return
+          if (address && payload.address.toLowerCase() !== address.toLowerCase()) {return}
 
           setMe((prev) => ({
             address: address?.toLowerCase() || payload.address,

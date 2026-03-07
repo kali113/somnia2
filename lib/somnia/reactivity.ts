@@ -36,12 +36,14 @@ export function createReactivityConnection(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let subscriptionId: string | null = null
 
-  async function connect() {
-    if (connected || ws) return
+  function connect(): Promise<void> {
+    if (connected || ws) {
+      return Promise.resolve()
+    }
 
     if (!IS_GAME_CONTRACT_CONFIGURED) {
       onEvent(createConnectionEvent('Missing contract address configuration', 'chain_error'))
-      return
+      return Promise.resolve()
     }
 
     const wsUrl = SOMNIA_TESTNET.rpcUrls.default.webSocket[0]
@@ -72,9 +74,13 @@ export function createReactivityConnection(
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data)
+          if (typeof event.data !== 'string') {
+            return
+          }
 
-          if (data.id === 1 && data.result) {
+          const data = JSON.parse(event.data) as unknown
+
+          if (isSubscriptionAck(data)) {
             subscriptionId = data.result
             onEvent(createConnectionEvent(
               `Subscribed to contract events (${subscriptionId?.slice(0, 10)}...)`,
@@ -82,7 +88,7 @@ export function createReactivityConnection(
             return
           }
 
-          if (data.method === 'eth_subscription' && data.params?.result) {
+          if (isSubscriptionEvent(data)) {
             const log = data.params.result
             handleLog(log, onEvent)
           }
@@ -103,13 +109,15 @@ export function createReactivityConnection(
         if (!reconnectTimer) {
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null
-            connect()
+            void connect()
           }, 5000)
         }
       }
     } catch {
       onEvent(createConnectionEvent('Failed to connect to Somnia Testnet', 'chain_error'))
     }
+
+    return Promise.resolve()
   }
 
   function disconnect() {
@@ -211,7 +219,7 @@ function handleLog(
         targetCenterX: Number(parsed.args.targetCenterX),
         targetCenterY: Number(parsed.args.targetCenterY),
         targetRadius: Number(parsed.args.targetRadius),
-        entropyHash: String(parsed.args.entropyHash),
+        entropyHash: parsed.args.entropyHash,
         timestamp: Number(parsed.args.timestamp),
       }, txHash))
       return
@@ -324,3 +332,51 @@ type DecodedSomniaEvent =
         ammoAmount?: bigint
       }
     }
+
+type SubscriptionResponse =
+  | {
+      id: 1
+      result: string
+    }
+  | {
+      method: 'eth_subscription'
+      params: {
+        result: {
+          topics: [] | [`0x${string}`, ...`0x${string}`[]]
+          data: `0x${string}`
+          transactionHash?: string
+        }
+      }
+    }
+
+function isSubscriptionAck(value: unknown): value is Extract<SubscriptionResponse, { id: 1 }> {
+  return typeof value === 'object'
+    && value !== null
+    && 'id' in value
+    && value.id === 1
+    && 'result' in value
+    && typeof value.result === 'string'
+}
+
+function isSubscriptionEvent(value: unknown): value is Extract<SubscriptionResponse, { method: 'eth_subscription' }> {
+  if (
+    typeof value !== 'object'
+    || value === null
+    || !('method' in value)
+    || value.method !== 'eth_subscription'
+    || !('params' in value)
+    || typeof value.params !== 'object'
+    || value.params === null
+    || !('result' in value.params)
+    || typeof value.params.result !== 'object'
+    || value.params.result === null
+  ) {
+    return false
+  }
+
+  const result = value.params.result as { data?: unknown; topics?: unknown; transactionHash?: unknown }
+  const hasValidTopics = Array.isArray(result.topics) && result.topics.every((topic) => typeof topic === 'string')
+  return hasValidTopics
+    && typeof result.data === 'string'
+    && (typeof result.transactionHash === 'string' || typeof result.transactionHash === 'undefined')
+}

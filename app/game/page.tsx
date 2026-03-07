@@ -115,11 +115,11 @@ function GamePageInner() {
 
       try {
         const nextMatch = await fetchMatchById(parsedMatchId)
-        if (cancelled) return
+        if (cancelled) {return}
         setMatch(nextMatch)
         setMatchError(null)
       } catch (error) {
-        if (cancelled) return
+        if (cancelled) {return}
         const message = error instanceof Error ? error.message : String(error)
         setMatchError(message)
       }
@@ -137,14 +137,14 @@ function GamePageInner() {
   useEffect(() => {
     const interval = setInterval(() => {
       const state = gameStateRef.current
-      if (!state) return
+      if (!state) {return}
 
       setAliveCount((prev) => (prev === state.aliveCount ? prev : state.aliveCount))
       setPhase((prev) => (prev === state.phase ? prev : state.phase))
       setPlacement((prev) => (prev === state.placement ? prev : state.placement))
       setGameTime((prev) => (Math.abs(prev - state.time) < 0.1 ? prev : state.time))
     }, 100)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); }
   }, [])
 
   // Somnia event handler
@@ -231,7 +231,7 @@ function GamePageInner() {
     })
 
     openContainerVerifiedOnChain(request).then(({ txHash, reason, reward }) => {
-      if (!gameStateRef.current) return
+      if (!gameStateRef.current) {return}
 
       if (txHash && reward) {
         const applied = confirmVerifiedContainerOpen(gameStateRef.current, reward)
@@ -268,7 +268,7 @@ function GamePageInner() {
 
   const handleStormCommitRequested = useCallback((request: StormCommitRequest) => {
     commitStormCircleOnChain(request).then(({ txHash, reason, commit }) => {
-      if (!gameStateRef.current) return
+      if (!gameStateRef.current) {return}
 
       if (commit) {
         confirmStormCircleCommit(gameStateRef.current, {
@@ -284,7 +284,7 @@ function GamePageInner() {
         'chain_error',
       ))
     }).catch(() => {
-      if (!gameStateRef.current) return
+      if (!gameStateRef.current) {return}
       fallbackStormCircleCommit(gameStateRef.current)
       pushSystemEvent(createConnectionEvent(
         'Storm commit failed; using local fallback',
@@ -359,9 +359,9 @@ function GamePageInner() {
   }, [phase, isMatchMode, walletAddress])
 
   useEffect(() => {
-    if (!containerTxToast || containerTxToast.kind === 'pending') return
-    const timer = setTimeout(() => setContainerTxToast(null), 4200)
-    return () => clearTimeout(timer)
+    if (!containerTxToast || containerTxToast.kind === 'pending') {return}
+    const timer = setTimeout(() => { setContainerTxToast(null); }, 4200)
+    return () => { clearTimeout(timer); }
   }, [containerTxToast])
 
   useEffect(() => {
@@ -406,7 +406,7 @@ function GamePageInner() {
 
   const handleSelectSlot = useCallback((slotIndex: number) => {
     const state = gameStateRef.current
-    if (!state) return
+    if (!state) {return}
     tapVirtualKey(state.input, String(slotIndex + 1))
   }, [])
 

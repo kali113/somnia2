@@ -40,8 +40,8 @@ export default function RewardsPanel() {
 
   useEffect(() => {
     if (claimHash) {
-      const timer = setTimeout(() => refetchRewards(), 3000)
-      return () => clearTimeout(timer)
+      const timer = setTimeout(() => { void refetchRewards() }, 3000)
+      return () => { clearTimeout(timer); }
     }
   }, [claimHash, refetchRewards])
 
