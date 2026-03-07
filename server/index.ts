@@ -15,6 +15,7 @@ import {
   createPublicClient,
   createWalletClient,
   defineChain,
+  fallback,
   http as viemHttp,
   isAddress,
   parseAbi,
@@ -58,7 +59,12 @@ function readDeploymentContractAddress(): string {
 
 // ── Environment ─────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3001', 10)
-const SOMNIA_RPC = process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'
+const SOMNIA_RPC = process.env.SOMNIA_RPC_URL || 'https://rpc.ankr.com/somnia_testnet'
+const SOMNIA_RPC_FALLBACKS: readonly string[] = [
+  SOMNIA_RPC,
+  'https://50312.rpc.thirdweb.com',
+  'https://dream-rpc.somnia.network',
+]
 const DEPLOYED_CONTRACT_ADDRESS = readDeploymentContractAddress()
 const rawContractAddress = (
   process.env.GAME_CONTRACT_ADDRESS ||
@@ -98,7 +104,7 @@ const somniaTestnet = defineChain({
   id: 50312,
   name: 'Somnia Testnet',
   nativeCurrency: { name: 'Somnia Test Token', symbol: 'STT', decimals: 18 },
-  rpcUrls: { default: { http: [SOMNIA_RPC] } },
+  rpcUrls: { default: { http: [...SOMNIA_RPC_FALLBACKS] } },
   blockExplorers: { default: { name: 'Somnia Shannon Explorer', url: 'https://shannon-explorer.somnia.network/' } },
   testnet: true,
 })
@@ -106,7 +112,10 @@ const somniaTestnet = defineChain({
 // ── Viem clients ────────────────────────────────────────────────────────────
 const publicClient = createPublicClient({
   chain: somniaTestnet,
-  transport: viemHttp(SOMNIA_RPC),
+  transport: fallback(
+    SOMNIA_RPC_FALLBACKS.map((url) => viemHttp(url)),
+    { rank: true },
+  ),
 })
 
 let orchestratorAccount: ReturnType<typeof privateKeyToAccount> | null = null
@@ -116,7 +125,10 @@ if (ORCHESTRATOR_KEY && ORCHESTRATOR_KEY !== ZERO_PRIVATE_KEY) {
   orchestratorClient = createWalletClient({
     account: orchestratorAccount,
     chain: somniaTestnet,
-    transport: viemHttp(SOMNIA_RPC),
+    transport: fallback(
+      SOMNIA_RPC_FALLBACKS.map((url) => viemHttp(url)),
+      { rank: true },
+    ),
   })
   console.log(`[orchestrator] Wallet: ${orchestratorAccount.address}`)
 }

@@ -5,8 +5,14 @@ import deployment from '@/contracts/deployments/somnia-shannon-50312.json'
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
-export const SOMNIA_RPC_URL =
-  process.env.NEXT_PUBLIC_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'
+// Ordered by reliability: Ankr and thirdweb are more stable than the default Somnia RPC.
+export const SOMNIA_RPC_URLS: readonly string[] = [
+  process.env.NEXT_PUBLIC_SOMNIA_RPC_URL || 'https://rpc.ankr.com/somnia_testnet',
+  'https://50312.rpc.thirdweb.com',
+  'https://dream-rpc.somnia.network',
+]
+
+export const SOMNIA_RPC_URL = SOMNIA_RPC_URLS[0]
 
 export const SOMNIA_WS_URL =
   process.env.NEXT_PUBLIC_SOMNIA_WS_URL || 'wss://dream-rpc.somnia.network/ws'
@@ -32,7 +38,7 @@ export const SOMNIA_TESTNET = {
   },
   rpcUrls: {
     default: {
-      http: [SOMNIA_RPC_URL],
+      http: [...SOMNIA_RPC_URLS],
       webSocket: [SOMNIA_WS_URL],
     },
   },

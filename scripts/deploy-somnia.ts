@@ -117,7 +117,7 @@ async function compilePixelRoyale(projectRoot: string): Promise<{ abi: unknown[]
 
 async function main(): Promise<void> {
   const projectRoot = process.cwd()
-  const rpcUrl = (process.env.SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network').trim()
+  const rpcUrl = (process.env.SOMNIA_RPC_URL || 'https://rpc.ankr.com/somnia_testnet').trim()
   const privateKey = requirePrivateKey()
   const account = privateKeyToAccount(privateKey)
   const orchestratorAddress = getOrchestratorAddress(account.address)

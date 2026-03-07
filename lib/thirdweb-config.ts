@@ -1,7 +1,7 @@
 'use client'
 
 import { createThirdwebClient, defineChain } from 'thirdweb'
-import { SOMNIA_TESTNET, SOMNIA_FAUCET_URL } from '@/lib/somnia/config'
+import { SOMNIA_TESTNET, SOMNIA_RPC_URL, SOMNIA_FAUCET_URL } from '@/lib/somnia/config'
 
 export const THIRDWEB_CLIENT_ID =
   process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ||
@@ -14,7 +14,7 @@ export const thirdwebClient = createThirdwebClient({
 export const somniaTestnet = defineChain({
   id: SOMNIA_TESTNET.id,
   name: SOMNIA_TESTNET.name,
-  rpc: SOMNIA_TESTNET.rpcUrls.default.http[0],
+  rpc: SOMNIA_RPC_URL,
   nativeCurrency: SOMNIA_TESTNET.nativeCurrency,
   blockExplorers: [
     {
