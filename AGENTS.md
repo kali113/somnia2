@@ -35,6 +35,11 @@ Start with one or two docs below, then follow their file pointers:
 - Push `main` to remote after merging: `git push origin main`.
 - No PR is required for this local workflow.
 
+## Agent Orchestration
+- **Prefer parallel subagents**: when a task has independent subtasks (e.g., write Solidity + update server + update frontend), launch multiple Task subagents in a single message rather than sequentially.
+- Plan first, then fan out: identify which pieces of work are independent, launch them concurrently, and only serialise steps that have true data dependencies.
+- After parallel agents complete, consolidate their outputs before running the shared verification step (`pnpm lint && pnpm build`).
+
 ## Guardrails
 - Keep edits minimal and local to the task.
 - Follow existing TypeScript style already present in touched files.

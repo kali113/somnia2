@@ -11,6 +11,8 @@ import {
   encodeDeployData,
   http,
   isAddress,
+  keccak256,
+  toBytes,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
@@ -107,6 +109,54 @@ async function compilePixelRoyale(projectRoot: string): Promise<{ abi: unknown[]
   const contract = output.contracts?.['PixelRoyale.sol']?.PixelRoyale
   if (!contract?.evm?.bytecode?.object || !contract.abi) {
     throw new Error('Could not find compiled PixelRoyale bytecode.')
+  }
+
+  return {
+    abi: contract.abi,
+    bytecode: `0x${contract.evm.bytecode.object}`,
+  }
+}
+
+async function compileReactivityHandler(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
+  const contractsDir = path.join(projectRoot, 'contracts')
+
+  // Read all source files needed
+  const handlerSource = await readFile(path.join(contractsDir, 'PixelRoyaleReactivityHandler.sol'), 'utf8')
+  const eventHandlerSource = await readFile(path.join(contractsDir, 'somnia-reactivity', 'SomniaEventHandler.sol'), 'utf8')
+
+  const input = {
+    language: 'Solidity',
+    sources: {
+      'PixelRoyaleReactivityHandler.sol': { content: handlerSource },
+      'somnia-reactivity/SomniaEventHandler.sol': { content: eventHandlerSource },
+    },
+    settings: {
+      optimizer: { enabled: true, runs: 200 },
+      outputSelection: {
+        '*': {
+          '*': ['abi', 'evm.bytecode.object'],
+        },
+      },
+    },
+  }
+
+  const compile = solc.compile as (source: string) => string
+  const output = JSON.parse(compile(JSON.stringify(input))) as {
+    errors?: Array<{ severity?: string; formattedMessage?: string; message?: string }>
+    contracts?: Record<string, Record<string, { abi?: unknown[]; evm?: { bytecode?: { object?: string } } }>>
+  }
+
+  if (Array.isArray(output.errors) && output.errors.length > 0) {
+    const fatal = output.errors.filter((error) => error.severity === 'error')
+    if (fatal.length > 0) {
+      const message = fatal.map((error) => error.formattedMessage || error.message || 'Unknown Solidity error').join('\n')
+      throw new Error(`Reactivity handler compile failed:\n${message}`)
+    }
+  }
+
+  const contract = output.contracts?.['PixelRoyaleReactivityHandler.sol']?.PixelRoyaleReactivityHandler
+  if (!contract?.evm?.bytecode?.object || !contract.abi) {
+    throw new Error('Could not find compiled PixelRoyaleReactivityHandler bytecode.')
   }
 
   return {
@@ -222,6 +272,153 @@ async function main(): Promise<void> {
   console.log('\nSet these env values now:')
   console.log(`NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS=${contractAddress}`)
   console.log(`GAME_CONTRACT_ADDRESS=${contractAddress}`)
+
+  // ── Deploy Reactivity Handler ───────────────────────────────────────
+  console.log('\nCompiling PixelRoyaleReactivityHandler...')
+  const handler = await compileReactivityHandler(projectRoot)
+
+  const handlerNonce = await publicClient.getTransactionCount({
+    address: account.address,
+    blockTag: 'pending',
+  })
+
+  const handlerDeployData = encodeDeployData({
+    abi: handler.abi,
+    bytecode: handler.bytecode,
+    args: [contractAddress], // pass PixelRoyale contract address
+  })
+
+  const handlerGas = await publicClient.estimateGas({
+    account: account.address,
+    data: handlerDeployData,
+  })
+
+  console.log('Deploying PixelRoyaleReactivityHandler...')
+  const handlerHash = await walletClient.deployContract({
+    abi: handler.abi,
+    bytecode: handler.bytecode,
+    args: [contractAddress],
+    nonce: handlerNonce,
+    gasPrice,
+    gas: (handlerGas * 12n) / 10n,
+    account,
+    chain: somniaShannon,
+  })
+
+  console.log(`Handler deployment tx: ${handlerHash}`)
+  const handlerReceipt = await publicClient.waitForTransactionReceipt({
+    hash: handlerHash,
+    timeout: 900_000,
+    pollingInterval: 2_000,
+  })
+
+  if (!handlerReceipt.contractAddress) {
+    throw new Error('Handler deployment mined but no contract address returned.')
+  }
+
+  const handlerAddress = handlerReceipt.contractAddress
+  console.log(`Handler deployed at: ${handlerAddress}`)
+
+  // ── Create on-chain reactivity subscriptions via precompile ──────────
+  console.log('\nCreating on-chain reactivity subscriptions...')
+
+  const REACTIVITY_PRECOMPILE = '0x0000000000000000000000000000000000000100' as const
+
+  // Minimal ABI for the precompile subscribe() function
+  const precompileAbi = [
+    {
+      type: 'function',
+      name: 'subscribe',
+      inputs: [
+        {
+          name: 'subscriptionData',
+          type: 'tuple',
+          components: [
+            { name: 'eventTopics', type: 'bytes32[4]' },
+            { name: 'origin', type: 'address' },
+            { name: 'caller', type: 'address' },
+            { name: 'emitter', type: 'address' },
+            { name: 'handlerContractAddress', type: 'address' },
+            { name: 'handlerFunctionSelector', type: 'bytes4' },
+            { name: 'priorityFeePerGas', type: 'uint64' },
+            { name: 'maxFeePerGas', type: 'uint64' },
+            { name: 'gasLimit', type: 'uint64' },
+            { name: 'isGuaranteed', type: 'bool' },
+            { name: 'isCoalesced', type: 'bool' },
+          ],
+        },
+      ],
+      outputs: [{ name: 'subscriptionId', type: 'uint256' }],
+      stateMutability: 'nonpayable',
+    },
+  ] as const
+
+  const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
+  const DEFAULT_HANDLER_SELECTOR = '0x00000000' as `0x${string}`
+
+  // GameStarted topic
+  const gameStartedTopic = keccak256(toBytes('GameStarted(uint256,address[],uint256)'))
+  // GameEnded topic
+  const gameEndedTopic = keccak256(toBytes('GameEnded(uint256,address,address[],uint256)'))
+
+  // Helper to create a subscription via the precompile
+  async function createSubscription(eventTopic: `0x${string}`, label: string): Promise<void> {
+    const subNonce = await publicClient.getTransactionCount({
+      address: account.address,
+      blockTag: 'pending',
+    })
+
+    const subHash = await walletClient.writeContract({
+      address: REACTIVITY_PRECOMPILE,
+      abi: precompileAbi,
+      functionName: 'subscribe',
+      args: [
+        {
+          eventTopics: [eventTopic, ZERO_BYTES32, ZERO_BYTES32, ZERO_BYTES32],
+          origin: ZERO_ADDRESS as `0x${string}`,
+          caller: ZERO_ADDRESS as `0x${string}`,
+          emitter: contractAddress,
+          handlerContractAddress: handlerAddress,
+          handlerFunctionSelector: DEFAULT_HANDLER_SELECTOR,
+          priorityFeePerGas: 2_000_000_000n, // 2 gwei in nanoSomi
+          maxFeePerGas: 10_000_000_000n, // 10 gwei in nanoSomi
+          gasLimit: 3_000_000n,
+          isGuaranteed: true,
+          isCoalesced: false,
+        },
+      ],
+      nonce: subNonce,
+      gasPrice,
+      gas: 500_000n,
+      account,
+      chain: somniaShannon,
+    })
+
+    console.log(`${label} subscription tx: ${subHash}`)
+    const subReceipt = await publicClient.waitForTransactionReceipt({
+      hash: subHash,
+      timeout: 300_000,
+      pollingInterval: 2_000,
+    })
+    console.log(`${label} subscription confirmed in block ${subReceipt.blockNumber}`)
+  }
+
+  await createSubscription(gameStartedTopic, 'GameStarted')
+  await createSubscription(gameEndedTopic, 'GameEnded')
+
+  // Update deployment file with handler info
+  const deploymentPath2 = path.join(deploymentsDir, 'somnia-shannon-50312.json')
+  const existingDeployment = JSON.parse(await readFile(deploymentPath2, 'utf8')) as Record<string, unknown>
+  existingDeployment.reactivityHandler = {
+    name: 'PixelRoyaleReactivityHandler',
+    address: handlerAddress,
+    txHash: handlerHash,
+    deployedAtBlock: Number(handlerReceipt.blockNumber),
+  }
+  await writeFile(deploymentPath2, `${JSON.stringify(existingDeployment, null, 2)}\n`, 'utf8')
+
+  console.log('\nReactivity handler deployment complete!')
+  console.log(`Handler: ${handlerAddress}`)
 }
 
 void main().catch((error: unknown) => {
