@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, formatUnits, http, type Abi } from 'viem'
+import { createPublicClient, fallback, formatUnits, http, type Abi } from 'viem'
 import { defineChain, getContract, prepareContractCall } from 'thirdweb'
 import {
   useActiveAccount as useThirdwebActiveAccount,
@@ -15,7 +15,7 @@ import {
   useWaitForReceipt,
 } from 'thirdweb/react'
 import { createWallet } from 'thirdweb/wallets'
-import { SOMNIA_TESTNET } from '@/lib/somnia/config'
+import { SOMNIA_TESTNET, SOMNIA_RPC_URLS } from '@/lib/somnia/config'
 import { somniaTestnet, thirdwebClient } from '@/lib/thirdweb-config'
 
 type QueryConfig = {
@@ -59,7 +59,10 @@ const METAMASK_CONNECTOR = {
 
 const somniaPublicClient = createPublicClient({
   chain: SOMNIA_TESTNET,
-  transport: http(SOMNIA_TESTNET.rpcUrls.default.http[0]),
+  transport: fallback(
+    SOMNIA_RPC_URLS.map((url) => http(url)),
+    { rank: true },
+  ),
 })
 
 function resolveChain(chainId?: number) {
