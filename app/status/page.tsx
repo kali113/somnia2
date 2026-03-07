@@ -5,8 +5,10 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ChevronRight, Crosshair, RefreshCcw, RotateCw, ScrollText, ShieldAlert, Sparkles } from 'lucide-react'
 
-/** Base URL of the VM that hosts deploy status data and the orchestrator API. */
-const VM_ORIGIN = 'http://188.166.47.230'
+/** Base URL of the VM that hosts deploy status data and the orchestrator API.
+ *  Uses a Cloudflare quick tunnel for HTTPS so GitHub Pages can fetch without mixed-content errors.
+ *  NOTE: quick tunnel URLs are random and change on restart — update this if the tunnel restarts. */
+const VM_ORIGIN = 'https://collaboration-sox-highlighted-sophisticated.trycloudflare.com'
 
 type DeployState = 'idle' | 'running' | 'success' | 'failed' | string
 
