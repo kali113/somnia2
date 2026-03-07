@@ -58,7 +58,7 @@
     "react-dom": "19.2.4",
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.7.1",
-    "recharts": "2.15.0",
+    "recharts": "3.8.0",
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.5.0",
     "thirdweb": "^5.119.1",
