@@ -31,6 +31,15 @@ const DEPLOYED_PIXEL_ROYALE_ADDRESS =
 const DEPLOYED_HANDLER_ADDRESS =
   ((deployment as Record<string, unknown>).reactivityHandler as { address?: string } | undefined)?.address || ZERO_ADDRESS
 
+const DEPLOYED_REACTIVE_ORCHESTRATOR_ADDRESS =
+  ((deployment as Record<string, unknown>).reactiveOrchestrator as { address?: string } | undefined)?.address || ZERO_ADDRESS
+
+const DEPLOYED_REACTIVE_REWARDS_ADDRESS =
+  ((deployment as Record<string, unknown>).reactiveRewards as { address?: string } | undefined)?.address || ZERO_ADDRESS
+
+const DEPLOYED_LEADERBOARD_ADDRESS =
+  ((deployment as Record<string, unknown>).leaderboard as { address?: string } | undefined)?.address || ZERO_ADDRESS
+
 export const SOMNIA_TESTNET = {
   id: 50312,
   name: 'Somnia Testnet',
@@ -75,6 +84,21 @@ export const IS_GAME_CONTRACT_CONFIGURED =
 export const REACTIVITY_HANDLER_ADDRESS =
   (DEPLOYED_HANDLER_ADDRESS.trim() && /^0x[a-fA-F0-9]{40}$/.test(DEPLOYED_HANDLER_ADDRESS.trim())
     ? DEPLOYED_HANDLER_ADDRESS.trim()
+    : ZERO_ADDRESS) as `0x${string}`
+
+export const REACTIVE_ORCHESTRATOR_ADDRESS =
+  (DEPLOYED_REACTIVE_ORCHESTRATOR_ADDRESS.trim() && /^0x[a-fA-F0-9]{40}$/.test(DEPLOYED_REACTIVE_ORCHESTRATOR_ADDRESS.trim())
+    ? DEPLOYED_REACTIVE_ORCHESTRATOR_ADDRESS.trim()
+    : ZERO_ADDRESS) as `0x${string}`
+
+export const REACTIVE_REWARDS_ADDRESS =
+  (DEPLOYED_REACTIVE_REWARDS_ADDRESS.trim() && /^0x[a-fA-F0-9]{40}$/.test(DEPLOYED_REACTIVE_REWARDS_ADDRESS.trim())
+    ? DEPLOYED_REACTIVE_REWARDS_ADDRESS.trim()
+    : ZERO_ADDRESS) as `0x${string}`
+
+export const LEADERBOARD_CONTRACT_ADDRESS =
+  (DEPLOYED_LEADERBOARD_ADDRESS.trim() && /^0x[a-fA-F0-9]{40}$/.test(DEPLOYED_LEADERBOARD_ADDRESS.trim())
+    ? DEPLOYED_LEADERBOARD_ADDRESS.trim()
     : ZERO_ADDRESS) as `0x${string}`
 
 export const SOMNIA_REACTIVITY_PRECOMPILE = '0x0000000000000000000000000000000000000100' as const

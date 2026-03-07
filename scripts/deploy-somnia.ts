@@ -74,62 +74,76 @@ function getOrchestratorAddress(fallbackAddress: `0x${string}`): `0x${string}` {
 }
 
 async function compilePixelRoyale(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
-  const contractPath = path.join(projectRoot, 'contracts', 'PixelRoyale.sol')
-  const source = await readFile(contractPath, 'utf8')
-
-  const input = {
-    language: 'Solidity',
-    sources: {
-      'PixelRoyale.sol': { content: source },
-    },
-    settings: {
-      optimizer: { enabled: true, runs: 200 },
-      outputSelection: {
-        '*': {
-          '*': ['abi', 'evm.bytecode.object'],
-        },
-      },
-    },
-  }
-
-  const compile = solc.compile as (source: string) => string
-  const output = JSON.parse(compile(JSON.stringify(input))) as {
-    errors?: Array<{ severity?: string; formattedMessage?: string; message?: string }>
-    contracts?: Record<string, Record<string, { abi?: unknown[]; evm?: { bytecode?: { object?: string } } }>>
-  }
-
-  if (Array.isArray(output.errors) && output.errors.length > 0) {
-    const fatal = output.errors.filter((error) => error.severity === 'error')
-    if (fatal.length > 0) {
-      const message = fatal.map((error) => error.formattedMessage || error.message || 'Unknown Solidity error').join('\n')
-      throw new Error(`Solidity compile failed:\n${message}`)
-    }
-  }
-
-  const contract = output.contracts?.['PixelRoyale.sol']?.PixelRoyale
-  if (!contract?.evm?.bytecode?.object || !contract.abi) {
-    throw new Error('Could not find compiled PixelRoyale bytecode.')
-  }
-
-  return {
-    abi: contract.abi,
-    bytecode: `0x${contract.evm.bytecode.object}`,
-  }
+  return await compileContract(projectRoot, {
+    entrySource: 'PixelRoyale.sol',
+    contractName: 'PixelRoyale',
+    sources: [
+      'PixelRoyale.sol',
+    ],
+  })
 }
 
 async function compileReactivityHandler(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
-  const contractsDir = path.join(projectRoot, 'contracts')
+  return await compileContract(projectRoot, {
+    entrySource: 'PixelRoyaleReactivityHandler.sol',
+    contractName: 'PixelRoyaleReactivityHandler',
+    sources: [
+      'PixelRoyaleReactivityHandler.sol',
+      'somnia-reactivity/SomniaEventHandler.sol',
+    ],
+  })
+}
 
-  // Read all source files needed
-  const handlerSource = await readFile(path.join(contractsDir, 'PixelRoyaleReactivityHandler.sol'), 'utf8')
-  const eventHandlerSource = await readFile(path.join(contractsDir, 'somnia-reactivity', 'SomniaEventHandler.sol'), 'utf8')
+async function compileReactiveOrchestrator(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
+  return await compileContract(projectRoot, {
+    entrySource: 'PixelRoyaleReactiveOrchestrator.sol',
+    contractName: 'PixelRoyaleReactiveOrchestrator',
+    sources: [
+      'PixelRoyaleReactiveOrchestrator.sol',
+      'somnia-reactivity/SomniaEventHandler.sol',
+    ],
+  })
+}
+
+async function compileReactiveRewards(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
+  return await compileContract(projectRoot, {
+    entrySource: 'PixelRoyaleReactiveRewards.sol',
+    contractName: 'PixelRoyaleReactiveRewards',
+    sources: [
+      'PixelRoyaleReactiveRewards.sol',
+      'somnia-reactivity/SomniaEventHandler.sol',
+    ],
+  })
+}
+
+async function compileLeaderboard(projectRoot: string): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
+  return await compileContract(projectRoot, {
+    entrySource: 'PixelRoyaleLeaderboard.sol',
+    contractName: 'PixelRoyaleLeaderboard',
+    sources: [
+      'PixelRoyaleLeaderboard.sol',
+      'somnia-reactivity/SomniaEventHandler.sol',
+    ],
+  })
+}
+
+async function compileContract(
+  projectRoot: string,
+  options: {
+    entrySource: string
+    contractName: string
+    sources: string[]
+  },
+): Promise<{ abi: unknown[]; bytecode: `0x${string}` }> {
+  const contractsDir = path.join(projectRoot, 'contracts')
+  const sources = await Promise.all(options.sources.map(async (sourcePath) => {
+    const content = await readFile(path.join(contractsDir, sourcePath), 'utf8')
+    return [sourcePath, { content }] as const
+  }))
 
   const input = {
     language: 'Solidity',
-    sources: {
-      'PixelRoyaleReactivityHandler.sol': { content: handlerSource },
-      'somnia-reactivity/SomniaEventHandler.sol': { content: eventHandlerSource },
-    },
+    sources: Object.fromEntries(sources),
     settings: {
       optimizer: { enabled: true, runs: 200 },
       outputSelection: {
@@ -150,13 +164,13 @@ async function compileReactivityHandler(projectRoot: string): Promise<{ abi: unk
     const fatal = output.errors.filter((error) => error.severity === 'error')
     if (fatal.length > 0) {
       const message = fatal.map((error) => error.formattedMessage || error.message || 'Unknown Solidity error').join('\n')
-      throw new Error(`Reactivity handler compile failed:\n${message}`)
+      throw new Error(`${options.contractName} compile failed:\n${message}`)
     }
   }
 
-  const contract = output.contracts?.['PixelRoyaleReactivityHandler.sol']?.PixelRoyaleReactivityHandler
+  const contract = output.contracts?.[options.entrySource]?.[options.contractName]
   if (!contract?.evm?.bytecode?.object || !contract.abi) {
-    throw new Error('Could not find compiled PixelRoyaleReactivityHandler bytecode.')
+    throw new Error(`Could not find compiled ${options.contractName} bytecode.`)
   }
 
   return {
@@ -170,7 +184,7 @@ async function main(): Promise<void> {
   const rpcUrl = (process.env.SOMNIA_RPC_URL || 'https://rpc.ankr.com/somnia_testnet').trim()
   const privateKey = requirePrivateKey()
   const account = privateKeyToAccount(privateKey)
-  const orchestratorAddress = getOrchestratorAddress(account.address)
+  const initialOrchestratorAddress = getOrchestratorAddress(account.address)
 
   const publicClient = createPublicClient({
     chain: somniaShannon,
@@ -188,136 +202,195 @@ async function main(): Promise<void> {
     throw new Error(`Deployer ${account.address} has 0 STT. Fund it from faucet first: https://cloud.google.com/application/web3/faucet/somnia/shannon`)
   }
 
-  const { abi, bytecode } = await compilePixelRoyale(projectRoot)
-
-  const nonce = await publicClient.getTransactionCount({
-    address: account.address,
-    blockTag: 'pending',
-  })
+  const [pixelRoyaleArtifact, handlerArtifact, orchestratorArtifact, rewardsArtifact, leaderboardArtifact] = await Promise.all([
+    compilePixelRoyale(projectRoot),
+    compileReactivityHandler(projectRoot),
+    compileReactiveOrchestrator(projectRoot),
+    compileReactiveRewards(projectRoot),
+    compileLeaderboard(projectRoot),
+  ])
 
   const suggestedGasPrice = await publicClient.getGasPrice()
   const gasPrice = (suggestedGasPrice * 12n) / 10n
 
-  const deploymentData = encodeDeployData({
-    abi,
-    bytecode,
-    args: [orchestratorAddress],
-  })
+  async function deployCompiledContract(
+    label: string,
+    artifact: { abi: unknown[]; bytecode: `0x${string}` },
+    args: readonly unknown[],
+  ): Promise<{ address: `0x${string}`; txHash: `0x${string}`; blockNumber: number }> {
+    const nonce = await publicClient.getTransactionCount({
+      address: account.address,
+      blockTag: 'pending',
+    })
 
-  const estimatedGas = await publicClient.estimateGas({
-    account: account.address,
-    data: deploymentData,
-  })
-  const gas = (estimatedGas * 12n) / 10n
+    const deploymentData = encodeDeployData({
+      abi: artifact.abi,
+      bytecode: artifact.bytecode,
+      args,
+    })
 
-  console.log('Deploying PixelRoyale...')
-  console.log(`Deployer: ${account.address}`)
-  console.log(`Orchestrator: ${orchestratorAddress}`)
-  console.log(`RPC: ${rpcUrl}`)
-  console.log(`Nonce: ${nonce}`)
-  console.log(`GasPrice: ${gasPrice}`)
-  console.log(`GasLimit: ${gas}`)
+    const estimatedGas = await publicClient.estimateGas({
+      account: account.address,
+      data: deploymentData,
+    })
 
-  const hash = await walletClient.deployContract({
-    abi,
-    bytecode,
-    args: [orchestratorAddress],
-    nonce,
-    gasPrice,
-    gas,
-    account,
-    chain: somniaShannon,
-  })
+    const gas = (estimatedGas * 12n) / 10n
 
-  console.log(`Deployment tx: ${hash}`)
-  const receipt = await publicClient.waitForTransactionReceipt({
-    hash,
-    timeout: 900_000,
-    pollingInterval: 2_000,
-  })
+    console.log(`Deploying ${label}...`)
+    console.log(`Nonce: ${nonce}`)
+    console.log(`GasPrice: ${gasPrice}`)
+    console.log(`GasLimit: ${gas}`)
 
-  if (!receipt.contractAddress) {
-    throw new Error('Deployment mined but no contract address returned.')
+    const txHash = await walletClient.deployContract({
+      abi: artifact.abi,
+      bytecode: artifact.bytecode,
+      args,
+      nonce,
+      gasPrice,
+      gas,
+      account,
+      chain: somniaShannon,
+    })
+
+    console.log(`${label} deployment tx: ${txHash}`)
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      timeout: 900_000,
+      pollingInterval: 2_000,
+    })
+
+    if (!receipt.contractAddress) {
+      throw new Error(`${label} deployment mined but no contract address returned.`)
+    }
+
+    console.log(`${label} deployed at: ${receipt.contractAddress}`)
+
+    return {
+      address: receipt.contractAddress,
+      txHash,
+      blockNumber: Number(receipt.blockNumber),
+    }
   }
 
-  const contractAddress = receipt.contractAddress
+  console.log('Deploying PixelRoyale reactive suite...')
+  console.log(`Deployer: ${account.address}`)
+  console.log(`Initial orchestrator: ${initialOrchestratorAddress}`)
+  console.log(`RPC: ${rpcUrl}`)
+
+  const pixelRoyaleDeployment = await deployCompiledContract(
+    'PixelRoyale',
+    pixelRoyaleArtifact,
+    [initialOrchestratorAddress],
+  )
+
+  const contractAddress = pixelRoyaleDeployment.address
   console.log(`Contract deployed at: ${contractAddress}`)
   console.log(`Explorer: https://shannon-explorer.somnia.network/address/${contractAddress}`)
 
   const abiPath = path.join(projectRoot, 'contracts', 'abi.json')
-  await writeFile(abiPath, `${JSON.stringify(abi, null, 2)}\n`, 'utf8')
+  await writeFile(abiPath, `${JSON.stringify(pixelRoyaleArtifact.abi, null, 2)}\n`, 'utf8')
+
+  const baseHandlerDeployment = await deployCompiledContract(
+    'PixelRoyaleReactivityHandler',
+    handlerArtifact,
+    [contractAddress],
+  )
+
+  const reactiveOrchestratorDeployment = await deployCompiledContract(
+    'PixelRoyaleReactiveOrchestrator',
+    orchestratorArtifact,
+    [contractAddress],
+  )
+
+  const reactiveRewardsDeployment = await deployCompiledContract(
+    'PixelRoyaleReactiveRewards',
+    rewardsArtifact,
+    [contractAddress],
+  )
+
+  const leaderboardDeployment = await deployCompiledContract(
+    'PixelRoyaleLeaderboard',
+    leaderboardArtifact,
+    [contractAddress],
+  )
+
+  const setOrchestratorAbi = [
+    {
+      type: 'function',
+      name: 'setOrchestrator',
+      inputs: [{ name: '_orch', type: 'address' }],
+      outputs: [],
+      stateMutability: 'nonpayable',
+    },
+  ] as const
+
+  const setOrchestratorTx = await walletClient.writeContract({
+    address: contractAddress,
+    abi: setOrchestratorAbi,
+    functionName: 'setOrchestrator',
+    args: [reactiveOrchestratorDeployment.address],
+    account,
+    chain: somniaShannon,
+    gasPrice,
+  })
+
+  await publicClient.waitForTransactionReceipt({
+    hash: setOrchestratorTx,
+    timeout: 300_000,
+    pollingInterval: 2_000,
+  })
+
+  console.log(`Reactive orchestrator activated: ${reactiveOrchestratorDeployment.address}`)
 
   const deploymentsDir = path.join(projectRoot, 'contracts', 'deployments')
   await mkdir(deploymentsDir, { recursive: true })
   const deploymentPath = path.join(deploymentsDir, 'somnia-shannon-50312.json')
-  await writeFile(
-    deploymentPath,
-    `${JSON.stringify({
-      chainId: 50312,
-      chainName: 'Somnia Testnet',
-      rpcUrl,
-      deployer: account.address,
-      orchestrator: orchestratorAddress,
-      contract: {
-        name: 'PixelRoyale',
-        address: contractAddress,
-        txHash: hash,
-        deployedAtBlock: Number(receipt.blockNumber),
-      },
-      deployedAt: new Date().toISOString(),
-    }, null, 2)}\n`,
-    'utf8',
-  )
+  const deploymentPayload = {
+    chainId: 50312,
+    chainName: 'Somnia Testnet',
+    rpcUrl,
+    deployer: account.address,
+    initialOrchestrator: initialOrchestratorAddress,
+    orchestrator: reactiveOrchestratorDeployment.address,
+    contract: {
+      name: 'PixelRoyale',
+      address: contractAddress,
+      txHash: pixelRoyaleDeployment.txHash,
+      deployedAtBlock: pixelRoyaleDeployment.blockNumber,
+    },
+    reactivityHandler: {
+      name: 'PixelRoyaleReactivityHandler',
+      address: baseHandlerDeployment.address,
+      txHash: baseHandlerDeployment.txHash,
+      deployedAtBlock: baseHandlerDeployment.blockNumber,
+    },
+    reactiveOrchestrator: {
+      name: 'PixelRoyaleReactiveOrchestrator',
+      address: reactiveOrchestratorDeployment.address,
+      txHash: reactiveOrchestratorDeployment.txHash,
+      deployedAtBlock: reactiveOrchestratorDeployment.blockNumber,
+      activatedByTxHash: setOrchestratorTx,
+    },
+    reactiveRewards: {
+      name: 'PixelRoyaleReactiveRewards',
+      address: reactiveRewardsDeployment.address,
+      txHash: reactiveRewardsDeployment.txHash,
+      deployedAtBlock: reactiveRewardsDeployment.blockNumber,
+    },
+    leaderboard: {
+      name: 'PixelRoyaleLeaderboard',
+      address: leaderboardDeployment.address,
+      txHash: leaderboardDeployment.txHash,
+      deployedAtBlock: leaderboardDeployment.blockNumber,
+    },
+    deployedAt: new Date().toISOString(),
+  } as Record<string, unknown>
+
+  await writeFile(deploymentPath, `${JSON.stringify(deploymentPayload, null, 2)}\n`, 'utf8')
 
   console.log('\nSet these env values now:')
   console.log(`NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS=${contractAddress}`)
   console.log(`GAME_CONTRACT_ADDRESS=${contractAddress}`)
-
-  // ── Deploy Reactivity Handler ───────────────────────────────────────
-  console.log('\nCompiling PixelRoyaleReactivityHandler...')
-  const handler = await compileReactivityHandler(projectRoot)
-
-  const handlerNonce = await publicClient.getTransactionCount({
-    address: account.address,
-    blockTag: 'pending',
-  })
-
-  const handlerDeployData = encodeDeployData({
-    abi: handler.abi,
-    bytecode: handler.bytecode,
-    args: [contractAddress], // pass PixelRoyale contract address
-  })
-
-  const handlerGas = await publicClient.estimateGas({
-    account: account.address,
-    data: handlerDeployData,
-  })
-
-  console.log('Deploying PixelRoyaleReactivityHandler...')
-  const handlerHash = await walletClient.deployContract({
-    abi: handler.abi,
-    bytecode: handler.bytecode,
-    args: [contractAddress],
-    nonce: handlerNonce,
-    gasPrice,
-    gas: (handlerGas * 12n) / 10n,
-    account,
-    chain: somniaShannon,
-  })
-
-  console.log(`Handler deployment tx: ${handlerHash}`)
-  const handlerReceipt = await publicClient.waitForTransactionReceipt({
-    hash: handlerHash,
-    timeout: 900_000,
-    pollingInterval: 2_000,
-  })
-
-  if (!handlerReceipt.contractAddress) {
-    throw new Error('Handler deployment mined but no contract address returned.')
-  }
-
-  const handlerAddress = handlerReceipt.contractAddress
-  console.log(`Handler deployed at: ${handlerAddress}`)
 
   // ── Create on-chain reactivity subscriptions via precompile ──────────
   console.log('\nCreating on-chain reactivity subscriptions...')
@@ -356,13 +429,16 @@ async function main(): Promise<void> {
   const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
   const DEFAULT_HANDLER_SELECTOR = '0x00000000' as `0x${string}`
 
-  // GameStarted topic
   const gameStartedTopic = keccak256(toBytes('GameStarted(uint256,address[],uint256)'))
-  // GameEnded topic
   const gameEndedTopic = keccak256(toBytes('GameEnded(uint256,address,address[],uint256)'))
+  const playerJoinedTopic = keccak256(toBytes('PlayerJoinedQueue(address,uint256)'))
 
   // Helper to create a subscription via the precompile
-  async function createSubscription(eventTopic: `0x${string}`, label: string): Promise<void> {
+  async function createSubscription(
+    eventTopic: `0x${string}`,
+    handlerAddress: `0x${string}`,
+    label: string,
+  ): Promise<`0x${string}`> {
     const subNonce = await publicClient.getTransactionCount({
       address: account.address,
       blockTag: 'pending',
@@ -401,24 +477,25 @@ async function main(): Promise<void> {
       pollingInterval: 2_000,
     })
     console.log(`${label} subscription confirmed in block ${subReceipt.blockNumber}`)
+    return subHash
   }
 
-  await createSubscription(gameStartedTopic, 'GameStarted')
-  await createSubscription(gameEndedTopic, 'GameEnded')
-
-  // Update deployment file with handler info
-  const deploymentPath2 = path.join(deploymentsDir, 'somnia-shannon-50312.json')
-  const existingDeployment = JSON.parse(await readFile(deploymentPath2, 'utf8')) as Record<string, unknown>
-  existingDeployment.reactivityHandler = {
-    name: 'PixelRoyaleReactivityHandler',
-    address: handlerAddress,
-    txHash: handlerHash,
-    deployedAtBlock: Number(handlerReceipt.blockNumber),
+  const subscriptions = {
+    gameStartedMirror: await createSubscription(gameStartedTopic, baseHandlerDeployment.address, 'GameStarted -> base handler'),
+    gameEndedMirror: await createSubscription(gameEndedTopic, baseHandlerDeployment.address, 'GameEnded -> base handler'),
+    matchmaking: await createSubscription(playerJoinedTopic, reactiveOrchestratorDeployment.address, 'PlayerJoinedQueue -> reactive orchestrator'),
+    rewards: await createSubscription(gameEndedTopic, reactiveRewardsDeployment.address, 'GameEnded -> reactive rewards'),
+    leaderboard: await createSubscription(gameEndedTopic, leaderboardDeployment.address, 'GameEnded -> leaderboard'),
   }
-  await writeFile(deploymentPath2, `${JSON.stringify(existingDeployment, null, 2)}\n`, 'utf8')
 
-  console.log('\nReactivity handler deployment complete!')
-  console.log(`Handler: ${handlerAddress}`)
+  deploymentPayload.subscriptions = subscriptions
+  await writeFile(deploymentPath, `${JSON.stringify(deploymentPayload, null, 2)}\n`, 'utf8')
+
+  console.log('\nReactive suite deployment complete!')
+  console.log(`Base handler: ${baseHandlerDeployment.address}`)
+  console.log(`Reactive orchestrator: ${reactiveOrchestratorDeployment.address}`)
+  console.log(`Reactive rewards: ${reactiveRewardsDeployment.address}`)
+  console.log(`Leaderboard: ${leaderboardDeployment.address}`)
 }
 
 void main().catch((error: unknown) => {
