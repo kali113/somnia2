@@ -183,7 +183,7 @@ async function main() {
     })
 
     await checkRoute(browser, '/game', async (page) => {
-      await page.getByRole('button', { name: /mute|unmute/i }).waitFor()
+      await page.getByRole('button', { name: /select slot 1: pickaxe/i }).waitFor()
       assert.match(page.url(), /\/game\/$/)
     })
   } finally {
