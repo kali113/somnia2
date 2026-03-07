@@ -297,7 +297,7 @@ export function useWriteContract() {
     writeContract,
     data: hash,
     isPending: transaction.isPending,
-    error: localError ?? (transaction.error as Error | null),
+    error: localError ?? transaction.error,
     reset,
   }
 }

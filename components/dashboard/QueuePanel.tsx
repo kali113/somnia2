@@ -35,7 +35,9 @@ type QueuePlayersResult = readonly string[]
 
 /** Parse a Solidity revert reason from an error message */
 function parseRevertReason(err: Error | null): string | null {
-  if (!err) return null
+  if (!err) {
+    return null
+  }
   const msg = err.message || ''
   // Match common patterns: "ALREADY_IN_QUEUE", "execution reverted: ALREADY_IN_QUEUE"
   const match = msg.match(/(?:execution reverted[:\s]*)?["']?(ALREADY_IN_QUEUE|NOT_IN_QUEUE|QUEUE_FULL|WRONG_FEE)["']?/i)
@@ -50,6 +52,7 @@ function friendlyQueueError(err: Error | null): string | null {
     case 'NOT_IN_QUEUE': return 'You are not currently in the queue.'
     case 'QUEUE_FULL': return 'The queue is full (20/20). Wait for the current game to start.'
     case 'WRONG_FEE': return 'Incorrect entry fee sent. Please try again.'
+    case null: return null
     default: return null
   }
 }
@@ -170,17 +173,25 @@ export default function QueuePanel() {
   const handledJoinErrorRef = useRef<Error | null>(null)
 
   useEffect(() => {
-    if (!joinError || joinError === handledJoinErrorRef.current) return
-    if (parseRevertReason(joinError) !== 'ALREADY_IN_QUEUE') return
+    if (!joinError || joinError === handledJoinErrorRef.current) {
+      return
+    }
+    if (parseRevertReason(joinError) !== 'ALREADY_IN_QUEUE') {
+      return
+    }
 
     handledJoinErrorRef.current = joinError
-    refetchInQueue()
-    refetchQueueSize()
-    refetchQueuePlayers()
+    void refetchInQueue()
+    void refetchQueueSize()
+    void refetchQueuePlayers()
 
     // Schedule state update + auto-dismiss asynchronously (not synchronous in effect body)
-    const t1 = setTimeout(() => setOptimisticJoined(true), 0)
-    const t2 = setTimeout(() => resetJoin(), 4000)
+    const t1 = setTimeout(() => {
+      setOptimisticJoined(true)
+    }, 0)
+    const t2 = setTimeout(() => {
+      resetJoin()
+    }, 4000)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [joinError, refetchInQueue, refetchQueueSize, refetchQueuePlayers, resetJoin])
 
