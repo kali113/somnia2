@@ -2,13 +2,13 @@
   "chainId": 50312,
   "chainName": "Somnia Testnet",
   "rpcUrl": "https://dream-rpc.somnia.network",
-  "deployer": "0xEdAcF7e7B79b78686bd45CC10B9695B62B1af02A",
-  "orchestrator": "0xEdAcF7e7B79b78686bd45CC10B9695B62B1af02A",
+  "deployer": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
+  "orchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "contract": {
     "name": "PixelRoyale",
-    "address": "0x3fe0b7aa1b541b3b6fba3dae0899d0a0b40901c1",
-    "txHash": "0x30a72be3057b5fe7e15bdb14ebc561d931988a1231156123e0038feb76068e23",
-    "deployedAtBlock": 323024928
+    "address": "0x12c1803f933095dd21c80f0c95b08235e43564c0",
+    "txHash": "0xde35ff5d96eb84d3377648bb398d60cc2209678423b6418c382d1523b7d18132",
+    "deployedAtBlock": 324526146
   },
-  "deployedAt": "2026-03-05T21:22:59.308Z"
+  "deployedAt": "2026-03-07T15:20:09.555Z"
 }
