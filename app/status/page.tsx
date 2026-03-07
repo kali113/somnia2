@@ -5,6 +5,9 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ChevronRight, Crosshair, RefreshCcw, RotateCw, ScrollText, ShieldAlert, Sparkles } from 'lucide-react'
 
+/** Base URL of the VM that hosts deploy status data and the orchestrator API. */
+const VM_ORIGIN = 'http://188.166.47.230'
+
 type DeployState = 'idle' | 'running' | 'success' | 'failed' | string
 
 interface DeployStatus {
@@ -124,9 +127,9 @@ export default function StatusPage() {
 
     try {
       const [nextStatus, nextHistory, nextLog] = await Promise.all([
-        fetchJson<DeployStatus>('./data/status.json'),
-        fetchJson<HistoryPayload>('./data/history.json'),
-        fetchText('./data/deploy.log'),
+        fetchJson<DeployStatus>(`${VM_ORIGIN}/status/data/status.json`),
+        fetchJson<HistoryPayload>(`${VM_ORIGIN}/status/data/history.json`),
+        fetchText(`${VM_ORIGIN}/status/data/deploy.log`),
       ])
 
       setStatus(nextStatus)
@@ -203,7 +206,7 @@ export default function StatusPage() {
     setActionStatus('Triggering redeploy...')
 
     try {
-      const response = await fetch('/api/admin/redeploy', {
+      const response = await fetch(`${VM_ORIGIN}/api/admin/redeploy`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
