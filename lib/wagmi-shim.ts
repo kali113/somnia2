@@ -287,11 +287,18 @@ export function useWriteContract() {
     [transaction],
   )
 
+  const reset = useCallback(() => {
+    setHash(undefined)
+    setLocalError(null)
+    transaction.reset()
+  }, [transaction])
+
   return {
     writeContract,
     data: hash,
     isPending: transaction.isPending,
     error: localError ?? (transaction.error as Error | null),
+    reset,
   }
 }
 
