@@ -7,6 +7,7 @@ import * as ResizablePrimitive from 'react-resizable-panels'
 import { cn } from '@/lib/utils'
 
 type ResizableDirection = 'horizontal' | 'vertical'
+type ResizablePrimitiveExports = Record<string, unknown>
 
 type ResizablePanelGroupProps = React.ComponentProps<'div'> & {
   autoSaveId?: string | null
@@ -46,8 +47,10 @@ type ResizableHandleProps = React.ComponentProps<'div'> & {
   withHandle?: boolean
 }
 
+const resizablePrimitiveExports = ResizablePrimitive as ResizablePrimitiveExports
+
 const ResizablePanelGroupPrimitive = (
-  'Group' in ResizablePrimitive ? ResizablePrimitive.Group : ResizablePrimitive.PanelGroup
+  resizablePrimitiveExports.Group ?? resizablePrimitiveExports.PanelGroup
 ) as React.ComponentType<Record<string, unknown>>
 
 const ResizablePanelPrimitive = ResizablePrimitive.Panel as React.ComponentType<
@@ -55,9 +58,8 @@ const ResizablePanelPrimitive = ResizablePrimitive.Panel as React.ComponentType<
 >
 
 const ResizableHandlePrimitive = (
-  'Separator' in ResizablePrimitive
-    ? ResizablePrimitive.Separator
-    : ResizablePrimitive.PanelResizeHandle
+  resizablePrimitiveExports.Separator ??
+  resizablePrimitiveExports.PanelResizeHandle
 ) as React.ComponentType<Record<string, unknown>>
 
 function ResizablePanelGroup({
@@ -65,10 +67,9 @@ function ResizablePanelGroup({
   direction = 'horizontal',
   ...props
 }: ResizablePanelGroupProps) {
-  const primitiveProps =
-    'Group' in ResizablePrimitive
-      ? { orientation: direction, ...props }
-      : { direction, ...props }
+  const primitiveProps = resizablePrimitiveExports.Group
+    ? { orientation: direction, ...props }
+    : { direction, ...props }
 
   return (
     <ResizablePanelGroupPrimitive

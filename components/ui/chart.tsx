@@ -282,17 +282,27 @@ function ChartTooltipContent({
 
 const ChartLegend = RechartsPrimitive.Legend
 
+type ChartLegendPayloadEntry = {
+  color?: string
+  dataKey?: string | number
+  value?: string | number
+}
+
+type ChartLegendProps = React.ComponentProps<'div'> & {
+  payload?: ReadonlyArray<ChartLegendPayloadEntry>
+  verticalAlign?: 'top' | 'bottom'
+}
+
 function ChartLegendContent({
   className,
   hideIcon = false,
   payload,
   verticalAlign = 'bottom',
   nameKey,
-}: React.ComponentProps<'div'> &
-  Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
-    hideIcon?: boolean
-    nameKey?: string
-  }) {
+}: ChartLegendProps & {
+  hideIcon?: boolean
+  nameKey?: string
+}) {
   const { config } = useChart()
 
   if (!payload?.length) {
