@@ -23,12 +23,34 @@ import {
   truncateAddress,
   SOMNIA_FAUCET_URL,
 } from '@/lib/somnia/contract'
+import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
 import { restoreSessionWallet, SESSION_UPDATED_EVENT } from '@/lib/somnia/session-wallet'
-import { Loader2, AlertTriangle, ExternalLink, Swords } from 'lucide-react'
-import { useEffect, useCallback, useState } from 'react'
+import { Loader2, AlertTriangle, ExternalLink, Swords, Timer } from 'lucide-react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { formatEther, type Address } from 'viem'
 
 type QueuePlayersResult = readonly string[]
+
+/** Parse a Solidity revert reason from an error message */
+function parseRevertReason(err: Error | null): string | null {
+  if (!err) return null
+  const msg = err.message || ''
+  // Match common patterns: "ALREADY_IN_QUEUE", "execution reverted: ALREADY_IN_QUEUE"
+  const match = msg.match(/(?:execution reverted[:\s]*)?["']?(ALREADY_IN_QUEUE|NOT_IN_QUEUE|QUEUE_FULL|WRONG_FEE)["']?/i)
+  return match ? match[1].toUpperCase() : null
+}
+
+/** Human-friendly error messages for known revert reasons */
+function friendlyQueueError(err: Error | null): string | null {
+  const reason = parseRevertReason(err)
+  switch (reason) {
+    case 'ALREADY_IN_QUEUE': return 'You are already in the queue. Wait for the game to start or leave first.'
+    case 'NOT_IN_QUEUE': return 'You are not currently in the queue.'
+    case 'QUEUE_FULL': return 'The queue is full (20/20). Wait for the current game to start.'
+    case 'WRONG_FEE': return 'Incorrect entry fee sent. Please try again.'
+    default: return null
+  }
+}
 
 export default function QueuePanel() {
   const { address, isConnected } = useAccount()
@@ -53,6 +75,59 @@ export default function QueuePanel() {
   const [sessionAddress, setSessionAddress] = useState<Address | null>(
     () => restoreSessionWallet()?.address ?? null,
   )
+
+  // ── Matchmaking WebSocket for countdown timer ─────────────────────────
+  const { queue: wsQueue } = useMatchmaking(address ?? undefined)
+
+  // ── Countdown timer ────────────────────────────────────────────────────
+  // We track the deadline in a ref and let a 1-second interval push updates
+  // into state via the interval callback (not synchronously in the effect body).
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownDeadlineRef = useRef<number | null>(null)
+
+  // Compute whether the timer should be active
+  const timerActive = !!(wsQueue?.openedAt && wsQueue.size >= wsQueue.minPlayers)
+
+  useEffect(() => {
+    // Clear any existing timer
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+
+    if (!timerActive || !wsQueue?.openedAt) {
+      countdownDeadlineRef.current = null
+      return
+    }
+
+    const deadline = wsQueue.openedAt + wsQueue.timeoutSec
+    countdownDeadlineRef.current = deadline
+
+    // The interval callback updates state (this is allowed — it's async, not synchronous in the effect body)
+    const tick = () => {
+      const d = countdownDeadlineRef.current
+      if (d === null) return
+      const now = Math.floor(Date.now() / 1000)
+      setCountdown(Math.max(0, d - now))
+    }
+
+    tick() // immediate first tick (runs in microtask via setInterval(fn, 0) below)
+    countdownRef.current = setInterval(tick, 1000)
+
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current)
+        countdownRef.current = null
+      }
+    }
+  }, [timerActive, wsQueue?.openedAt, wsQueue?.timeoutSec])
+
+  // Reset countdown when timer becomes inactive (derived, not in effect)
+  const displayCountdown = timerActive ? countdown : null
+
+  // ── Optimistic join flag (prevents double-join race) ──────────────────
+  const [optimisticJoinedRaw, setOptimisticJoined] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -99,8 +174,11 @@ export default function QueuePanel() {
     },
   })
 
+  // Derive optimistic flag: auto-clear when on-chain state resolves
+  const optimisticJoined = isInQueue === undefined ? optimisticJoinedRaw : false
+
   // ── Write contract ────────────────────────────────────────────────────
-  const { writeContract: joinQueue, data: joinHash, isPending: isJoining, error: joinError } = useWriteContract()
+  const { writeContract: joinQueue, data: joinHash, isPending: isJoining, error: joinError, reset: resetJoin } = useWriteContract()
   const { writeContract: leaveQueue, data: leaveHash, isPending: isLeaving, error: leaveError } = useWriteContract()
 
   const { isLoading: joinConfirming } = useWaitForTransactionReceipt({
@@ -110,6 +188,26 @@ export default function QueuePanel() {
   const { isLoading: leaveConfirming } = useWaitForTransactionReceipt({
     hash: leaveHash,
   })
+
+  // Handle ALREADY_IN_QUEUE error: treat as "you're in queue" and force refetch.
+  // We use a ref to track the last handled error to avoid re-triggering, and
+  // schedule setState in a timeout (async) to satisfy the lint rule.
+  const handledJoinErrorRef = useRef<Error | null>(null)
+
+  useEffect(() => {
+    if (!joinError || joinError === handledJoinErrorRef.current) return
+    if (parseRevertReason(joinError) !== 'ALREADY_IN_QUEUE') return
+
+    handledJoinErrorRef.current = joinError
+    refetchInQueue()
+    refetchQueueSize()
+    refetchQueuePlayers()
+
+    // Schedule state update + auto-dismiss asynchronously (not synchronous in effect body)
+    const t1 = setTimeout(() => setOptimisticJoined(true), 0)
+    const t2 = setTimeout(() => resetJoin(), 4000)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [joinError, refetchInQueue, refetchQueueSize, refetchQueuePlayers, resetJoin])
 
   // Refetch after tx confirms
   useEffect(() => {
@@ -127,7 +225,7 @@ export default function QueuePanel() {
   const hasEnoughBalance = balance ? balance.value >= MIN_QUEUE_BALANCE : false
   const hasSessionWallet = !!sessionAddress
   const hasSessionConfigured = hasSessionWallet && isValidSession === true
-  const playerInQueue = isInQueue === true
+  const playerInQueue = isInQueue === true || optimisticJoined
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
 
   // Queue progress percentage
@@ -139,13 +237,23 @@ export default function QueuePanel() {
     if (!isOnSomnia) return
     if (!hasSessionConfigured) return
     if (!hasEnoughBalance) return
+    if (playerInQueue) return // prevent double-join
+    setOptimisticJoined(true)
     joinQueue(joinQueueArgs())
-  }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance])
+  }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance, playerInQueue])
 
   const handleLeaveQueue = useCallback(() => {
     if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    setOptimisticJoined(false)
     leaveQueue(leaveQueueArgs())
   }, [leaveQueue])
+
+  // Format countdown as MM:SS
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   return (
     <div className="rounded-xl border border-[rgba(255,215,0,0.15)] bg-[rgba(255,215,0,0.03)] p-6">
@@ -193,6 +301,48 @@ export default function QueuePanel() {
           </p>
         )}
       </div>
+
+      {/* Countdown Timer */}
+      {displayCountdown !== null && currentQueueSize >= 2 && (
+        <div className="mb-4 rounded-lg border border-[rgba(58,232,255,0.25)] bg-[rgba(58,232,255,0.06)] p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Timer className="h-4 w-4 text-[#3ae8ff]" />
+            <span className="text-xs font-mono font-bold text-[#3ae8ff] uppercase">
+              {displayCountdown > 0 ? 'Game starts in' : 'Starting game...'}
+            </span>
+          </div>
+          {displayCountdown > 0 ? (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-2xl font-mono font-black text-white tabular-nums">
+                  {formatCountdown(displayCountdown)}
+                </span>
+                <span className="text-[10px] font-mono text-[rgba(255,255,255,0.4)]">
+                  {currentQueueSize} player{currentQueueSize !== 1 ? 's' : ''} ready
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[rgba(0,0,0,0.4)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#3ae8ff] to-[#7b2dff] transition-all duration-1000"
+                  style={{
+                    width: `${Math.max(0, 100 - (displayCountdown / (wsQueue?.timeoutSec ?? 120)) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="text-[10px] font-mono text-[rgba(255,255,255,0.35)] mt-1.5">
+                Game auto-starts when timer expires (min 2 players) or queue fills to 20.
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center justify-center gap-2 py-1">
+              <Loader2 className="h-4 w-4 animate-spin text-[#3ae8ff]" />
+              <span className="text-sm font-mono font-bold text-[#3ae8ff] animate-pulse">
+                Initiating game...
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Queued Players List */}
       {Array.isArray(queuePlayers) && queuePlayers.length > 0 && (
@@ -347,7 +497,9 @@ export default function QueuePanel() {
       {(joinError || leaveError) && (
         <div className="mt-3 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
           <p className="text-xs font-mono text-[#ff4444]">
-            {(joinError || leaveError)?.message?.slice(0, 100) || 'Transaction failed'}
+            {friendlyQueueError(joinError || leaveError) ||
+              (joinError || leaveError)?.message?.slice(0, 120) ||
+              'Transaction failed'}
           </p>
         </div>
       )}
