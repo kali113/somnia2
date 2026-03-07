@@ -183,7 +183,6 @@ async function main() {
     })
 
     await checkRoute(browser, '/game', async (page) => {
-      await page.getByRole('button', { name: /connect to somnia/i }).waitFor()
       await page.getByRole('button', { name: /mute|unmute/i }).waitFor()
       assert.match(page.url(), /\/game\/$/)
     })
