@@ -216,10 +216,16 @@ export default function QueuePanel() {
   // Check session expiry periodically (Date.now() is impure, so we use an interval)
   useEffect(() => {
     if (!sessionExpiry) {
-      const t = setTimeout(() => setSessionExpiringSoon(false), 0)
-      return () => clearTimeout(t)
+      const t = setTimeout(() => {
+        setSessionExpiringSoon(false)
+      }, 0)
+      return () => {
+        clearTimeout(t)
+      }
     }
-    const check = () => setSessionExpiringSoon((sessionExpiry - Date.now()) < SESSION_MIN_REMAINING_MS)
+    const check = () => {
+      setSessionExpiringSoon((sessionExpiry - Date.now()) < SESSION_MIN_REMAINING_MS)
+    }
     const t = setTimeout(check, 0)
     const interval = setInterval(check, 10_000)
     return () => { clearTimeout(t); clearInterval(interval) }
@@ -264,7 +270,7 @@ export default function QueuePanel() {
     // The interval callback updates state (async, not synchronous in the effect body)
     const tick = () => {
       const d = countdownDeadlineRef.current
-      if (d === null) return
+      if (d === null) {return}
       const now = Math.floor(Date.now() / 1000)
       setCountdown(Math.max(0, d - now))
     }
