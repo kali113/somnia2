@@ -75,8 +75,10 @@ const config = tseslint.config(
   {
     ignores: [
       '.next/**',
+      'coverage/**',
       'out/**',
       'server/dist/**',
+      'server/coverage/**',
       'node_modules/**',
       'tsconfig.tsbuildinfo',
       'ops/vm/dist/**',
