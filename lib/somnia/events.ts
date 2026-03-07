@@ -5,6 +5,9 @@ export type SomniaEventType =
   | 'queue_left'
   | 'game_started'
   | 'game_ended'
+  | 'reactive_force_start'
+  | 'reactive_reward_claim'
+  | 'leaderboard_updated'
   | 'storm_committed'
   | 'chest_opened'
   | 'reward_claimed'
@@ -21,6 +24,9 @@ export interface SomniaEvent {
     | QueueEventData
     | GameStartedEventData
     | GameEndedEventData
+    | ReactiveForceStartEventData
+    | ReactiveRewardClaimEventData
+    | LeaderboardUpdatedEventData
     | StormCommittedEventData
     | ChestOpenedEventData
     | RewardClaimedEventData
@@ -45,6 +51,26 @@ export interface GameEndedEventData {
   gameId: number
   winner: string
   placements: string[]
+  prizePool: string
+}
+
+export interface ReactiveForceStartEventData {
+  player: string
+  queueSize: number
+  success: boolean
+}
+
+export interface ReactiveRewardClaimEventData {
+  gameId: number
+  player: string
+  placement: number
+  success: boolean
+}
+
+export interface LeaderboardUpdatedEventData {
+  gameId: number
+  winner: string
+  playerCount: number
   prizePool: string
 }
 
@@ -151,6 +177,56 @@ export function createGameEndedEvent(
     type: 'game_ended',
     timestamp: Date.now(),
     data: { gameId, winner, placements, prizePool } as GameEndedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createReactiveForceStartEvent(
+  player: string,
+  queueSize: number,
+  success: boolean,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'reactive_force_start',
+    timestamp: Date.now(),
+    data: { player, queueSize, success } as ReactiveForceStartEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createReactiveRewardClaimEvent(
+  gameId: number,
+  player: string,
+  placement: number,
+  success: boolean,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'reactive_reward_claim',
+    timestamp: Date.now(),
+    data: { gameId, player, placement, success } as ReactiveRewardClaimEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
+export function createLeaderboardUpdatedEvent(
+  gameId: number,
+  winner: string,
+  playerCount: number,
+  prizePool: string,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'leaderboard_updated',
+    timestamp: Date.now(),
+    data: { gameId, winner, playerCount, prizePool } as LeaderboardUpdatedEventData,
     source: 'testnet',
     txHash,
   }
@@ -267,6 +343,22 @@ export function formatEventMessage(event: SomniaEvent): string {
     case 'game_ended': {
       const d = event.data as GameEndedEventData
       return `Match #${d.gameId} ended. Winner: ${d.winner.slice(0, 6)}...`
+    }
+    case 'reactive_force_start': {
+      const d = event.data as ReactiveForceStartEventData
+      return d.success
+        ? `Reactive orchestrator started queue at ${d.queueSize} players`
+        : `Reactive start checked queue at ${d.queueSize} players`
+    }
+    case 'reactive_reward_claim': {
+      const d = event.data as ReactiveRewardClaimEventData
+      return d.success
+        ? `Auto-paid P${d.placement} rewards for ${d.player.slice(0, 6)}...`
+        : `Auto-pay retry needed for ${d.player.slice(0, 6)}...`
+    }
+    case 'leaderboard_updated': {
+      const d = event.data as LeaderboardUpdatedEventData
+      return `On-chain leaderboard updated for match #${d.gameId}`
     }
     case 'storm_committed': {
       const d = event.data as StormCommittedEventData

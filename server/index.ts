@@ -49,14 +49,25 @@ const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
 const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
 
-function readDeploymentContractAddress(): string {
+function readDeployment(): {
+  contract?: { address?: string }
+  reactivityHandler?: { address?: string }
+  reactiveOrchestrator?: { address?: string }
+  reactiveRewards?: { address?: string }
+  leaderboard?: { address?: string }
+} {
   try {
     const deploymentPath = path.join(projectRoot, 'contracts', 'deployments', 'somnia-shannon-50312.json')
     const raw = readFileSync(deploymentPath, 'utf8')
-    const payload = JSON.parse(raw) as { contract?: { address?: string } }
-    return (payload.contract?.address || '').trim()
+    return JSON.parse(raw) as {
+      contract?: { address?: string }
+      reactivityHandler?: { address?: string }
+      reactiveOrchestrator?: { address?: string }
+      reactiveRewards?: { address?: string }
+      leaderboard?: { address?: string }
+    }
   } catch {
-    return ''
+    return {}
   }
 }
 
@@ -68,7 +79,8 @@ const SOMNIA_RPC_FALLBACKS: readonly string[] = [
   'https://50312.rpc.thirdweb.com',
   'https://dream-rpc.somnia.network',
 ]
-const DEPLOYED_CONTRACT_ADDRESS = readDeploymentContractAddress()
+const deployment = readDeployment()
+const DEPLOYED_CONTRACT_ADDRESS = (deployment.contract?.address || '').trim()
 const rawContractAddress = (
   process.env.GAME_CONTRACT_ADDRESS ||
   process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
@@ -78,6 +90,13 @@ const rawContractAddress = (
 ).trim()
 const CONTRACT_ADDRESS: Address = isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
+const REACTIVITY_EVENT_SOURCES = [
+  CONTRACT_ADDRESS,
+  deployment.reactivityHandler?.address,
+  deployment.reactiveOrchestrator?.address,
+  deployment.reactiveRewards?.address,
+  deployment.leaderboard?.address,
+].filter((value): value is Address => Boolean(value && isAddress(value) && value.toLowerCase() !== ZERO_ADDRESS))
 const ORCHESTRATOR_KEY = (
   process.env.ORCHESTRATOR_PRIVATE_KEY ||
   process.env.SOMNIA_DEPLOYER_PRIVATE_KEY
@@ -489,11 +508,14 @@ async function startReactivitySubscription(): Promise<void> {
       'event RewardClaimed(address indexed player, uint256 amount)',
       'event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry)',
       'event SessionKeyRevoked(address indexed player, address indexed sessionKey)',
+      'event ReactiveForceStartAttempt(address indexed player, uint256 queueSize, bool success, bytes returnData)',
+      'event ReactiveRewardClaim(uint256 indexed gameId, address indexed player, uint256 placement, bool success, bytes returnData)',
+      'event LeaderboardUpdated(uint256 indexed gameId, address indexed winner, uint256 playerCount, uint256 prizePool)',
     ] as const)
 
     const result = await sdk.subscribe({
       ethCalls: [],
-      eventContractSources: [CONTRACT_ADDRESS],
+      eventContractSources: REACTIVITY_EVENT_SOURCES,
       onData: (data: SubscriptionCallback) => {
         try {
           const { topics, data: eventData } = data.result
@@ -538,7 +560,7 @@ async function startReactivitySubscription(): Promise<void> {
     }
 
     console.log(`[reactivity] Off-chain subscription active (id: ${result.subscriptionId})`)
-    console.log(`[reactivity] Watching contract: ${CONTRACT_ADDRESS}`)
+    console.log(`[reactivity] Watching contracts: ${REACTIVITY_EVENT_SOURCES.join(', ')}`)
     console.log(`[reactivity] WebSocket: ${SOMNIA_WS_URL}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

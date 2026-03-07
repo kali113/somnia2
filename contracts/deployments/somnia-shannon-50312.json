@@ -3,12 +3,45 @@
   "chainName": "Somnia Testnet",
   "rpcUrl": "https://dream-rpc.somnia.network",
   "deployer": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
-  "orchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
+  "initialOrchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
+  "orchestrator": "0x87a8caaf64f4b31cb1048daff0a323e5d8f00c14",
   "contract": {
     "name": "PixelRoyale",
-    "address": "0x12c1803f933095dd21c80f0c95b08235e43564c0",
-    "txHash": "0xde35ff5d96eb84d3377648bb398d60cc2209678423b6418c382d1523b7d18132",
-    "deployedAtBlock": 324526146
+    "address": "0xbf2a623af06492536cb34da6e8cff292de45a4b8",
+    "txHash": "0x0530b5757a51fd9cb4accdbc6c1012e0011fc43c9f0ffce268f44459291982d4",
+    "deployedAtBlock": 324557656
   },
-  "deployedAt": "2026-03-07T15:20:09.555Z"
+  "reactivityHandler": {
+    "name": "PixelRoyaleReactivityHandler",
+    "address": "0xcb04233e9fe1c489a1026d400ba9ab3c74fdf403",
+    "txHash": "0x94bdd9bb5d6037983d950983c4f07dee8cf01b31d8a251e3e1b6a06c4654007e",
+    "deployedAtBlock": 324557663
+  },
+  "reactiveOrchestrator": {
+    "name": "PixelRoyaleReactiveOrchestrator",
+    "address": "0x87a8caaf64f4b31cb1048daff0a323e5d8f00c14",
+    "txHash": "0x29f2d1d22c7334820899b8449ecbdebe361a9705de0e8e48ba01dd512468e781",
+    "deployedAtBlock": 324557669,
+    "activatedByTxHash": "0xa5df2f3808b17e89e4bbfab76c9ddf52c2abeea16bcfe38da3b31784492e28af"
+  },
+  "reactiveRewards": {
+    "name": "PixelRoyaleReactiveRewards",
+    "address": "0xf49a2f3238009d33516b60ef6e149fcadb7acdcb",
+    "txHash": "0x97a3298bf40f8aed852c8657678c9dd91db626e8b90434f91fbfb1bbf011aade",
+    "deployedAtBlock": 324557675
+  },
+  "leaderboard": {
+    "name": "PixelRoyaleLeaderboard",
+    "address": "0x843b953e873e3eb89b4fb99afba2addcff467d34",
+    "txHash": "0x2e2e8105fd2acd927acbb35f9942fba6b0b1efa84934cd7ea72424f69063d305",
+    "deployedAtBlock": 324557681
+  },
+  "deployedAt": "2026-03-07T23:09:15.194Z",
+  "subscriptions": {
+    "gameStartedMirror": "0x5ce68773473666062ece992f01cff61e1ede6d457a6cf77d2526839e1b0d6006",
+    "gameEndedMirror": "0x82ed43a9637b81ab39a3e1a860694810f9ecb1614edc98ac81b4180379ccd99c",
+    "matchmaking": "0xe78182c00fec5257107302f494196dc6735f4f4925df4c120e58e4e3dc9ec3bf",
+    "rewards": "0x3426b23bb532751b36819a71a7b1a1037bc86a3b96a96b11acfc91d6a33e5deb",
+    "leaderboard": "0x7d4f7eac27fffb1172a8360e44f32e4c81ed89cf70728fb137085eba9fb96cc0"
+  }
 }

@@ -15,8 +15,11 @@ import {
   createConnectionEvent,
   createGameEndedEvent,
   createGameStartedEvent,
+  createLeaderboardUpdatedEvent,
   createQueueJoinedEvent,
   createQueueLeftEvent,
+  createReactiveForceStartEvent,
+  createReactiveRewardClaimEvent,
   createRewardClaimedEvent,
   createSessionApprovedEvent,
   createSessionRevokedEvent,
@@ -377,6 +380,32 @@ function handleDecodedEvent(
       onEvent(createRewardClaimedEvent(
         (args.player as string).toLowerCase(),
         String(args.amount),
+        txHash,
+      ))
+      break
+    case 'ReactiveForceStartAttempt':
+      onEvent(createReactiveForceStartEvent(
+        (args.player as string).toLowerCase(),
+        Number(args.queueSize),
+        Boolean(args.success),
+        txHash,
+      ))
+      break
+    case 'ReactiveRewardClaim':
+      onEvent(createReactiveRewardClaimEvent(
+        Number(args.gameId),
+        (args.player as string).toLowerCase(),
+        Number(args.placement),
+        Boolean(args.success),
+        txHash,
+      ))
+      break
+    case 'LeaderboardUpdated':
+      onEvent(createLeaderboardUpdatedEvent(
+        Number(args.gameId),
+        (args.winner as string).toLowerCase(),
+        Number(args.playerCount),
+        String(args.prizePool),
         txHash,
       ))
       break

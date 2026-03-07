@@ -21,9 +21,9 @@ pragma solidity ^0.8.24;
 contract PixelRoyale {
     // ──────────────────────────── Constants ────────────────────────────
     uint256 public constant MAX_PLAYERS       = 20;
-    uint256 public constant MIN_PLAYERS       = 2;
+    uint256 public constant MIN_PLAYERS       = 1;
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
-    uint256 public constant QUEUE_TIMEOUT     = 120;          // seconds
+    uint256 public constant QUEUE_TIMEOUT     = 0;            // seconds
     uint16 public constant MAP_WIDTH          = 3200;
     uint16 public constant MAP_HEIGHT         = 3200;
     uint16 public constant INITIAL_STORM_X    = 1600;
@@ -581,13 +581,19 @@ contract PixelRoyale {
 
     /// @notice Claim all pending STT rewards.
     function claimRewards() external {
-        uint256 amount = pendingRewards[msg.sender];
+        claimRewardsFor(msg.sender);
+    }
+
+    /// @notice Claim pending rewards for a player and send them directly to that player.
+    /// @dev Anyone can trigger this; funds always go to `_player`.
+    function claimRewardsFor(address _player) public returns (uint256 amount) {
+        amount = pendingRewards[_player];
         require(amount > 0, "NO_REWARDS");
-        pendingRewards[msg.sender] = 0;
+        pendingRewards[_player] = 0;
         totalPendingRewards -= amount;
-        (bool ok, ) = msg.sender.call{value: amount}("");
+        (bool ok, ) = _player.call{value: amount}("");
         require(ok, "CLAIM_FAILED");
-        emit RewardClaimed(msg.sender, amount);
+        emit RewardClaimed(_player, amount);
     }
 
     // ──────────────────────────── Views ────────────────────────────────
