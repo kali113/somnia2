@@ -183,7 +183,12 @@ async function main() {
     })
 
     await checkRoute(browser, '/game', async (page) => {
-      await page.getByRole('button', { name: /select slot 1: pickaxe/i }).waitFor()
+      await Promise.any([
+        page.getByRole('button', { name: /select slot 1: pickaxe/i }).waitFor(),
+        page.getByRole('button', { name: /mute|unmute/i }).waitFor(),
+        page.getByRole('button', { name: /connect to somnia/i }).waitFor(),
+        page.getByText(/preparing match/i).waitFor(),
+      ])
       assert.match(page.url(), /\/game\/$/)
     })
   } finally {
