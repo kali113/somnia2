@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from 'express'
-import type { GameStore } from '../store.js'
+import { getServerLocals } from '../http.js'
 
 export const queueRouter: ExpressRouter = Router()
 
@@ -8,7 +8,7 @@ export const queueRouter: ExpressRouter = Router()
  * Returns current on-chain mirrored queue state.
  */
 queueRouter.get('/status', (_req, res) => {
-  const store = (_req as any).store as GameStore
+  const { store } = getServerLocals(_req)
   res.json(store.getQueueState())
 })
 

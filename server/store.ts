@@ -112,13 +112,13 @@ export class GameStore {
   }
 
   getQueueAgeSec(nowSec: number = Math.floor(Date.now() / 1000)): number {
-    if (!this.queueOpenedAt) return 0
+    if (!this.queueOpenedAt) {return 0}
     return Math.max(0, nowSec - this.queueOpenedAt)
   }
 
   canForceStart(nowSec: number = Math.floor(Date.now() / 1000)): boolean {
-    if (this.queuePlayers.length < this.queueMinPlayers) return false
-    if (!this.queueOpenedAt) return false
+    if (this.queuePlayers.length < this.queueMinPlayers) {return false}
+    if (!this.queueOpenedAt) {return false}
     return nowSec >= this.queueOpenedAt + this.queueTimeoutSec
   }
 
@@ -132,13 +132,13 @@ export class GameStore {
     const votes: Record<GameMode, number> = { solo: 0, duo: 0, squad: 0 }
     for (const p of players) {
       const mode = this.playerModes.get(p.toLowerCase())
-      if (mode) votes[mode]++
+      if (mode) {votes[mode]++}
     }
 
     // Default to solo when no stored preference exists.
-    if (votes.solo === 0 && votes.duo === 0 && votes.squad === 0) return 'solo'
-    if (votes.solo >= votes.duo && votes.solo >= votes.squad) return 'solo'
-    if (votes.duo >= votes.squad) return 'duo'
+    if (votes.solo === 0 && votes.duo === 0 && votes.squad === 0) {return 'solo'}
+    if (votes.solo >= votes.duo && votes.solo >= votes.squad) {return 'solo'}
+    if (votes.duo >= votes.squad) {return 'duo'}
     return 'squad'
   }
 
@@ -227,7 +227,7 @@ export class GameStore {
 
   getMatchForPlayer(address: string): MatchRecord | undefined {
     const matchId = this.playerToMatch.get(address.toLowerCase())
-    if (matchId === undefined) return undefined
+    if (matchId === undefined) {return undefined}
     return this.matches.get(matchId)
   }
 
@@ -247,8 +247,8 @@ export class GameStore {
       player.gamesPlayed++
       player.kills += result.kills[i] || 0
       player.matchHistory.push(result.gameId)
-      if (i === 0) player.wins++
-      if (i > 0) player.deaths++
+      if (i === 0) {player.wins++}
+      if (i > 0) {player.deaths++}
     }
 
     return true

@@ -15,7 +15,7 @@ import { activateAudio } from '@/lib/game/audio'
 
 type GameHookWindow = Window & {
   render_game_to_text?: () => string
-  advanceTime?: (ms: number) => Promise<void>
+  advanceTime?: (ms: number) => void
   pixel_debug_state?: GameState | null
   pixel_debug_snapshot?: () => {
     time: number
@@ -76,7 +76,7 @@ export default function GameCanvas({
 
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) {return}
     const viewport = window.visualViewport
     const width = Math.max(1, Math.round(viewport?.width ?? window.innerWidth))
     const height = Math.max(1, Math.round(viewport?.height ?? window.innerHeight))
@@ -92,7 +92,7 @@ export default function GameCanvas({
   const stepGame = useCallback((dt: number) => {
     const state = gameStateRef.current
     const ctx = ctxRef.current
-    if (!state || !ctx) return
+    if (!state || !ctx) {return}
 
     updateGame(state, dt)
     renderGame(ctx, state)
@@ -100,13 +100,13 @@ export default function GameCanvas({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) {return}
 
     let cancelled = false
     canvas.style.touchAction = 'none'
     handleResize()
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {return}
     ctxRef.current = ctx
 
     const win = window as GameHookWindow
@@ -157,8 +157,8 @@ export default function GameCanvas({
         }
       }
     }
-    win.advanceTime = async (ms: number) => {
-      if (!gameStateRef.current) return
+    win.advanceTime = (ms: number) => {
+      if (!gameStateRef.current) {return}
 
       manualAdvanceRef.current = true
       try {
@@ -180,7 +180,7 @@ export default function GameCanvas({
 
     const boot = async () => {
       const mapSeed = await fetchSomniaRandomSeed()
-      if (cancelled) return
+      if (cancelled) {return}
 
       const state = initGame(canvas, {
         botCount,
@@ -214,7 +214,7 @@ export default function GameCanvas({
           return
         }
 
-        if (lastTimeRef.current < 0) lastTimeRef.current = timestamp
+        if (lastTimeRef.current < 0) {lastTimeRef.current = timestamp}
         const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05) // Cap at 50ms
         lastTimeRef.current = timestamp
 
@@ -232,7 +232,7 @@ export default function GameCanvas({
       onPhaseChange(state.phase)
     }
 
-    boot().catch((error) => {
+    boot().catch((error: unknown) => {
       console.error('Failed to boot game canvas', error)
     })
 

@@ -9,9 +9,9 @@ import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
 function PixelBackground() {
   useEffect(() => {
     const canvas = document.getElementById('bg-canvas') as HTMLCanvasElement
-    if (!canvas) return
+    if (!canvas) {return}
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {return}
 
     let animFrame = 0
     const NODE_COUNT = 80
@@ -43,15 +43,15 @@ function PixelBackground() {
     }
 
     function draw() {
-      if (!ctx) return
+      if (!ctx) {return}
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       // Move nodes, bounce off edges
       for (const n of nodes) {
         n.x += n.vx
         n.y += n.vy
-        if (n.x < 0 || n.x > canvas.width) n.vx *= -1
-        if (n.y < 0 || n.y > canvas.height) n.vy *= -1
+        if (n.x < 0 || n.x > canvas.width) {n.vx *= -1}
+        if (n.y < 0 || n.y > canvas.height) {n.vy *= -1}
         n.pulse += 0.008 * n.pulseDir
         if (n.pulse > 1) { n.pulse = 1; n.pulseDir = -1 }
         if (n.pulse < 0.2) { n.pulse = 0.2; n.pulseDir = 1 }
@@ -108,7 +108,7 @@ export default function HomePage() {
       setMounted(true)
     }, 0)
 
-    return () => window.clearTimeout(timer)
+    return () => { window.clearTimeout(timer); }
   }, [])
 
   return (

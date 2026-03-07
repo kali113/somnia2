@@ -16,6 +16,15 @@ interface StoredSession {
   expiry: number
 }
 
+function isStoredSession(value: unknown): value is StoredSession {
+  return typeof value === 'object'
+    && value !== null
+    && 'address' in value
+    && typeof value.address === 'string'
+    && 'expiry' in value
+    && typeof value.expiry === 'number'
+}
+
 function notifySessionUpdated(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT))
@@ -51,13 +60,18 @@ export function createSessionWallet(durationMs: number = DEFAULT_SESSION_DURATIO
  * Restore the short-lived session approval state if it still exists.
  */
 export function restoreSessionWallet(): SessionWallet | null {
-  if (typeof window === 'undefined') return null
+  if (typeof window === 'undefined') {return null}
 
   const raw = sessionStorage.getItem(SESSION_KEY)
-  if (!raw) return null
+  if (!raw) {return null}
 
   try {
-    const stored: StoredSession = JSON.parse(raw)
+    const stored = JSON.parse(raw) as unknown
+    if (!isStoredSession(stored)) {
+      destroySessionWallet()
+      return null
+    }
+
     if (!isAddress(stored.address) || Date.now() >= stored.expiry) {
       destroySessionWallet()
       return null

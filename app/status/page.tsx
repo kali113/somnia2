@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ChevronRight, Crosshair, RefreshCcw, RotateCw, ScrollText, ShieldAlert, Sparkles } from 'lucide-react'
 
-type DeployState = 'idle' | 'running' | 'success' | 'failed' | string
+type DeployState = 'idle' | 'running' | 'success' | 'failed' | (string & {})
 
 interface DeployStatus {
   repoUrl: string
@@ -52,9 +52,9 @@ function formatValue(value: string | number | null | undefined): string {
 }
 
 function statusClasses(status: DeployState): string {
-  if (status === 'success') return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
-  if (status === 'running') return 'border-amber-300/30 bg-amber-300/10 text-amber-100'
-  if (status === 'failed') return 'border-rose-400/30 bg-rose-400/10 text-rose-100'
+  if (status === 'success') {return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'}
+  if (status === 'running') {return 'border-amber-300/30 bg-amber-300/10 text-amber-100'}
+  if (status === 'failed') {return 'border-rose-400/30 bg-rose-400/10 text-rose-100'}
   return 'border-white/10 bg-white/5 text-white/65'
 }
 
@@ -85,7 +85,7 @@ async function fetchJson<T>(path: string): Promise<T> {
     throw new Error(`Failed to load ${path}: HTTP ${response.status}`)
   }
 
-  return response.json() as Promise<T>
+  return await (response.json() as Promise<T>)
 }
 
 async function fetchText(path: string): Promise<string> {
@@ -94,7 +94,7 @@ async function fetchText(path: string): Promise<string> {
     throw new Error(`Failed to load ${path}: HTTP ${response.status}`)
   }
 
-  return response.text()
+  return await response.text()
 }
 
 export default function StatusPage() {
@@ -134,7 +134,7 @@ export default function StatusPage() {
       setLog(nextLog || 'No log output yet.')
       setError(null)
       return nextStatus
-    } catch (loadError) {
+    } catch (loadError: unknown) {
       const message = loadError instanceof Error ? loadError.message : String(loadError)
       setError(message)
       setLog(`Failed to load status: ${message}`)
@@ -163,7 +163,7 @@ export default function StatusPage() {
 
           stopPolling()
         })
-        .catch((pollError) => {
+        .catch((pollError: unknown) => {
           const message = pollError instanceof Error ? pollError.message : String(pollError)
           setActionStatus(`Status refresh failed: ${message}`)
           stopPolling()
@@ -181,7 +181,7 @@ export default function StatusPage() {
       // initial load error already reflected in state
     })
 
-    return () => stopPolling()
+    return () => { stopPolling(); }
   }, [load, startPolling, stopPolling])
 
   const handleRefresh = async () => {
@@ -268,7 +268,7 @@ export default function StatusPage() {
               </Link>
               <button
                 type="button"
-                onClick={handleRedeploy}
+                onClick={() => { void handleRedeploy() }}
                 disabled={redeploying}
                 className="inline-flex items-center gap-2 rounded-full border border-[#3ae8ff]/30 bg-[#3ae8ff] px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-[#050508] transition-transform hover:scale-[1.02] disabled:cursor-wait disabled:opacity-60"
               >

@@ -75,8 +75,13 @@ export class SpatialGrid {
     for (let cx = minCX; cx <= maxCX; cx++) {
       for (let cy = minCY; cy <= maxCY; cy++) {
         const k = this.key(cx, cy)
-        if (!this.cells.has(k)) this.cells.set(k, [])
-        this.cells.get(k)!.push(id)
+        const cell = this.cells.get(k)
+        if (cell) {
+          cell.push(id)
+          continue
+        }
+
+        this.cells.set(k, [id])
       }
     }
   }
@@ -92,7 +97,7 @@ export class SpatialGrid {
       for (let cy = minCY; cy <= maxCY; cy++) {
         const ids = this.cells.get(this.key(cx, cy))
         if (ids) {
-          for (const id of ids) result.add(id)
+          for (const id of ids) {result.add(id)}
         }
       }
     }
@@ -157,13 +162,13 @@ export class SpatialGridRef<T> {
       for (let cy = minCY; cy <= maxCY; cy++) {
         const key = this.key(cx, cy)
         const cell = this.cells.get(key)
-        if (!cell) continue
+        if (!cell) {continue}
 
         for (let i = cell.length - 1; i >= 0; i--) {
-          if (cell[i] === obj) cell.splice(i, 1)
+          if (cell[i] === obj) {cell.splice(i, 1)}
         }
 
-        if (cell.length === 0) this.cells.delete(key)
+        if (cell.length === 0) {this.cells.delete(key)}
       }
     }
   }
@@ -195,8 +200,8 @@ export class SpatialGridRef<T> {
     for (let cx = minCX; cx <= maxCX; cx++) {
       for (let cy = minCY; cy <= maxCY; cy++) {
         const cell = this.cells.get(this.key(cx, cy))
-        if (!cell) continue
-        for (const obj of cell) result.add(obj)
+        if (!cell) {continue}
+        for (const obj of cell) {result.add(obj)}
       }
     }
 

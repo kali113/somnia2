@@ -12,6 +12,15 @@ export interface GameResultResponse {
   error: string | null
 }
 
+function readBodyError(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('error' in body)) {
+    return null
+  }
+
+  const { error } = body as { error?: unknown }
+  return typeof error === 'string' ? error : null
+}
+
 /**
  * Submit a match-mode game result to the backend.
  * The backend orchestrator wallet will call submitGameResult() on-chain.
@@ -36,11 +45,11 @@ export async function submitGameResult(
     })
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
+      const body: unknown = await res.json().catch(() => null)
       return {
         success: false,
         txHash: null,
-        error: (body as Record<string, unknown>).error as string ?? `HTTP ${res.status}`,
+        error: readBodyError(body) ?? `HTTP ${res.status}`,
       }
     }
 

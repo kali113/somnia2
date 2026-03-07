@@ -112,7 +112,7 @@ export function createPlayer(x: number, y: number, name: string): Player {
 
 export function getActiveWeapon(player: Player): WeaponDef | null {
   const slot = player.slots[player.activeSlot]
-  if (!slot) return null
+  if (!slot) {return null}
   return WEAPONS[slot.weaponId] ?? null
 }
 
@@ -128,39 +128,39 @@ function getReserveMultiplier(rarity: Rarity): number {
 
 function getPickupReserveAmmo(weaponId: string, rarity: Rarity): number {
   const weapon = WEAPONS[weaponId]
-  if (!weapon || weapon.isMelee || !Number.isFinite(weapon.magSize)) return 0
+  if (!weapon || weapon.isMelee || !Number.isFinite(weapon.magSize)) {return 0}
   return Math.max(10, Math.round(weapon.magSize * getReserveMultiplier(rarity)))
 }
 
 export function addAmmoToPlayer(player: Player, amount: number, preferredWeaponId?: string): number {
-  if (amount <= 0) return 0
+  if (amount <= 0) {return 0}
   const candidateSlots: InventorySlot[] = []
 
   const pushSlot = (slot: InventorySlot | null) => {
-    if (!slot) return
+    if (!slot) {return}
     const weapon = WEAPONS[slot.weaponId]
-    if (!weapon || weapon.isMelee || !Number.isFinite(slot.reserveAmmo)) return
+    if (!weapon || weapon.isMelee || !Number.isFinite(slot.reserveAmmo)) {return}
     candidateSlots.push(slot)
   }
 
   if (preferredWeaponId) {
     for (const slot of player.slots) {
-      if (slot?.weaponId === preferredWeaponId) pushSlot(slot)
+      if (slot?.weaponId === preferredWeaponId) {pushSlot(slot)}
     }
   }
 
   for (const slot of player.slots) {
-    if (slot && slot.weaponId !== preferredWeaponId) pushSlot(slot)
+    if (slot && slot.weaponId !== preferredWeaponId) {pushSlot(slot)}
   }
 
-  if (candidateSlots.length === 0) return 0
+  if (candidateSlots.length === 0) {return 0}
 
   const split = Math.max(1, Math.floor(amount / candidateSlots.length))
   let granted = 0
   for (let i = 0; i < candidateSlots.length; i++) {
     const slot = candidateSlots[i]
     const remaining = amount - granted
-    if (remaining <= 0) break
+    if (remaining <= 0) {break}
     const bundle = i === candidateSlots.length - 1 ? remaining : Math.min(remaining, split)
     slot.reserveAmmo += bundle
     granted += bundle
@@ -170,8 +170,8 @@ export function addAmmoToPlayer(player: Player, amount: number, preferredWeaponI
 }
 
 function getConsumableCap(itemId: ConsumableId): number {
-  if (itemId === 'bandage') return 75
-  if (itemId === 'mini_shield') return 50
+  if (itemId === 'bandage') {return 75}
+  if (itemId === 'mini_shield') {return 50}
   return itemId === 'medkit' ? PLAYER_MAX_HEALTH : PLAYER_MAX_SHIELD
 }
 
@@ -189,8 +189,8 @@ function getConsumableEffectiveAmount(player: Player, itemId: ConsumableId): num
 }
 
 export function canUseConsumable(player: Player, itemId: ConsumableId): boolean {
-  if (!player.alive) return false
-  if (player.consumables[itemId] <= 0) return false
+  if (!player.alive) {return false}
+  if (player.consumables[itemId] <= 0) {return false}
   return getConsumableEffectiveAmount(player, itemId) > 0
 }
 
@@ -205,7 +205,7 @@ export function selectBestConsumable(player: Player): ConsumableId | null {
   let bestScore = -1
   let bestAmount = -1
   for (const itemId of pickFrom) {
-    if (!canUseConsumable(player, itemId)) continue
+    if (!canUseConsumable(player, itemId)) {continue}
     const item = ITEMS[itemId]
     const amount = getConsumableEffectiveAmount(player, itemId)
     const score = amount / item.useTime
@@ -221,15 +221,15 @@ export function selectBestConsumable(player: Player): ConsumableId | null {
 export function tryPickupConsumable(player: Player, itemId: ConsumableId): boolean {
   const item = ITEMS[itemId]
   const current = player.consumables[itemId]
-  if (current >= item.maxStack) return false
+  if (current >= item.maxStack) {return false}
   player.consumables[itemId] = current + 1
   player.itemsCollected++
   return true
 }
 
 export function startConsumableUse(player: Player, itemId: ConsumableId, now: number): boolean {
-  if (player.activeConsumableUse) return false
-  if (!canUseConsumable(player, itemId)) return false
+  if (player.activeConsumableUse) {return false}
+  if (!canUseConsumable(player, itemId)) {return false}
   const item = ITEMS[itemId]
   player.activeConsumableUse = {
     itemId,
@@ -241,7 +241,7 @@ export function startConsumableUse(player: Player, itemId: ConsumableId, now: nu
 }
 
 export function cancelConsumableUse(player: Player): boolean {
-  if (!player.activeConsumableUse) return false
+  if (!player.activeConsumableUse) {return false}
   player.activeConsumableUse = null
   return true
 }
@@ -251,14 +251,14 @@ export function completeConsumableUseIfReady(
   now: number,
 ): { itemId: ConsumableId; amount: number } | null {
   const active = player.activeConsumableUse
-  if (!active || now < active.endsAt) return null
+  if (!active || now < active.endsAt) {return null}
   player.activeConsumableUse = null
 
   const itemId = active.itemId
-  if (player.consumables[itemId] <= 0) return null
+  if (player.consumables[itemId] <= 0) {return null}
 
   const amount = getConsumableEffectiveAmount(player, itemId)
-  if (amount <= 0) return null
+  if (amount <= 0) {return null}
 
   const item = ITEMS[itemId]
   if (item.healAmount) {
@@ -326,13 +326,13 @@ export function canPlaceBuild(player: Player, map: GameMap, build: BuildPlacemen
 
   const queryRange = Math.max(build.w, build.h) / 2 + 24
   for (const item of map.structureGrid.query(centerX, centerY, queryRange)) {
-    if ('health' in item && item.health <= 0) continue
-    if (aabbOverlap(build, item)) return false
+    if ('health' in item && item.health <= 0) {continue}
+    if (aabbOverlap(build, item)) {return false}
   }
 
   for (const obj of map.envGrid.query(centerX, centerY, queryRange)) {
-    if (obj.health <= 0) continue
-    if (aabbOverlap(build, getEnvironmentBuildOverlay(obj))) return false
+    if (obj.health <= 0) {continue}
+    if (aabbOverlap(build, getEnvironmentBuildOverlay(obj))) {return false}
   }
 
   if (circleAABBOverlap(player.x, player.y, PLAYER_SIZE / 2, build)) {
@@ -358,7 +358,7 @@ export function updatePlayer(
   map: GameMap,
   allColliders: AABB[],
 ): { fired: boolean; buildPlaced: boolean } {
-  if (!player.alive) return { fired: false, buildPlaced: false }
+  if (!player.alive) {return { fired: false, buildPlaced: false }}
 
   let fired = false
   let buildPlaced = false
@@ -366,10 +366,10 @@ export function updatePlayer(
   // ── Movement ──────────────────────────────────────────────────────────
   let dx = input.moveX
   let dy = input.moveY
-  if (input.keys.has('w') || input.keys.has('arrowup')) dy -= 1
-  if (input.keys.has('s') || input.keys.has('arrowdown')) dy += 1
-  if (input.keys.has('a') || input.keys.has('arrowleft')) dx -= 1
-  if (input.keys.has('d') || input.keys.has('arrowright')) dx += 1
+  if (input.keys.has('w') || input.keys.has('arrowup')) {dy -= 1}
+  if (input.keys.has('s') || input.keys.has('arrowdown')) {dy += 1}
+  if (input.keys.has('a') || input.keys.has('arrowleft')) {dx -= 1}
+  if (input.keys.has('d') || input.keys.has('arrowright')) {dx += 1}
 
   if (dx !== 0 || dy !== 0) {
     const len = Math.sqrt(dx * dx + dy * dy)
@@ -387,14 +387,14 @@ export function updatePlayer(
 
   for (const c of allColliders) {
     const testX: AABB = { x: newX - pSize, y: player.y - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
-    if (aabbOverlap(testX, c)) blockedX = true
+    if (aabbOverlap(testX, c)) {blockedX = true}
 
     const testY: AABB = { x: player.x - pSize, y: newY - pSize, w: PLAYER_SIZE, h: PLAYER_SIZE }
-    if (aabbOverlap(testY, c)) blockedY = true
+    if (aabbOverlap(testY, c)) {blockedY = true}
   }
 
-  if (!blockedX) player.x = Math.max(pSize, Math.min(MAP_WIDTH - pSize, newX))
-  if (!blockedY) player.y = Math.max(pSize, Math.min(MAP_HEIGHT - pSize, newY))
+  if (!blockedX) {player.x = Math.max(pSize, Math.min(MAP_WIDTH - pSize, newX))}
+  if (!blockedY) {player.y = Math.max(pSize, Math.min(MAP_HEIGHT - pSize, newY))}
 
   // ── Aim Angle ─────────────────────────────────────────────────────────
   player.angle = Math.atan2(
@@ -417,8 +417,8 @@ export function updatePlayer(
       cycleBuildPiece(player, Math.sign(input.scrollDelta))
     } else {
       let next = player.activeSlot + Math.sign(input.scrollDelta)
-      if (next < 0) next = 4
-      if (next > 4) next = 0
+      if (next < 0) {next = 4}
+      if (next > 4) {next = 0}
       player.activeSlot = next
       player.reloading = false
     }
@@ -443,9 +443,9 @@ export function updatePlayer(
     cycleBuildPiece(player, 1)
   }
 
-  if (player.buildMode && input.justPressed.has('z')) player.buildPiece = 'wall'
-  if (player.buildMode && input.justPressed.has('x')) player.buildPiece = 'barricade'
-  if (player.buildMode && input.justPressed.has('c')) player.buildPiece = 'bunker'
+  if (player.buildMode && input.justPressed.has('z')) {player.buildPiece = 'wall'}
+  if (player.buildMode && input.justPressed.has('x')) {player.buildPiece = 'barricade'}
+  if (player.buildMode && input.justPressed.has('c')) {player.buildPiece = 'bunker'}
 
   if (player.buildMode && input.justClicked) {
     const placement = getBuildPlacement(player, input)
@@ -529,7 +529,7 @@ export function tryPickupWeapon(
   for (let i = 1; i < 5; i++) {
     if (!player.slots[i]) {
       const wep = WEAPONS[weaponId]
-      if (!wep) return false
+      if (!wep) {return false}
       player.slots[i] = {
         weaponId,
         rarity,
@@ -546,7 +546,7 @@ export function tryPickupWeapon(
   // Replace current slot (if not pickaxe)
   if (player.activeSlot > 0) {
     const wep = WEAPONS[weaponId]
-    if (!wep) return false
+    if (!wep) {return false}
     player.slots[player.activeSlot] = {
       weaponId,
       rarity,

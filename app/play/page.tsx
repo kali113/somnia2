@@ -27,9 +27,9 @@ import {
 function DashboardBackground() {
   useEffect(() => {
     const canvas = document.getElementById('dash-bg') as HTMLCanvasElement
-    if (!canvas) return
+    if (!canvas) {return}
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {return}
 
     let animFrame = 0
     const particles: { x: number; y: number; vy: number; size: number; alpha: number }[] = []
@@ -42,7 +42,7 @@ function DashboardBackground() {
     window.addEventListener('resize', resize)
 
     function draw() {
-      if (!ctx) return
+      if (!ctx) {return}
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       // Subtle grid

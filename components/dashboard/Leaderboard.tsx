@@ -42,7 +42,7 @@ export default function Leaderboard() {
         const addr = player.toLowerCase()
         const existing = map.get(addr) || { address: player, wins: 0, gamesPlayed: 0 }
         existing.gamesPlayed++
-        if (addr === winner) existing.wins++
+        if (addr === winner) {existing.wins++}
         map.set(addr, existing)
       }
     }

@@ -23,7 +23,7 @@ export default function VictoryScreen({
   phase, player, placement, gameTime, mode, onPlayAgain, onBackToMenu,
   isMatchMode = false, resultSubmitting = false, resultTxHash = null, resultError = null,
 }: VictoryScreenProps) {
-  if (phase !== 'victory' && phase !== 'eliminated') return null
+  if (phase !== 'victory' && phase !== 'eliminated') {return null}
   const isVictory = phase === 'victory'
 
   const formatTime = (s: number) => {

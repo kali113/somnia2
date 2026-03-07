@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from 'express'
-import type { GameStore } from '../store.js'
+import { getServerLocals } from '../http.js'
 
 export const matchmakingRouter: ExpressRouter = Router()
 
@@ -8,12 +8,12 @@ function isValidAddress(address: string): boolean {
 }
 
 matchmakingRouter.get('/queue', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   res.json(store.getQueueState())
 })
 
 matchmakingRouter.get('/me/:address', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const address = req.params.address?.toLowerCase()
 
   if (!address || !isValidAddress(address)) {
@@ -50,7 +50,7 @@ matchmakingRouter.get('/me/:address', (req, res) => {
 })
 
 matchmakingRouter.get('/matches/:matchId', (req, res) => {
-  const store = (req as any).store as GameStore
+  const { store } = getServerLocals(req)
   const matchId = Number(req.params.matchId)
 
   if (!Number.isFinite(matchId) || matchId < 0) {

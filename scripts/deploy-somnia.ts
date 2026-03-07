@@ -90,7 +90,8 @@ async function compilePixelRoyale(projectRoot: string): Promise<{ abi: unknown[]
     },
   }
 
-  const output = JSON.parse(solc.compile(JSON.stringify(input))) as {
+  const compile = solc.compile as (source: string) => string
+  const output = JSON.parse(compile(JSON.stringify(input))) as {
     errors?: Array<{ severity?: string; formattedMessage?: string; message?: string }>
     contracts?: Record<string, Record<string, { abi?: unknown[]; evm?: { bytecode?: { object?: string } } }>>
   }

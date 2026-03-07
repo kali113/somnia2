@@ -120,7 +120,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, ps: ParticleSyste
   for (const p of ps.particles) {
     const sx = p.x - cam.x
     const sy = p.y - cam.y
-    if (sx < -10 || sx > cam.width + 10 || sy < -10 || sy > cam.height + 10) continue
+    if (sx < -10 || sx > cam.width + 10 || sy < -10 || sy > cam.height + 10) {continue}
     ctx.globalAlpha = p.life / p.maxLife
     ctx.fillStyle = p.color
     ctx.fillRect(sx - p.size / 2, sy - p.size / 2, p.size, p.size)
@@ -131,7 +131,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, ps: ParticleSyste
   for (const d of ps.damagePopups) {
     const sx = d.x - cam.x
     const sy = d.y - cam.y
-    if (sx < -50 || sx > cam.width + 50 || sy < -50 || sy > cam.height + 50) continue
+    if (sx < -50 || sx > cam.width + 50 || sy < -50 || sy > cam.height + 50) {continue}
     drawDamageNumber(ctx, sx, sy, d.damage, d.isShield, d.life)
   }
 
@@ -139,7 +139,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, ps: ParticleSyste
   for (const e of ps.elimExplosions) {
     const sx = e.x - cam.x
     const sy = e.y - cam.y
-    if (sx < -60 || sx > cam.width + 60 || sy < -60 || sy > cam.height + 60) continue
+    if (sx < -60 || sx > cam.width + 60 || sy < -60 || sy > cam.height + 60) {continue}
     drawElimEffect(ctx, sx, sy, e.progress)
   }
 }

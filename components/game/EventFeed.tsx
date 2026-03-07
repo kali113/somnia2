@@ -53,7 +53,7 @@ export default function EventFeed({ events, isLive, touchControls = false }: Eve
     const interval = setInterval(() => {
       setNowMs(Date.now())
     }, 1000)
-    return () => clearInterval(interval)
+    return () => { clearInterval(interval); }
   }, [])
 
   if (touchControls) {

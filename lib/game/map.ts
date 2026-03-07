@@ -143,7 +143,7 @@ function isContainerTooClose(containers: ContainerObj[], x: number, y: number, m
   for (const container of containers) {
     const dx = container.x - x
     const dy = container.y - y
-    if (dx * dx + dy * dy < minDistSq) return true
+    if (dx * dx + dy * dy < minDistSq) {return true}
   }
   return false
 }
@@ -195,7 +195,7 @@ export function generateMap(seed = 42): GameMap {
     for (let x = sx; x <= ex; x++) {
       for (let w = -1; w <= 1; w++) {
         const idx = (ay + w) * MAP_TILES_X + x
-        if (idx >= 0 && idx < tiles.length) tiles[idx] = TileType.Road
+        if (idx >= 0 && idx < tiles.length) {tiles[idx] = TileType.Road}
       }
     }
     const sy = Math.min(ay, by)
@@ -203,7 +203,7 @@ export function generateMap(seed = 42): GameMap {
     for (let y = sy; y <= ey; y++) {
       for (let w = -1; w <= 1; w++) {
         const idx = y * MAP_TILES_X + (bx + w)
-        if (idx >= 0 && idx < tiles.length) tiles[idx] = TileType.Road
+        if (idx >= 0 && idx < tiles.length) {tiles[idx] = TileType.Road}
       }
     }
   }
@@ -320,10 +320,10 @@ export function generateMap(seed = 42): GameMap {
     const cy = 100 + rng() * (MAP_HEIGHT - 200)
     const tx = Math.floor(cx / TILE_SIZE)
     const ty = Math.floor(cy / TILE_SIZE)
-    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) continue
+    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) {continue}
     const tile = tiles[ty * MAP_TILES_X + tx]
-    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) continue
-    if (isContainerTooClose(containers, cx, cy, 42)) continue
+    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) {continue}
+    if (isContainerTooClose(containers, cx, cy, 42)) {continue}
 
     containers.push({
       id: nextContainerId++,
@@ -383,10 +383,10 @@ export function generateMap(seed = 42): GameMap {
     const ay = 100 + rng() * (MAP_HEIGHT - 200)
     const tx = Math.floor(ax / TILE_SIZE)
     const ty = Math.floor(ay / TILE_SIZE)
-    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) continue
+    if (tx < 0 || tx >= MAP_TILES_X || ty < 0 || ty >= MAP_TILES_Y) {continue}
     const tile = tiles[ty * MAP_TILES_X + tx]
-    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) continue
-    if (isContainerTooClose(containers, ax, ay, 30)) continue
+    if (tile !== TileType.Grass && tile !== TileType.Sand && tile !== TileType.BuildingFloor) {continue}
+    if (isContainerTooClose(containers, ax, ay, 30)) {continue}
 
     containers.push({
       id: nextContainerId++,
@@ -452,7 +452,7 @@ export function generateMap(seed = 42): GameMap {
     const cy = 80 + rng() * (MAP_HEIGHT - 160)
     const tileX = Math.floor(cx / TILE_SIZE)
     const tileY = Math.floor(cy / TILE_SIZE)
-    if (tileX < 0 || tileX >= MAP_TILES_X || tileY < 0 || tileY >= MAP_TILES_Y) continue
+    if (tileX < 0 || tileX >= MAP_TILES_X || tileY < 0 || tileY >= MAP_TILES_Y) {continue}
     const tile = tiles[tileY * MAP_TILES_X + tileX]
     if (tile === TileType.Road || tile === TileType.BuildingFloor || tile === TileType.Sand) {
       cars.push({ kind: 'car', x: cx, y: cy, health: 130 })
@@ -517,13 +517,13 @@ function buildMinimapCanvas(
   rocks: RockObj[],
   cars: CarObj[],
 ): HTMLCanvasElement | null {
-  if (typeof document === 'undefined') return null
+  if (typeof document === 'undefined') {return null}
   const size = MINIMAP_SIZE
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  if (!ctx) return null
+  if (!ctx) {return null}
 
   const scale = size / MAP_WIDTH
   const tileW = size / MAP_TILES_X  // 1.6 px per tile
@@ -624,7 +624,7 @@ export function renderMap(
   for (const b of map.buildings) {
     const sx = b.x - cam.x
     const sy = b.y - cam.y
-    if (sx + b.w < -10 || sx > cam.width + 10 || sy + b.h < -10 || sy > cam.height + 10) continue
+    if (sx + b.w < -10 || sx > cam.width + 10 || sy + b.h < -10 || sy > cam.height + 10) {continue}
 
     ctx.strokeStyle = COLORS.buildingDark
     ctx.lineWidth = 4
@@ -655,34 +655,34 @@ export function renderMap(
   for (const pb of map.playerBuilds) {
     const sx = pb.x - cam.x
     const sy = pb.y - cam.y
-    if (sx + pb.w < -10 || sx > cam.width + 10 || sy + pb.h < -10 || sy > cam.height + 10) continue
+    if (sx + pb.w < -10 || sx > cam.width + 10 || sy + pb.h < -10 || sy > cam.height + 10) {continue}
     drawBuildPiece(ctx, sx, sy, pb.w, pb.h, pb.material, pb.pieceId, pb.rotation, pb.health, pb.maxHealth)
   }
 
   // Trees
   for (const t of map.trees) {
-    if (t.health <= 0) continue
+    if (t.health <= 0) {continue}
     const sx = t.x - cam.x
     const sy = t.y - cam.y
-    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
+    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) {continue}
     drawTree(ctx, sx, sy)
   }
 
   // Rocks
   for (const r of map.rocks) {
-    if (r.health <= 0) continue
+    if (r.health <= 0) {continue}
     const sx = r.x - cam.x
     const sy = r.y - cam.y
-    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) continue
+    if (sx < -20 || sx > cam.width + 20 || sy < -20 || sy > cam.height + 20) {continue}
     drawRock(ctx, sx, sy)
   }
 
   // Cars
   for (const car of map.cars) {
-    if (car.health <= 0) continue
+    if (car.health <= 0) {continue}
     const sx = car.x - cam.x
     const sy = car.y - cam.y
-    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
+    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) {continue}
     drawCar(ctx, sx, sy, car.health / 130)
   }
 
@@ -690,7 +690,7 @@ export function renderMap(
   for (const c of map.containers) {
     const sx = c.x - cam.x
     const sy = c.y - cam.y
-    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) continue
+    if (sx < -30 || sx > cam.width + 30 || sy < -30 || sy > cam.height + 30) {continue}
     drawContainer(
       ctx,
       sx,
@@ -709,7 +709,7 @@ export function renderMap(
   for (const label of map.poiLabels) {
     const sx = label.x - cam.x
     const sy = label.y - cam.y
-    if (sx < -100 || sx > cam.width + 100 || sy < -20 || sy > cam.height + 20) continue
+    if (sx < -100 || sx > cam.width + 100 || sy < -20 || sy > cam.height + 20) {continue}
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     const w = ctx.measureText(label.name).width + 8
     ctx.fillRect(sx - w / 2, sy - 10, w, 16)
@@ -722,15 +722,15 @@ export function renderMap(
 
 function buildEnvironmentGrid(trees: TreeObj[], rocks: RockObj[], cars: CarObj[]): SpatialGridRef<EnvObj> {
   const grid = new SpatialGridRef<EnvObj>(200)
-  for (const tree of trees) grid.insertPoint(tree, tree.x, tree.y, 16)
-  for (const rock of rocks) grid.insertPoint(rock, rock.x, rock.y, 16)
-  for (const car of cars) grid.insertPoint(car, car.x, car.y, 24)
+  for (const tree of trees) {grid.insertPoint(tree, tree.x, tree.y, 16)}
+  for (const rock of rocks) {grid.insertPoint(rock, rock.x, rock.y, 16)}
+  for (const car of cars) {grid.insertPoint(car, car.x, car.y, 24)}
   return grid
 }
 
 function buildStructureGrid(wallColliders: AABB[]): SpatialGridRef<AABB | PlayerBuild> {
   const grid = new SpatialGridRef<AABB | PlayerBuild>(200)
-  for (const wall of wallColliders) grid.insertAABB(wall, wall)
+  for (const wall of wallColliders) {grid.insertAABB(wall, wall)}
   return grid
 }
 
@@ -769,7 +769,7 @@ function isStructureCandidateInRange(box: AABB, x: number, y: number, range: num
 export function getEnvironmentColliders(map: GameMap, x: number, y: number, range: number): AABB[] {
   const colliders: AABB[] = []
   for (const obj of map.envGrid.query(x, y, range)) {
-    if (obj.health <= 0 || !isEnvironmentCandidateInRange(obj, x, y, range)) continue
+    if (obj.health <= 0 || !isEnvironmentCandidateInRange(obj, x, y, range)) {continue}
     colliders.push(getEnvironmentCollider(obj))
   }
   return colliders
@@ -779,11 +779,11 @@ export function getStructureColliders(map: GameMap, x: number, y: number, range:
   const colliders: AABB[] = []
   for (const item of map.structureGrid.query(x, y, range)) {
     if ('health' in item) {
-      if (!item.blocksMovement || item.health <= 0 || !isStructureCandidateInRange(item, x, y, range)) continue
+      if (!item.blocksMovement || item.health <= 0 || !isStructureCandidateInRange(item, x, y, range)) {continue}
       colliders.push(item)
       continue
     }
-    if (!isStructureCandidateInRange(item, x, y, range)) continue
+    if (!isStructureCandidateInRange(item, x, y, range)) {continue}
     colliders.push(item)
   }
   return colliders

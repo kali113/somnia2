@@ -47,10 +47,10 @@ export default function WalletPanel() {
     connectors.find((connector) => /meta\s?mask/i.test(connector.name))
 
   const copyAddress = useCallback(() => {
-    if (!address) return
-    navigator.clipboard.writeText(address)
+    if (!address) {return}
+    void navigator.clipboard.writeText(address)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => { setCopied(false); }, 2000)
   }, [address])
 
   if (!isConnected || !address) {
@@ -68,7 +68,7 @@ export default function WalletPanel() {
         <button
           onClick={() => {
             if (metaMaskConnector) {
-              connect({ connector: metaMaskConnector, chainId: somniaTestnet.id })
+              void connect({ connector: metaMaskConnector, chainId: somniaTestnet.id })
             }
           }}
           disabled={!metaMaskConnector}
@@ -96,7 +96,7 @@ export default function WalletPanel() {
           </div>
         </div>
         <button
-          onClick={() => disconnect()}
+          onClick={() => { disconnect(); }}
           className="rounded-lg bg-[rgba(255,68,68,0.1)] p-2 text-[#ff4444] hover:bg-[rgba(255,68,68,0.2)] transition-colors"
           title="Disconnect"
         >
@@ -109,7 +109,7 @@ export default function WalletPanel() {
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-mono text-[#ffb347]">Wrong network. Switch to Somnia Testnet (50312).</p>
             <button
-              onClick={() => switchChain({ chainId: somniaTestnet.id })}
+              onClick={() => { void switchChain({ chainId: somniaTestnet.id }) }}
               disabled={isSwitchingChain}
               className="rounded-md bg-[rgba(58,232,255,0.15)] px-2.5 py-1 text-[10px] font-mono font-bold text-[#3ae8ff] disabled:opacity-50"
             >

@@ -35,7 +35,9 @@ type QueuePlayersResult = readonly string[]
 
 /** Parse a Solidity revert reason from an error message */
 function parseRevertReason(err: Error | null): string | null {
-  if (!err) return null
+  if (!err) {
+    return null
+  }
   const msg = err.message || ''
   // Match common patterns: "ALREADY_IN_QUEUE", "execution reverted: ALREADY_IN_QUEUE"
   const match = msg.match(/(?:execution reverted[:\s]*)?["']?(ALREADY_IN_QUEUE|NOT_IN_QUEUE|QUEUE_FULL|WRONG_FEE)["']?/i)
@@ -50,6 +52,7 @@ function friendlyQueueError(err: Error | null): string | null {
     case 'NOT_IN_QUEUE': return 'You are not currently in the queue.'
     case 'QUEUE_FULL': return 'The queue is full (20/20). Wait for the current game to start.'
     case 'WRONG_FEE': return 'Incorrect entry fee sent. Please try again.'
+    case null: return null
     default: return null
   }
 }
@@ -170,17 +173,25 @@ export default function QueuePanel() {
   const handledJoinErrorRef = useRef<Error | null>(null)
 
   useEffect(() => {
-    if (!joinError || joinError === handledJoinErrorRef.current) return
-    if (parseRevertReason(joinError) !== 'ALREADY_IN_QUEUE') return
+    if (!joinError || joinError === handledJoinErrorRef.current) {
+      return
+    }
+    if (parseRevertReason(joinError) !== 'ALREADY_IN_QUEUE') {
+      return
+    }
 
     handledJoinErrorRef.current = joinError
-    refetchInQueue()
-    refetchQueueSize()
-    refetchQueuePlayers()
+    void refetchInQueue()
+    void refetchQueueSize()
+    void refetchQueuePlayers()
 
     // Schedule state update + auto-dismiss asynchronously (not synchronous in effect body)
-    const t1 = setTimeout(() => setOptimisticJoined(true), 0)
-    const t2 = setTimeout(() => resetJoin(), 4000)
+    const t1 = setTimeout(() => {
+      setOptimisticJoined(true)
+    }, 0)
+    const t2 = setTimeout(() => {
+      resetJoin()
+    }, 4000)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [joinError, refetchInQueue, refetchQueueSize, refetchQueuePlayers, resetJoin])
 
@@ -188,11 +199,11 @@ export default function QueuePanel() {
   useEffect(() => {
     if (joinHash || leaveHash) {
       const timer = setTimeout(() => {
-        refetchQueueSize()
-        refetchQueuePlayers()
-        refetchInQueue()
+        void refetchQueueSize()
+        void refetchQueuePlayers()
+        void refetchInQueue()
       }, 3000)
-      return () => clearTimeout(timer)
+      return () => { clearTimeout(timer); }
     }
   }, [joinHash, leaveHash, refetchQueueSize, refetchQueuePlayers, refetchInQueue])
 
@@ -205,10 +216,16 @@ export default function QueuePanel() {
   // Check session expiry periodically (Date.now() is impure, so we use an interval)
   useEffect(() => {
     if (!sessionExpiry) {
-      const t = setTimeout(() => setSessionExpiringSoon(false), 0)
-      return () => clearTimeout(t)
+      const t = setTimeout(() => {
+        setSessionExpiringSoon(false)
+      }, 0)
+      return () => {
+        clearTimeout(t)
+      }
     }
-    const check = () => setSessionExpiringSoon((sessionExpiry - Date.now()) < SESSION_MIN_REMAINING_MS)
+    const check = () => {
+      setSessionExpiringSoon((sessionExpiry - Date.now()) < SESSION_MIN_REMAINING_MS)
+    }
     const t = setTimeout(check, 0)
     const interval = setInterval(check, 10_000)
     return () => { clearTimeout(t); clearInterval(interval) }
@@ -216,6 +233,10 @@ export default function QueuePanel() {
 
   const playerInQueue = isInQueue === true || optimisticJoined
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
+  const normalizedAddress = address?.toLowerCase() ?? null
+  const queuedPlayers = Array.isArray(queuePlayers)
+    ? queuePlayers.filter((player): player is string => typeof player === 'string')
+    : []
 
   // Queue progress percentage
   const queueProgress = (currentQueueSize / 20) * 100
@@ -249,7 +270,7 @@ export default function QueuePanel() {
     // The interval callback updates state (async, not synchronous in the effect body)
     const tick = () => {
       const d = countdownDeadlineRef.current
-      if (d === null) return
+      if (d === null) {return}
       const now = Math.floor(Date.now() / 1000)
       setCountdown(Math.max(0, d - now))
     }
@@ -270,18 +291,18 @@ export default function QueuePanel() {
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleJoinQueue = useCallback(() => {
-    if (!IS_PIXEL_ROYALE_CONFIGURED) return
-    if (!isOnSomnia) return
-    if (!hasSessionConfigured) return
-    if (!hasEnoughBalance) return
-    if (playerInQueue) return // prevent double-join
-    if (sessionExpiringSoon) return // session key expires too soon
+    if (!IS_PIXEL_ROYALE_CONFIGURED) {return}
+    if (!isOnSomnia) {return}
+    if (!hasSessionConfigured) {return}
+    if (!hasEnoughBalance) {return}
+    if (playerInQueue) {return}
+    if (sessionExpiringSoon) {return}
     setOptimisticJoined(true)
     joinQueue(joinQueueArgs())
   }, [joinQueue, isOnSomnia, hasSessionConfigured, hasEnoughBalance, playerInQueue, sessionExpiringSoon])
 
   const handleLeaveQueue = useCallback(() => {
-    if (!IS_PIXEL_ROYALE_CONFIGURED) return
+    if (!IS_PIXEL_ROYALE_CONFIGURED) {return}
     setOptimisticJoined(false)
     leaveQueue(leaveQueueArgs())
   }, [leaveQueue])
@@ -383,24 +404,24 @@ export default function QueuePanel() {
       )}
 
       {/* Queued Players List */}
-      {Array.isArray(queuePlayers) && queuePlayers.length > 0 && (
+      {queuedPlayers.length > 0 && (
         <div className="mb-4 max-h-32 overflow-y-auto rounded-lg bg-[rgba(0,0,0,0.3)] p-3">
           <span className="text-[10px] font-mono text-[rgba(255,255,255,0.3)] uppercase mb-2 block">
             Queued Players
           </span>
           <div className="space-y-1">
-            {queuePlayers.map((player) => (
+            {queuedPlayers.map((player) => (
               <div
                 key={player}
                 className={`flex items-center gap-2 text-xs font-mono ${
-                  player.toLowerCase() === address?.toLowerCase()
+                  player.toLowerCase() === normalizedAddress
                     ? 'text-[#3ae8ff]'
                     : 'text-[rgba(255,255,255,0.5)]'
                 }`}
               >
                 <div className="h-1.5 w-1.5 rounded-full bg-[#4cff4c]" />
                 <span>{truncateAddress(player)}</span>
-                {player.toLowerCase() === address?.toLowerCase() && (
+                {player.toLowerCase() === normalizedAddress && (
                   <span className="text-[10px] text-[#3ae8ff]">(you)</span>
                 )}
               </div>
@@ -425,7 +446,7 @@ export default function QueuePanel() {
             </p>
           </div>
           <button
-            onClick={() => switchChain({ chainId: somniaTestnet.id })}
+            onClick={() => { void switchChain({ chainId: somniaTestnet.id }) }}
             disabled={isSwitchingChain}
             className="w-full rounded-lg bg-[rgba(58,232,255,0.16)] border border-[rgba(58,232,255,0.3)] px-4 py-3 font-mono font-bold text-sm text-[#3ae8ff] hover:bg-[rgba(58,232,255,0.22)] transition-colors disabled:opacity-50"
           >

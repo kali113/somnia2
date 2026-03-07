@@ -94,26 +94,26 @@ export default function MobileControls({
 
   const withInput = (handler: (state: GameState) => void) => {
     const state = gameStateRef.current
-    if (!state) return
+    if (!state) {return}
     handler(state)
   }
 
   useEffect(() => {
-    if (visible) return
+    if (visible) {return}
     const state = gameStateRef.current
-    if (!state) return
+    if (!state) {return}
     resetVirtualMove(state.input)
     clearVirtualAim(state.input)
     setVirtualKeyHeld(state.input, 'e', false)
   }, [gameStateRef, visible])
 
   const interactLabel = useMemo(() => {
-    if (player?.buildMode) return 'Rotate'
-    if (containerPrompt) return 'Open'
+    if (player?.buildMode) {return 'Rotate'}
+    if (containerPrompt) {return 'Open'}
     return 'Use'
   }, [containerPrompt, player?.buildMode])
 
-  if (!visible || !player) return null
+  if (!visible || !player) {return null}
 
   return (
     <div
@@ -132,25 +132,25 @@ export default function MobileControls({
             movePointerIdRef.current = event.pointerId
             event.currentTarget.setPointerCapture(event.pointerId)
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-            withInput((state) => setVirtualMove(state.input, next.x, next.y))
+            withInput((state) => { setVirtualMove(state.input, next.x, next.y); })
           }}
           onPointerMove={(event) => {
-            if (movePointerIdRef.current !== event.pointerId) return
+            if (movePointerIdRef.current !== event.pointerId) {return}
             event.preventDefault()
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-            withInput((state) => setVirtualMove(state.input, next.x, next.y))
+            withInput((state) => { setVirtualMove(state.input, next.x, next.y); })
           }}
           onPointerUp={(event) => {
-            if (movePointerIdRef.current !== event.pointerId) return
+            if (movePointerIdRef.current !== event.pointerId) {return}
             event.preventDefault()
             movePointerIdRef.current = null
             event.currentTarget.releasePointerCapture(event.pointerId)
-            withInput((state) => resetVirtualMove(state.input))
+            withInput((state) => { resetVirtualMove(state.input); })
           }}
           onPointerCancel={(event) => {
-            if (movePointerIdRef.current !== event.pointerId) return
+            if (movePointerIdRef.current !== event.pointerId) {return}
             movePointerIdRef.current = null
-            withInput((state) => resetVirtualMove(state.input))
+            withInput((state) => { resetVirtualMove(state.input); })
           }}
         >
           <div className="pointer-events-none flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.08)]">
@@ -170,25 +170,25 @@ export default function MobileControls({
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
             const angleX = Math.abs(next.x) < 0.12 && Math.abs(next.y) < 0.12 ? Math.cos(player.angle) : next.x
             const angleY = Math.abs(next.x) < 0.12 && Math.abs(next.y) < 0.12 ? Math.sin(player.angle) : next.y
-            withInput((state) => setVirtualAim(state.input, angleX, angleY, !player.buildMode))
+            withInput((state) => { setVirtualAim(state.input, angleX, angleY, !player.buildMode); })
           }}
           onPointerMove={(event) => {
-            if (aimPointerIdRef.current !== event.pointerId) return
+            if (aimPointerIdRef.current !== event.pointerId) {return}
             event.preventDefault()
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-            withInput((state) => setVirtualAim(state.input, next.x, next.y, !player.buildMode))
+            withInput((state) => { setVirtualAim(state.input, next.x, next.y, !player.buildMode); })
           }}
           onPointerUp={(event) => {
-            if (aimPointerIdRef.current !== event.pointerId) return
+            if (aimPointerIdRef.current !== event.pointerId) {return}
             event.preventDefault()
             aimPointerIdRef.current = null
             event.currentTarget.releasePointerCapture(event.pointerId)
-            withInput((state) => clearVirtualAim(state.input))
+            withInput((state) => { clearVirtualAim(state.input); })
           }}
           onPointerCancel={(event) => {
-            if (aimPointerIdRef.current !== event.pointerId) return
+            if (aimPointerIdRef.current !== event.pointerId) {return}
             aimPointerIdRef.current = null
-            withInput((state) => clearVirtualAim(state.input))
+            withInput((state) => { clearVirtualAim(state.input); })
           }}
         >
           <div className="pointer-events-none flex h-12 w-12 items-center justify-center rounded-full border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.08)]">
@@ -212,8 +212,8 @@ export default function MobileControls({
             })
           }}
           onHoldEnd={() => {
-            if (player.buildMode) return
-            withInput((state) => setVirtualKeyHeld(state.input, 'e', false))
+            if (player.buildMode) {return}
+            withInput((state) => { setVirtualKeyHeld(state.input, 'e', false); })
           }}
         />
         <ActionButton
@@ -235,7 +235,7 @@ export default function MobileControls({
           testId="mobile-action-heal"
           icon={<HeartPulse className="h-4 w-4" />}
           onTap={() => {
-            withInput((state) => tapVirtualKey(state.input, 'f'))
+            withInput((state) => { tapVirtualKey(state.input, 'f'); })
           }}
         />
         <ActionButton
@@ -243,7 +243,7 @@ export default function MobileControls({
           testId="mobile-action-build"
           icon={<Hammer className="h-4 w-4" />}
           onTap={() => {
-            withInput((state) => tapVirtualKey(state.input, 'b'))
+            withInput((state) => { tapVirtualKey(state.input, 'b'); })
           }}
         />
       </div>
