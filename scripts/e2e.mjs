@@ -119,14 +119,21 @@ async function assertNoPageErrors(page, route, pageErrors) {
 async function checkRoute(browser, route, verify) {
   const page = await browser.newPage()
   const pageErrors = []
+  page.setDefaultTimeout(15_000)
+  page.setDefaultNavigationTimeout(30_000)
 
   page.on('pageerror', (error) => {
     pageErrors.push(error.message)
   })
 
-  await page.goto(`${frontendOrigin}${route}`, { waitUntil: 'domcontentloaded' })
+  console.log(`Checking ${route}`)
+  await page.goto(`${frontendOrigin}${route}`, {
+    timeout: 30_000,
+    waitUntil: 'domcontentloaded',
+  })
   await verify(page)
   await assertNoPageErrors(page, route, pageErrors)
+  console.log(`Checked ${route}`)
   await page.close()
 }
 
@@ -158,6 +165,7 @@ async function main() {
       waitForUrl(`${frontendOrigin}/`, 'frontend', frontend),
       waitForUrl(`${backendOrigin}/api/health`, 'backend', backend),
     ])
+    console.log('Frontend and backend are ready')
 
     browser = await chromium.launch({ headless: true })
 
