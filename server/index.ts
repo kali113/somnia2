@@ -14,14 +14,17 @@ import dotenv from 'dotenv'
 import {
   createPublicClient,
   createWalletClient,
+  decodeEventLog,
   defineChain,
   fallback,
   http as viemHttp,
   isAddress,
   parseAbi,
+  webSocket,
   type Address,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+import { SDK as SomniaReactivitySDK, type SubscriptionCallback } from '@somnia-chain/reactivity'
 import { playerRouter } from './routes/player.js'
 import { queueRouter } from './routes/queue.js'
 import { gameRouter } from './routes/game.js'
@@ -437,10 +440,112 @@ const wsHeartbeat = setInterval(() => {
 
 server.on('close', () => {
   clearInterval(wsHeartbeat)
+  if (reactivityCleanup) {
+    reactivityCleanup()
+  }
 })
 
 // ── Chain Event Indexer ─────────────────────────────────────────────────────
 const indexer = new Indexer(publicClient, CONTRACT_ADDRESS, store, handleIndexedEvent)
+
+// ── Somnia Reactivity (off-chain push subscription) ─────────────────────────
+const SOMNIA_WS_URL = process.env.SOMNIA_WS_URL || 'wss://dream-rpc.somnia.network/ws'
+
+let reactivityCleanup: (() => void) | null = null
+
+async function startReactivitySubscription(): Promise<void> {
+  if (!CONTRACT_CONFIGURED) {
+    console.log('[reactivity] Contract not configured, skipping off-chain subscription')
+    return
+  }
+
+  try {
+    // Create a WebSocket-backed public client for the SDK
+    const wsPublicClient = createPublicClient({
+      chain: somniaTestnet,
+      transport: webSocket(SOMNIA_WS_URL),
+    })
+
+    const sdk = new SomniaReactivitySDK({
+      public: wsPublicClient,
+      ...(orchestratorClient ? { wallet: orchestratorClient } : {}),
+    })
+
+    // Event topic hashes are computed by the SDK for filtering internally.
+    // We keep them available as comments for reference:
+    // GameStarted: keccak256(toBytes('GameStarted(uint256,address[],uint256)'))
+    // GameEnded: keccak256(toBytes('GameEnded(uint256,address,address[],uint256)'))
+    // PlayerJoinedQueue: keccak256(toBytes('PlayerJoinedQueue(address,uint256)'))
+    // PlayerLeftQueue: keccak256(toBytes('PlayerLeftQueue(address,uint256)'))
+    // RewardClaimed: keccak256(toBytes('RewardClaimed(address,uint256)'))
+    // SessionKeyApproved: keccak256(toBytes('SessionKeyApproved(address,address,uint256)'))
+    // SessionKeyRevoked: keccak256(toBytes('SessionKeyRevoked(address,address)'))
+
+    const CONTRACT_ABI = parseAbi([
+      'event PlayerJoinedQueue(address indexed player, uint256 queueSize)',
+      'event PlayerLeftQueue(address indexed player, uint256 queueSize)',
+      'event GameStarted(uint256 indexed gameId, address[] players, uint256 prizePool)',
+      'event GameEnded(uint256 indexed gameId, address indexed winner, address[] placements, uint256 prizePool)',
+      'event RewardClaimed(address indexed player, uint256 amount)',
+      'event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry)',
+      'event SessionKeyRevoked(address indexed player, address indexed sessionKey)',
+    ] as const)
+
+    const result = await sdk.subscribe({
+      ethCalls: [],
+      eventContractSources: [CONTRACT_ADDRESS],
+      onData: (data: SubscriptionCallback) => {
+        try {
+          const { topics, data: eventData } = data.result
+          if (!topics || topics.length === 0) {
+            return
+          }
+
+          // Decode using viem
+          const decoded = decodeEventLog({
+            abi: CONTRACT_ABI,
+            topics: topics as [`0x${string}`, ...`0x${string}`[]],
+            data: eventData,
+          })
+
+          // Broadcast the decoded event to all WebSocket clients
+          broadcastGameEvent({
+            type: 'reactivity_event',
+            eventName: decoded.eventName,
+            args: decoded.args,
+            topics,
+            source: 'somnia_reactivity',
+            timestamp: Date.now(),
+          })
+
+          console.log(`[reactivity] Event received: ${decoded.eventName}`)
+        } catch (_err) {
+          // Silently ignore decode errors for unrecognized events
+        }
+      },
+      onError: (error: Error) => {
+        console.error(`[reactivity] Subscription error: ${error.message}`)
+      },
+    })
+
+    if (result instanceof Error) {
+      console.error(`[reactivity] Failed to create subscription: ${result.message}`)
+      return
+    }
+
+    reactivityCleanup = () => {
+      result.unsubscribe().catch(() => {})
+    }
+
+    console.log(`[reactivity] Off-chain subscription active (id: ${result.subscriptionId})`)
+    console.log(`[reactivity] Watching contract: ${CONTRACT_ADDRESS}`)
+    console.log(`[reactivity] WebSocket: ${SOMNIA_WS_URL}`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[reactivity] Failed to start: ${message}`)
+    console.log('[reactivity] Falling back to polling indexer only')
+  }
+}
 
 // ── Timeout matchmaking orchestrator ───────────────────────────────────────
 let forceStartInFlight = false
@@ -506,4 +611,9 @@ server.listen(PORT, () => {
   })
 
   startForceStartLoop()
+
+  startReactivitySubscription().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[reactivity] failed to start: ${message}`)
+  })
 })

@@ -1,5 +1,7 @@
 // ── Somnia Reactivity Integration ───────────────────────────────────────────
-// Connects to Somnia testnet via WebSocket to subscribe to on-chain game events.
+// Receives game events from the server's Somnia Reactivity subscription
+// via the existing WebSocket connection. Falls back to direct eth_subscribe
+// if the server connection is unavailable.
 
 import { decodeEventLog } from 'viem'
 import {
@@ -28,6 +30,15 @@ export interface ReactivityConnection {
   isConnected: () => boolean
 }
 
+/**
+ * Creates a reactivity connection that listens to the server's WebSocket
+ * for game events relayed from Somnia Reactivity SDK.
+ *
+ * The server handles the actual Somnia Reactivity subscription and pushes
+ * decoded events to all connected clients via the `/ws/queue` WebSocket.
+ *
+ * Falls back to direct `eth_subscribe` if server WebSocket is unavailable.
+ */
 export function createReactivityConnection(
   onEvent: (event: SomniaEvent) => void,
 ): ReactivityConnection {
@@ -35,9 +46,97 @@ export function createReactivityConnection(
   let connected = false
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let subscriptionId: string | null = null
+  let mode: 'server' | 'direct' | null = null
 
-  function connect(): Promise<void> {
-    if (connected || ws) {
+  function getServerWsUrl(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    return `${protocol}//${host}/ws/queue`
+  }
+
+  function connectToServer(): Promise<void> {
+    const serverUrl = getServerWsUrl()
+    if (!serverUrl) {
+      // SSR or no window — fall back to direct
+      return connectDirect()
+    }
+
+    return new Promise<void>((resolve) => {
+      try {
+        onEvent(createConnectionEvent('Connecting to game server...'))
+        const serverWs = new WebSocket(serverUrl)
+        let resolved = false
+
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true
+            serverWs.close()
+            console.warn('[reactivity] Server WS timeout, falling back to direct')
+            void connectDirect().then(resolve)
+          }
+        }, 5000)
+
+        serverWs.onopen = () => {
+          if (resolved) {
+            return
+          }
+          resolved = true
+          clearTimeout(timeout)
+          ws = serverWs
+          connected = true
+          mode = 'server'
+          onEvent(createConnectionEvent(
+            'Connected to Somnia Reactivity via game server (Chain ID: 50312)',
+          ))
+          resolve()
+        }
+
+        serverWs.onmessage = (event) => {
+          try {
+            if (typeof event.data !== 'string') {
+              return
+            }
+            const msg = JSON.parse(event.data) as {
+              type?: string
+              data?: unknown
+            }
+
+            if (msg.type === 'game_event' && msg.data) {
+              handleServerEvent(msg.data, onEvent)
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        serverWs.onerror = () => {
+          if (!resolved) {
+            resolved = true
+            clearTimeout(timeout)
+            console.warn('[reactivity] Server WS error, falling back to direct')
+            void connectDirect().then(resolve)
+          }
+        }
+
+        serverWs.onclose = () => {
+          if (mode === 'server') {
+            connected = false
+            ws = null
+            mode = null
+            scheduleReconnect()
+          }
+        }
+      } catch {
+        void connectDirect().then(resolve)
+      }
+    })
+  }
+
+  function connectDirect(): Promise<void> {
+    if (connected || (ws && mode === 'direct')) {
       return Promise.resolve()
     }
 
@@ -49,27 +148,21 @@ export function createReactivityConnection(
     const wsUrl = SOMNIA_TESTNET.rpcUrls.default.webSocket[0]
 
     try {
-      onEvent(createConnectionEvent('Connecting to Somnia Testnet...'))
+      onEvent(createConnectionEvent('Connecting directly to Somnia Testnet...'))
 
       ws = new WebSocket(wsUrl)
+      mode = 'direct'
 
       ws.onopen = () => {
         connected = true
         onEvent(createConnectionEvent('Connected to Somnia Testnet (Chain ID: 50312)'))
 
-        const subscribeMsg = {
+        ws?.send(JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
           method: 'eth_subscribe',
-          params: [
-            'logs',
-            {
-              address: GAME_CONTRACT_ADDRESS,
-            },
-          ],
-        }
-
-        ws?.send(JSON.stringify(subscribeMsg))
+          params: ['logs', { address: GAME_CONTRACT_ADDRESS }],
+        }))
       }
 
       ws.onmessage = (event) => {
@@ -77,7 +170,6 @@ export function createReactivityConnection(
           if (typeof event.data !== 'string') {
             return
           }
-
           const data = JSON.parse(event.data) as unknown
 
           if (isSubscriptionAck(data)) {
@@ -89,8 +181,7 @@ export function createReactivityConnection(
           }
 
           if (isSubscriptionEvent(data)) {
-            const log = data.params.result
-            handleLog(log, onEvent)
+            handleLog(data.params.result, onEvent)
           }
         } catch {
           // Ignore parse errors
@@ -98,26 +189,41 @@ export function createReactivityConnection(
       }
 
       ws.onerror = () => {
-        onEvent(createConnectionEvent('WebSocket error while listening to chain events', 'chain_error'))
+        onEvent(createConnectionEvent(
+          'WebSocket error while listening to chain events',
+          'chain_error',
+        ))
       }
 
       ws.onclose = () => {
         connected = false
         subscriptionId = null
         ws = null
-
-        if (!reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null
-            void connect()
-          }, 5000)
-        }
+        mode = null
+        scheduleReconnect()
       }
     } catch {
       onEvent(createConnectionEvent('Failed to connect to Somnia Testnet', 'chain_error'))
     }
 
     return Promise.resolve()
+  }
+
+  function scheduleReconnect() {
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        void connect()
+      }, 5000)
+    }
+  }
+
+  function connect(): Promise<void> {
+    if (connected || ws) {
+      return Promise.resolve()
+    }
+    // Try server relay first, fall back to direct
+    return connectToServer()
   }
 
   function disconnect() {
@@ -127,7 +233,7 @@ export function createReactivityConnection(
     }
 
     if (ws) {
-      if (subscriptionId) {
+      if (mode === 'direct' && subscriptionId) {
         ws.send(JSON.stringify({
           jsonrpc: '2.0',
           id: 2,
@@ -141,6 +247,7 @@ export function createReactivityConnection(
 
     connected = false
     subscriptionId = null
+    mode = null
   }
 
   return {
@@ -150,7 +257,148 @@ export function createReactivityConnection(
   }
 }
 
-// ── Parse on-chain log to app event ─────────────────────────────────────────
+// ── Handle events from server relay ─────────────────────────────────────────
+
+function handleServerEvent(
+  data: unknown,
+  onEvent: (event: SomniaEvent) => void,
+) {
+  if (typeof data !== 'object' || data === null) {
+    return
+  }
+
+  const event = data as Record<string, unknown>
+
+  // Handle pre-decoded reactivity events from server
+  if (event.source === 'somnia_reactivity' && event.eventName) {
+    handleDecodedEvent(
+      event.eventName as string,
+      event.args as Record<string, unknown>,
+      undefined,
+      onEvent,
+    )
+    return
+  }
+
+  // Handle IndexedEvent format from server (queue_synced, game_started, etc.)
+  if (event.type && typeof event.type === 'string') {
+    handleIndexedEvent(event, onEvent)
+  }
+}
+
+function handleIndexedEvent(
+  event: Record<string, unknown>,
+  onEvent: (event: SomniaEvent) => void,
+) {
+  const txHash = typeof event.txHash === 'string' ? event.txHash : undefined
+
+  switch (event.type) {
+    case 'game_started':
+      onEvent(createGameStartedEvent(
+        event.gameId as number,
+        (event.players as string[]).map((p) => p.toLowerCase()),
+        event.prizePool as string,
+        txHash,
+      ))
+      break
+    case 'game_ended':
+      onEvent(createGameEndedEvent(
+        event.gameId as number,
+        (event.winner as string).toLowerCase(),
+        (event.placements as string[]).map((p) => p.toLowerCase()),
+        event.prizePool as string,
+        txHash,
+      ))
+      break
+    case 'reward_claimed':
+      onEvent(createRewardClaimedEvent(
+        (event.player as string).toLowerCase(),
+        event.amount as string,
+        txHash,
+      ))
+      break
+    case 'session_approved':
+      onEvent(createSessionApprovedEvent(
+        (event.player as string).toLowerCase(),
+        (event.sessionKey as string).toLowerCase(),
+        event.expiry as number,
+        txHash,
+      ))
+      break
+    case 'session_revoked':
+      onEvent(createSessionRevokedEvent(
+        (event.player as string).toLowerCase(),
+        (event.sessionKey as string).toLowerCase(),
+        txHash,
+      ))
+      break
+  }
+}
+
+function handleDecodedEvent(
+  eventName: string,
+  args: Record<string, unknown>,
+  txHash: string | undefined,
+  onEvent: (event: SomniaEvent) => void,
+) {
+  switch (eventName) {
+    case 'PlayerJoinedQueue':
+      onEvent(createQueueJoinedEvent(
+        (args.player as string).toLowerCase(),
+        Number(args.queueSize),
+        txHash,
+      ))
+      break
+    case 'PlayerLeftQueue':
+      onEvent(createQueueLeftEvent(
+        (args.player as string).toLowerCase(),
+        Number(args.queueSize),
+        txHash,
+      ))
+      break
+    case 'GameStarted':
+      onEvent(createGameStartedEvent(
+        Number(args.gameId),
+        (args.players as string[]).map((p) => p.toLowerCase()),
+        String(args.prizePool),
+        txHash,
+      ))
+      break
+    case 'GameEnded':
+      onEvent(createGameEndedEvent(
+        Number(args.gameId),
+        (args.winner as string).toLowerCase(),
+        (args.placements as string[]).map((p) => p.toLowerCase()),
+        String(args.prizePool),
+        txHash,
+      ))
+      break
+    case 'RewardClaimed':
+      onEvent(createRewardClaimedEvent(
+        (args.player as string).toLowerCase(),
+        String(args.amount),
+        txHash,
+      ))
+      break
+    case 'SessionKeyApproved':
+      onEvent(createSessionApprovedEvent(
+        (args.player as string).toLowerCase(),
+        (args.sessionKey as string).toLowerCase(),
+        Number(args.expiry),
+        txHash,
+      ))
+      break
+    case 'SessionKeyRevoked':
+      onEvent(createSessionRevokedEvent(
+        (args.player as string).toLowerCase(),
+        (args.sessionKey as string).toLowerCase(),
+        txHash,
+      ))
+      break
+  }
+}
+
+// ── Parse on-chain log to app event (direct mode fallback) ──────────────────
 
 function handleLog(
   log: {

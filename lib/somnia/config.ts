@@ -28,6 +28,9 @@ export const SOMNIA_FAUCET_URL =
 const DEPLOYED_PIXEL_ROYALE_ADDRESS =
   (deployment.contract?.address || ZERO_ADDRESS) as `0x${string}`
 
+const DEPLOYED_HANDLER_ADDRESS =
+  ((deployment as Record<string, unknown>).reactivityHandler as { address?: string } | undefined)?.address || ZERO_ADDRESS
+
 export const SOMNIA_TESTNET = {
   id: 50312,
   name: 'Somnia Testnet',
@@ -68,6 +71,13 @@ export const GAME_CONTRACT_ADDRESS =
 
 export const IS_GAME_CONTRACT_CONFIGURED =
   GAME_CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
+
+export const REACTIVITY_HANDLER_ADDRESS =
+  (DEPLOYED_HANDLER_ADDRESS.trim() && /^0x[a-fA-F0-9]{40}$/.test(DEPLOYED_HANDLER_ADDRESS.trim())
+    ? DEPLOYED_HANDLER_ADDRESS.trim()
+    : ZERO_ADDRESS) as `0x${string}`
+
+export const SOMNIA_REACTIVITY_PRECOMPILE = '0x0000000000000000000000000000000000000100' as const
 
 // ── Event Topics (keccak256 hashes of event signatures) ─────────────────────
 
