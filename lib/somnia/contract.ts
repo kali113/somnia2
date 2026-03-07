@@ -128,6 +128,22 @@ export function getIsValidSessionArgs(player: Address, sessionKey: Address) {
   } as const
 }
 
+export function getQueueOpenedAtArgs() {
+  return {
+    address: PIXEL_ROYALE_ADDRESS,
+    abi: pixelRoyaleAbi,
+    functionName: 'queueOpenedAt',
+  } as const
+}
+
+export function getQueueTimeoutArgs() {
+  return {
+    address: PIXEL_ROYALE_ADDRESS,
+    abi: pixelRoyaleAbi,
+    functionName: 'QUEUE_TIMEOUT',
+  } as const
+}
+
 // ── Write helpers (args for wallet hook shim useWriteContract) ───────────────
 
 export function joinQueueArgs() {

@@ -3,7 +3,8 @@ import { formatEther, isAddress, parseEther, type Address } from 'viem'
 
 const SESSION_KEY = 'pixel_royale_session'
 export const SESSION_UPDATED_EVENT = 'pixel-royale-session-updated'
-export const DEFAULT_SESSION_DURATION_MS = 15 * 60_000
+export const DEFAULT_SESSION_DURATION_MS = 60 * 60_000
+export const SESSION_MIN_REMAINING_MS = 20 * 60_000
 
 export interface SessionWallet {
   address: Address
