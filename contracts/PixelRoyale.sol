@@ -181,6 +181,11 @@ contract PixelRoyale {
 
         emit PlayerJoinedQueue(msg.sender, queue.length);
 
+        if (QUEUE_TIMEOUT == 0 && queue.length >= MIN_PLAYERS) {
+            _startGame();
+            return;
+        }
+
         if (queue.length == MAX_PLAYERS) {
             _startGame();
         }
