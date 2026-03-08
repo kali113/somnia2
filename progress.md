@@ -144,3 +144,43 @@ Original prompt: there is not a victory screen when killing everyone
 - Final repo verification:
   - `pnpm lint`
   - `pnpm build`
+
+- Current prompt: make the mobile game perfwct and full playable, try to play the game
+- Created branch `mobile-game-playable`.
+- Reproduced the current phone gameplay on `/game` with iPhone 13 Playwright sessions and refreshed deterministic `/game` artifacts with the `develop-web-game` client.
+- Mobile findings before the patch:
+  - Inventory slot 5 was physically covered by the mobile action buttons in portrait.
+  - Solo mobile still showed the disconnected Somnia pill, crowding the top-left HUD.
+  - Build mode was not fully playable on touch because piece/material selection remained keyboard-only.
+  - Aim-pad input doubled as fire input, so touch aiming always attacked.
+  - Held touch actions could get stuck if the finger left the button before release.
+- Applied touch/mobile fixes:
+  - `components/game/GameHUD.tsx`
+    - Shifted the mobile inventory/build panels left so all five slots stay hit-testable beside the action cluster.
+    - Added touch build controls for material cycling and direct wall/barricade/bunker selection.
+  - `components/game/EventFeed.tsx`
+    - Hide the disconnected touch pill when solo mobile has no live events.
+  - `components/game/MobileControls.tsx`
+    - Added pointer capture/release handling for action buttons so held buttons do not stick after drag-off releases.
+    - Split aiming from firing: the aim pad now aims only, and the primary touch action now acts as a hold-to-fire button outside build mode.
+  - `lib/game/input.ts`
+    - Added a dedicated virtual fire-held helper so touch fire no longer depends on aim state.
+  - `app/game/page.tsx`
+    - Deduplicated container-prompt updates so standing near a chest does not churn the full mobile overlay every frame.
+    - Snapshot/deduplicate player and storm UI state so mobile HUD/build changes show up immediately instead of waiting on the 100ms polling loop.
+  - `components/game/GameCanvas.tsx`
+    - Throttled resize handling through `requestAnimationFrame`, ignored unchanged viewport sizes, and dropped `visualViewport` scroll resize churn to reduce canvas reallocations on mobile browser chrome shifts.
+- Manual phone verification after the patch:
+  - Portrait hit-testing confirmed all five inventory slots are clickable.
+  - Aim-only touch no longer sets `mouseDown`; hold-to-fire spends ammo as expected.
+  - Dragging off the interact button and releasing elsewhere no longer leaves `E` stuck in the input state.
+  - Build mode now updates immediately on touch with `MAT` and piece buttons; verified `STONE + BUNKER` selection in the HUD and engine text state.
+  - Landscape retest kept the touch controls visible and all five slots accessible.
+- Deterministic/browser artifacts after the patch:
+  - `output/mobile-check/current-pass/post-fix-initial.png`
+  - `output/mobile-check/current-pass/landscape-post-fix.png`
+  - `output/web-game/mobile-game-playable/`
+  - `output/web-game/mobile-game-playable-v2/`
+- Verification still pending at handoff:
+  - `pnpm lint`
+  - `pnpm build`

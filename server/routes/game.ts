@@ -264,6 +264,7 @@ const ACTIVE_GAME_PLAYER_COUNT_ABI = [{
   outputs: [{ name: '', type: 'uint8' }],
 }] as const
 
+
 /**
  * POST /api/game/result
  * Submit a validated game result from a privileged orchestrator caller.
@@ -625,7 +626,8 @@ gameRouter.post('/elimination', privilegedWriteLimiter, asyncHandler(async (req,
       args: [BigInt(gameId), player, killer, BigInt(placement)],
     })
 
-    console.log(`[game] Recorded elimination for game #${gameId}, placement ${placement}, tx: ${txHash}`)
+    const loggedTxHash = safeLogValue(txHash)
+    console.log(`[game] Recorded elimination for game #${gameId} (placement ${placement}), tx: ${loggedTxHash}`)
     return res.json({ success: true, gameId, player, killer, placement, txHash })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

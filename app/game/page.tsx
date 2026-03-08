@@ -50,6 +50,113 @@ type ContainerTxToast = {
   message: string
 }
 
+function sameContainerPrompt(
+  prev: ContainerPromptState | null,
+  next: ContainerPromptState | null,
+): boolean {
+  if (prev === next) {return true}
+  if (!prev || !next) {return false}
+
+  return prev.key === next.key
+    && prev.containerType === next.containerType
+    && prev.containerId === next.containerId
+    && prev.status === next.status
+    && prev.searchTime === next.searchTime
+    && Math.abs(prev.progress - next.progress) < 0.001
+}
+
+function clonePlayerUiState(player: Player): Player {
+  return {
+    ...player,
+    slots: player.slots.map((slot) => (slot ? { ...slot } : null)),
+    consumables: { ...player.consumables },
+    activeConsumableUse: player.activeConsumableUse ? { ...player.activeConsumableUse } : null,
+  }
+}
+
+function samePlayerUiState(prev: Player | null, next: Player): boolean {
+  if (!prev) {return false}
+  if (
+    prev.alive !== next.alive
+    || prev.health !== next.health
+    || prev.shield !== next.shield
+    || prev.kills !== next.kills
+    || prev.activeSlot !== next.activeSlot
+    || prev.buildMode !== next.buildMode
+    || prev.buildMaterial !== next.buildMaterial
+    || prev.buildPiece !== next.buildPiece
+    || prev.buildRotation !== next.buildRotation
+    || prev.reloading !== next.reloading
+    || prev.wood !== next.wood
+    || prev.stone !== next.stone
+    || prev.metal !== next.metal
+  ) {
+    return false
+  }
+
+  const prevUse = prev.activeConsumableUse
+  const nextUse = next.activeConsumableUse
+  if (Boolean(prevUse) !== Boolean(nextUse)) {return false}
+  if (prevUse && nextUse) {
+    if (
+      prevUse.itemId !== nextUse.itemId
+      || prevUse.startedAt !== nextUse.startedAt
+      || prevUse.endsAt !== nextUse.endsAt
+    ) {
+      return false
+    }
+  }
+
+  const consumableIds: Array<keyof Player['consumables']> = ['bandage', 'medkit', 'mini_shield', 'shield_potion']
+  for (const consumableId of consumableIds) {
+    if (prev.consumables[consumableId] !== next.consumables[consumableId]) {
+      return false
+    }
+  }
+
+  for (let i = 0; i < prev.slots.length; i++) {
+    const prevSlot = prev.slots[i]
+    const nextSlot = next.slots[i]
+    if (Boolean(prevSlot) !== Boolean(nextSlot)) {return false}
+    if (!prevSlot || !nextSlot) {continue}
+    if (
+      prevSlot.weaponId !== nextSlot.weaponId
+      || prevSlot.rarity !== nextSlot.rarity
+      || prevSlot.ammo !== nextSlot.ammo
+      || prevSlot.maxAmmo !== nextSlot.maxAmmo
+      || prevSlot.reserveAmmo !== nextSlot.reserveAmmo
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function cloneStormUiState(storm: StormState): StormState {
+  return { ...storm }
+}
+
+function sameStormUiState(prev: StormState | null, next: StormState): boolean {
+  if (!prev) {return false}
+  return prev.phase === next.phase
+    && prev.shrinking === next.shrinking
+    && prev.pendingCommit === next.pendingCommit
+    && prev.requestedPhase === next.requestedPhase
+    && prev.currentRadius === next.currentRadius
+    && prev.centerX === next.centerX
+    && prev.centerY === next.centerY
+    && prev.shrinkFromCenterX === next.shrinkFromCenterX
+    && prev.shrinkFromCenterY === next.shrinkFromCenterY
+    && prev.shrinkFromRadius === next.shrinkFromRadius
+    && prev.targetRadius === next.targetRadius
+    && prev.targetCenterX === next.targetCenterX
+    && prev.targetCenterY === next.targetCenterY
+    && prev.damagePerTick === next.damagePerTick
+    && prev.entropyHash === next.entropyHash
+    && Math.floor(prev.timer * 10) === Math.floor(next.timer * 10)
+}
+
 function GamePageInner() {
   const { address: connectedAddress, isConnected: isWalletConnected } = useAccount()
   const searchParams = useSearchParams()
@@ -438,6 +545,32 @@ function GamePageInner() {
     tapVirtualKey(state.input, String(slotIndex + 1))
   }, [])
 
+  const handlePlayerUpdate = useCallback((nextPlayer: Player) => {
+    setPlayer((prevPlayer) => (samePlayerUiState(prevPlayer, nextPlayer) ? prevPlayer : clonePlayerUiState(nextPlayer)))
+  }, [])
+
+  const handleStormUpdate = useCallback((nextStorm: StormState) => {
+    setStorm((prevStorm) => (sameStormUiState(prevStorm, nextStorm) ? prevStorm : cloneStormUiState(nextStorm)))
+  }, [])
+
+  const handleContainerPromptUpdate = useCallback((nextPrompt: ContainerPromptState | null) => {
+    setContainerPrompt((prevPrompt) => (sameContainerPrompt(prevPrompt, nextPrompt) ? prevPrompt : nextPrompt))
+  }, [])
+
+  const handleSelectBuildPiece = useCallback((pieceId: 'wall' | 'barricade' | 'bunker') => {
+    const state = gameStateRef.current
+    if (!state) {return}
+
+    const key = pieceId === 'wall' ? 'z' : pieceId === 'barricade' ? 'x' : 'c'
+    tapVirtualKey(state.input, key)
+  }, [])
+
+  const handleCycleBuildMaterial = useCallback(() => {
+    const state = gameStateRef.current
+    if (!state) {return}
+    tapVirtualKey(state.input, 'r')
+  }, [])
+
   const canStartGame = !isMatchMode || isWalletConnected
   const showWalletControl = !touchControls || isMatchMode || isWalletConnected
   const matchBannerTop = 'calc(env(safe-area-inset-top) + 0.75rem)'
@@ -469,10 +602,10 @@ function GamePageInner() {
             onKillFeedUpdate={setKillFeed}
             onAliveCountUpdate={setAliveCount}
             onPhaseChange={setPhase}
-            onPlayerUpdate={setPlayer}
-            onStormUpdate={setStorm}
+            onPlayerUpdate={handlePlayerUpdate}
+            onStormUpdate={handleStormUpdate}
             onStormCommitRequested={handleStormCommitRequested}
-            onContainerPromptUpdate={setContainerPrompt}
+            onContainerPromptUpdate={handleContainerPromptUpdate}
             onContainerVerificationRequested={handleContainerVerificationRequested}
             gameStateRef={gameStateRef}
             botCount={botCount}
@@ -490,6 +623,8 @@ function GamePageInner() {
             containerPrompt={containerPrompt}
             touchControls={touchControls}
             onSelectSlot={touchControls ? handleSelectSlot : undefined}
+            onSelectBuildPiece={touchControls ? handleSelectBuildPiece : undefined}
+            onCycleBuildMaterial={touchControls ? handleCycleBuildMaterial : undefined}
           />
 
           <MobileControls

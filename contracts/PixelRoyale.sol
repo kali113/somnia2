@@ -21,6 +21,7 @@ pragma solidity ^0.8.24;
 contract PixelRoyale {
     // ──────────────────────────── Constants ────────────────────────────
     uint256 public constant MAX_PLAYERS       = 20;
+
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
     uint16 public constant MAP_WIDTH          = 3200;
     uint16 public constant MAP_HEIGHT         = 3200;
@@ -278,6 +279,22 @@ contract PixelRoyale {
         // Remainder stays in contract as protocol revenue
         _recordPlayerStats(_gameId, _placements, _kills);
         _storeGameResult(_gameId, _placements, pool);
+    }
+
+    /// @notice Emit an elimination event during an active game.
+    /// @param _gameId    The active game ID.
+    /// @param _player    The eliminated player address.
+    /// @param _killer    The player who scored the kill (or address(0) for storm/self).
+    /// @param _placement The placement position (e.g. 20 = eliminated first in 20-player game).
+    function emitElimination(
+        uint256 _gameId,
+        address _player,
+        address _killer,
+        uint256 _placement
+    ) external onlyOrchestrator {
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        require(activeGamePlayers[_gameId][_player], "PLAYER_NOT_IN_GAME");
+        emit PlayerEliminated(_gameId, _player, _killer, _placement, block.timestamp);
     }
 
     // ──────────────────────────── Storm Commits ────────────────────────

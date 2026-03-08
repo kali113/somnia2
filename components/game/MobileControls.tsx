@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react'
-import { Crosshair, Hammer, HeartPulse, PackageOpen, RefreshCw, RotateCw } from 'lucide-react'
+import { useEffect, useMemo, useRef, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Crosshair, Hammer, HeartPulse, PackageOpen, RotateCw } from 'lucide-react'
 import type { GameState, ContainerPromptState } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import {
   clearVirtualAim,
   resetVirtualMove,
   setVirtualAim,
+  setVirtualFireHeld,
   setVirtualKeyHeld,
   setVirtualMove,
   tapVirtualClick,
@@ -40,6 +41,17 @@ function ActionButton({
   onHoldEnd,
   disabled,
 }: ActionButtonProps) {
+  const activePointerIdRef = useRef<number | null>(null)
+
+  const finishHold = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (activePointerIdRef.current !== event.pointerId) {return}
+    activePointerIdRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    onHoldEnd?.()
+  }
+
   return (
     <button
       type="button"
@@ -48,6 +60,8 @@ function ActionButton({
       className="pointer-events-auto flex h-11 w-11 touch-none flex-col items-center justify-center rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[rgba(8,12,16,0.82)] text-[rgba(255,255,255,0.82)] shadow-[0_10px_30px_rgba(0,0,0,0.3)] backdrop-blur-sm transition active:scale-95 disabled:opacity-40"
       onPointerDown={(event) => {
         event.preventDefault()
+        activePointerIdRef.current = event.pointerId
+        event.currentTarget.setPointerCapture(event.pointerId)
         onHoldStart?.()
         if (!onHoldStart) {
           onTap?.()
@@ -55,12 +69,15 @@ function ActionButton({
       }}
       onPointerUp={(event) => {
         event.preventDefault()
-        onHoldEnd?.()
+        finishHold(event)
       }}
-      onPointerCancel={onHoldEnd}
+      onPointerCancel={finishHold}
+      onLostPointerCapture={(event) => {
+        finishHold(event)
+      }}
       onPointerLeave={(event) => {
-        if (event.buttons === 0) {
-          onHoldEnd?.()
+        if (event.buttons === 0 && activePointerIdRef.current === event.pointerId) {
+          finishHold(event)
         }
       }}
     >
@@ -104,8 +121,17 @@ export default function MobileControls({
     if (!state) {return}
     resetVirtualMove(state.input)
     clearVirtualAim(state.input)
+    setVirtualFireHeld(state.input, false)
     setVirtualKeyHeld(state.input, 'e', false)
   }, [gameStateRef, visible])
+
+  useEffect(() => {
+    const state = gameStateRef.current
+    if (!state) {return}
+    if (player?.buildMode) {
+      setVirtualFireHeld(state.input, false)
+    }
+  }, [gameStateRef, player?.buildMode])
 
   const interactLabel = useMemo(() => {
     if (player?.buildMode) {return 'Rotate'}
@@ -170,13 +196,13 @@ export default function MobileControls({
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
             const angleX = Math.abs(next.x) < 0.12 && Math.abs(next.y) < 0.12 ? Math.cos(player.angle) : next.x
             const angleY = Math.abs(next.x) < 0.12 && Math.abs(next.y) < 0.12 ? Math.sin(player.angle) : next.y
-            withInput((state) => { setVirtualAim(state.input, angleX, angleY, !player.buildMode); })
+            withInput((state) => { setVirtualAim(state.input, angleX, angleY, false); })
           }}
           onPointerMove={(event) => {
             if (aimPointerIdRef.current !== event.pointerId) {return}
             event.preventDefault()
             const next = clampStick(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-            withInput((state) => { setVirtualAim(state.input, next.x, next.y, !player.buildMode); })
+            withInput((state) => { setVirtualAim(state.input, next.x, next.y, false); })
           }}
           onPointerUp={(event) => {
             if (aimPointerIdRef.current !== event.pointerId) {return}
@@ -217,17 +243,17 @@ export default function MobileControls({
           }}
         />
         <ActionButton
-          label={player.buildMode ? 'Place' : 'Reload'}
+          label={player.buildMode ? 'Place' : 'Fire'}
           testId="mobile-action-primary"
-          icon={player.buildMode ? <Hammer className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-          onTap={() => {
-            withInput((state) => {
-              if (player.buildMode) {
-                tapVirtualClick(state.input)
-                return
-              }
-              tapVirtualKey(state.input, 'r')
-            })
+          icon={player.buildMode ? <Hammer className="h-4 w-4" /> : <Crosshair className="h-4 w-4" />}
+          onTap={player.buildMode ? () => {
+            withInput((state) => { tapVirtualClick(state.input); })
+          } : undefined}
+          onHoldStart={player.buildMode ? undefined : () => {
+            withInput((state) => { setVirtualFireHeld(state.input, true); })
+          }}
+          onHoldEnd={player.buildMode ? undefined : () => {
+            withInput((state) => { setVirtualFireHeld(state.input, false); })
           }}
         />
         <ActionButton
