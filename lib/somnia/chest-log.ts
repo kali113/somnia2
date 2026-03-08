@@ -2,18 +2,16 @@
 
 import {
   createPublicClient,
-  createWalletClient,
-  custom,
   decodeEventLog,
   encodePacked,
   http,
   keccak256,
-  type Address,
 } from 'viem'
 import type { ContainerRewardBundle, ContainerVerificationRequest } from '@/lib/game/engine'
 import type { ConsumableId, ContainerType, Rarity } from '@/lib/game/constants'
 import { SOMNIA_RPC_URL, SOMNIA_TESTNET } from './config'
 import { PIXEL_ROYALE_ADDRESS, pixelRoyaleAbi, IS_PIXEL_ROYALE_CONFIGURED } from './contract'
+import { getSessionWalletClient } from './session-wallet'
 
 const CONTAINER_TYPE_CODE: Record<ContainerType, number> = {
   chest: 0,
@@ -56,10 +54,6 @@ interface ContainerVerifyResponse {
   txHash: string | null
   reward?: ContainerRewardBundle
   reason?: string
-}
-
-interface BrowserEthereumProvider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>
 }
 
 type DecodableLog = {
@@ -149,30 +143,10 @@ export async function openContainerVerifiedOnChain(
     transport: http(SOMNIA_RPC_URL),
   })
 
-  const ethereum = (window as Window & { ethereum?: BrowserEthereumProvider }).ethereum
-  if (!ethereum) {
-    return { txHash: null, reason: 'wallet_unavailable' }
-  }
-
-  const chainIdHex = `0x${SOMNIA_TESTNET.id.toString(16)}`
-  try {
-    await ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: chainIdHex }],
-    })
-  } catch {
-    return { txHash: null, reason: 'chain_switch_failed' }
-  }
-
-  const walletClient = createWalletClient({
-    chain: SOMNIA_TESTNET,
-    transport: custom(ethereum),
-  })
-
-  const addresses = await walletClient.getAddresses()
-  const account = addresses[0] as Address | undefined
-  if (!account) {
-    return { txHash: null, reason: 'wallet_not_connected' }
+  // Use session wallet for signing (no Phantom popup)
+  const walletClient = getSessionWalletClient()
+  if (!walletClient) {
+    return { txHash: null, reason: 'session_wallet_unavailable' }
   }
 
   try {
@@ -181,7 +155,6 @@ export async function openContainerVerifiedOnChain(
       abi: pixelRoyaleAbi,
       functionName: 'openContainerVerified',
       chain: SOMNIA_TESTNET,
-      account,
       args: [
         BigInt(request.gameId),
         BigInt(request.containerId),

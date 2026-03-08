@@ -1,5 +1,6 @@
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { formatEther, isAddress, parseEther, type Address } from 'viem'
+import { createWalletClient, formatEther, http, isAddress, parseEther, type Address } from 'viem'
+import { SOMNIA_RPC_URL, SOMNIA_TESTNET } from './config'
 
 const SESSION_KEY = 'pixel_royale_session'
 export const SESSION_UPDATED_EVENT = 'pixel-royale-session-updated'
@@ -13,6 +14,7 @@ export interface SessionWallet {
 
 interface StoredSession {
   address: string
+  privateKey: string
   expiry: number
 }
 
@@ -21,6 +23,8 @@ function isStoredSession(value: unknown): value is StoredSession {
     && value !== null
     && 'address' in value
     && typeof value.address === 'string'
+    && 'privateKey' in value
+    && typeof value.privateKey === 'string'
     && 'expiry' in value
     && typeof value.expiry === 'number'
 }
@@ -32,13 +36,13 @@ function notifySessionUpdated(): void {
 }
 
 /**
- * Create a short-lived session approval address.
- *
- * The signer key is not persisted in browser storage. Only the approved
- * address and expiry are stored so the UI can track the session state.
+ * Create a short-lived session wallet with a stored private key.
+ * The private key is persisted in sessionStorage so it can sign
+ * in-game transactions without prompting the user's main wallet.
  */
 export function createSessionWallet(durationMs: number = DEFAULT_SESSION_DURATION_MS): SessionWallet {
-  const account = privateKeyToAccount(generatePrivateKey())
+  const privateKey = generatePrivateKey()
+  const account = privateKeyToAccount(privateKey)
   const session: SessionWallet = {
     address: account.address,
     expiry: Date.now() + durationMs,
@@ -47,6 +51,7 @@ export function createSessionWallet(durationMs: number = DEFAULT_SESSION_DURATIO
   if (typeof window !== 'undefined') {
     const stored: StoredSession = {
       address: session.address,
+      privateKey,
       expiry: session.expiry,
     }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored))
@@ -57,7 +62,7 @@ export function createSessionWallet(durationMs: number = DEFAULT_SESSION_DURATIO
 }
 
 /**
- * Restore the short-lived session approval state if it still exists.
+ * Restore the session wallet state (address + expiry) for UI display.
  */
 export function restoreSessionWallet(): SessionWallet | null {
   if (typeof window === 'undefined') {return null}
@@ -88,7 +93,33 @@ export function restoreSessionWallet(): SessionWallet | null {
 }
 
 /**
- * Destroy the stored session approval state.
+ * Get a viem WalletClient backed by the session wallet's private key.
+ * Returns null if no valid session exists.
+ */
+export function getSessionWalletClient() {
+  if (typeof window === 'undefined') {return null}
+
+  const raw = sessionStorage.getItem(SESSION_KEY)
+  if (!raw) {return null}
+
+  try {
+    const stored = JSON.parse(raw) as unknown
+    if (!isStoredSession(stored)) {return null}
+    if (!isAddress(stored.address) || Date.now() >= stored.expiry) {return null}
+
+    const account = privateKeyToAccount(stored.privateKey as `0x${string}`)
+    return createWalletClient({
+      account,
+      chain: SOMNIA_TESTNET,
+      transport: http(SOMNIA_RPC_URL),
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Destroy the stored session wallet.
  */
 export function destroySessionWallet(): void {
   if (typeof window !== 'undefined') {
