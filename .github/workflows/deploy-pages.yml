@@ -80,6 +80,7 @@ jobs:
           NEXT_PUBLIC_SOMNIA_WS_URL: wss://dream-rpc.somnia.network/ws
           NEXT_PUBLIC_SOMNIA_EXPLORER_URL: https://shannon-explorer.somnia.network/
           NEXT_PUBLIC_SOMNIA_FAUCET_URL: https://cloud.google.com/application/web3/faucet/somnia/shannon
+          NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
 
       - name: Disable Jekyll processing
         run: touch ./out/.nojekyll
