@@ -81,23 +81,12 @@ function GamePageInner() {
 
   // Somnia state
   const [somniaEvents, setSomniaEvents] = useState<SomniaEvent[]>([])
-  const [walletAddress, setWalletAddress] = useState<string | null>(connectedAddress ?? null)
+  const walletAddress = isWalletConnected && connectedAddress ? connectedAddress : null
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [containerTxToast, setContainerTxToast] = useState<ContainerTxToast | null>(null)
   const [resultSubmitting, setResultSubmitting] = useState(false)
   const [resultTxHash, setResultTxHash] = useState<string | null>(null)
   const [resultError, setResultError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (isWalletConnected && connectedAddress) {
-      setWalletAddress(connectedAddress)
-      return
-    }
-
-    if (!isWalletConnected) {
-      setWalletAddress(null)
-    }
-  }, [connectedAddress, isWalletConnected])
 
   // Audio
   const [muted, setMutedState] = useState(() => isMuted())
@@ -197,9 +186,7 @@ function GamePageInner() {
   }, [])
 
   // Wallet handlers
-  const handleWalletConnect = useCallback((address: string) => {
-    setWalletAddress(address)
-
+  const handleWalletConnect = useCallback((_address: string) => {
     const conn = createReactivityConnection(handleSomniaEvent)
     reactivityRef.current = conn
     conn.connect().then(() => {
@@ -210,7 +197,6 @@ function GamePageInner() {
   }, [handleSomniaEvent])
 
   const handleWalletDisconnect = useCallback(() => {
-    setWalletAddress(null)
     setIsLiveMode(false)
     setContainerPrompt(null)
 
