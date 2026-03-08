@@ -94,6 +94,35 @@ export class GameStore {
     this.queueUpdatedAt = Math.floor(Date.now() / 1000)
   }
 
+  recordQueueJoin(player: string): void {
+    const normalizedPlayer = player.toLowerCase()
+    if (!this.queuePlayers.includes(normalizedPlayer)) {
+      if (this.queuePlayers.length === 0) {
+        this.queueOpenedAt = Math.floor(Date.now() / 1000)
+      }
+      this.queuePlayers.push(normalizedPlayer)
+    }
+    this.queueUpdatedAt = Math.floor(Date.now() / 1000)
+  }
+
+  recordQueueLeave(player: string): void {
+    const normalizedPlayer = player.toLowerCase()
+    this.queuePlayers = this.queuePlayers.filter((queuedPlayer) => queuedPlayer !== normalizedPlayer)
+    if (this.queuePlayers.length === 0) {
+      this.queueOpenedAt = null
+    }
+    this.queueUpdatedAt = Math.floor(Date.now() / 1000)
+  }
+
+  recordQueueGameStarted(players: string[]): void {
+    const startedPlayers = new Set(players.map((player) => player.toLowerCase()))
+    this.queuePlayers = this.queuePlayers.filter((player) => !startedPlayers.has(player))
+    if (this.queuePlayers.length === 0) {
+      this.queueOpenedAt = null
+    }
+    this.queueUpdatedAt = Math.floor(Date.now() / 1000)
+  }
+
   getQueueState(): QueueState {
     return {
       players: [...this.queuePlayers],
