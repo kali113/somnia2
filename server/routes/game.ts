@@ -555,7 +555,7 @@ gameRouter.post('/elimination', privilegedWriteLimiter, asyncHandler(async (req,
     return res.json({ success: true, gameId, player, killer, placement, txHash })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.error(`[game] Failed to record elimination for game #${gameId}: ${message}`)
+    console.error(`[game] Failed to record elimination for game #${gameId}: ${safeLogValue(message)}`)
     return res.status(500).json({
       error: 'Failed to record elimination',
       reason: 'tx_failed',
