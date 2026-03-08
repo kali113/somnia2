@@ -143,7 +143,7 @@ export class Indexer {
 
     this.polling = setInterval(() => {
       void poll()
-    }, 5000)
+    }, 2000)
   }
 
   stop() {
