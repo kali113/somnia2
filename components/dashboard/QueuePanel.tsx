@@ -244,16 +244,16 @@ export default function QueuePanel() {
         // Ignore transient backend timing issues during instant-start polling.
       }
 
-      if (attempts < 12) {
+      if (attempts < 60) {
         window.setTimeout(() => {
           void checkForAssignedMatch()
-        }, 1000)
+        }, 2000)
       }
     }
 
     const timer = window.setTimeout(() => {
       void checkForAssignedMatch()
-    }, 1000)
+    }, 2000)
 
     return () => {
       cancelled = true
