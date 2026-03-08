@@ -382,23 +382,54 @@ contract PixelRoyale {
         uint32 _seed,
         uint32 _playerNonce
     ) external {
+        _openContainerVerified(msg.sender, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+    }
+
+    /// @notice Open a loot container using an approved session key for a player.
+    function openContainerVerifiedForPlayer(
+        address _player,
+        uint256 _gameId,
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
+    ) external {
+        require(_player != address(0), "ZERO_ADDRESS");
+        require(
+            msg.sender == _player || sessionKeys[_player][msg.sender] > block.timestamp,
+            "INVALID_SESSION"
+        );
+
+        _openContainerVerified(_player, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+    }
+
+    function _openContainerVerified(
+        address _player,
+        uint256 _gameId,
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
+    ) internal {
         require(_containerKey != bytes32(0), "INVALID_CONTAINER_KEY");
         require(_containerType <= 2, "INVALID_CONTAINER_TYPE");
         require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
-        require(activeGamePlayers[_gameId][msg.sender], "PLAYER_NOT_IN_GAME");
+        require(activeGamePlayers[_gameId][_player], "PLAYER_NOT_IN_GAME");
         require(!openedContainers[_gameId][_containerKey], "CONTAINER_ALREADY_OPENED");
-        require(!playerContainerOpened[msg.sender][_containerKey], "CONTAINER_ALREADY_OPENED");
+        require(!playerContainerOpened[_player][_containerKey], "CONTAINER_ALREADY_OPENED");
 
-        uint16 roll = _deriveRoll(_gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+        uint16 roll = _deriveRoll(_player, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
         ContainerReward memory reward = _deriveContainerReward(_containerType, roll, _playerNonce);
 
         openedContainers[_gameId][_containerKey] = true;
-        playerContainerOpened[msg.sender][_containerKey] = true;
+        playerContainerOpened[_player][_containerKey] = true;
 
         emit ContainerOpened(
             _gameId,
             _containerId,
-            msg.sender,
+            _player,
             _containerKey,
             _containerType,
             roll,
@@ -416,6 +447,7 @@ contract PixelRoyale {
     }
 
     function _deriveRoll(
+        address _player,
         uint256 _gameId,
         uint256 _containerId,
         bytes32 _containerKey,
@@ -426,7 +458,7 @@ contract PixelRoyale {
         uint256 entropy = uint256(keccak256(abi.encodePacked(
             _gameId,
             _containerId,
-            msg.sender,
+            _player,
             _containerKey,
             _containerType,
             _seed,

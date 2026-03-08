@@ -132,6 +132,7 @@ function isContainerOpenedEvent(value: unknown): value is DecodedContainerOpened
 
 export async function openContainerVerifiedOnChain(
   request: ContainerVerificationRequest,
+  playerAddress: `0x${string}`,
 ): Promise<ContainerVerifyResponse> {
   if (!IS_PIXEL_ROYALE_CONFIGURED) {
     return { txHash: null, reason: 'contract_not_configured' }
@@ -150,13 +151,18 @@ export async function openContainerVerifiedOnChain(
     return { txHash: null, reason: 'session_wallet_unavailable' }
   }
 
+  if (!/^0x[a-fA-F0-9]{40}$/.test(playerAddress)) {
+    return { txHash: null, reason: 'invalid_player_address' }
+  }
+
   try {
     const txHash = await walletClient.writeContract({
       address: PIXEL_ROYALE_ADDRESS,
       abi: pixelRoyaleAbi,
-      functionName: 'openContainerVerified',
+      functionName: 'openContainerVerifiedForPlayer',
       chain: SOMNIA_TESTNET,
       args: [
+        playerAddress as `0x${string}`,
         BigInt(request.gameId),
         BigInt(request.containerId),
         containerKey,
