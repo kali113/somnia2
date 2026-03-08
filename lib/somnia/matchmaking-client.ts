@@ -6,6 +6,7 @@ import {
   buildBackendApiUrl,
   isBackendConfigured,
   backendConfigError,
+  fetchBackendUrl,
 } from './runtime-config'
 
 export interface QueueSnapshot {
@@ -154,6 +155,8 @@ export function useMatchmaking(address?: string) {
   useEffect(() => {
     let cancelled = false
     const runRefresh = async () => {
+      // On GitHub Pages, fetch backend URL from Gist before first refresh
+      await fetchBackendUrl()
       if (cancelled) {return}
       await refresh()
     }

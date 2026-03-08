@@ -6,6 +6,13 @@ const FALLBACK_DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD' as Ad
 const DEPLOYED_PIXEL_ROYALE_ADDRESS =
   (deployment.contract?.address || ZERO_ADDRESS) as Address
 
+/**
+ * Public Gist that holds the current CF tunnel URL.
+ * Updated automatically by the VM tunnel-start script.
+ */
+const BACKEND_URL_GIST =
+  'https://gist.githubusercontent.com/matoscmanceron-collab/ad6fdfac579afd74a797613efaf483ea/raw/backend-url.json'
+
 function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, '')
 }
@@ -58,10 +65,18 @@ function validateBackendUrl(value: string): string | null {
   }
 }
 
-function deriveWsUrl(): string | null {
-  if (typeof window === 'undefined') {return null}
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${window.location.host}/ws/queue`
+function deriveWsUrl(base: string): string | null {
+  // Same-origin mode: derive from window.location
+  if (base === '') {
+    if (typeof window === 'undefined') {return null}
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/ws/queue`
+  }
+  // Explicit URL: convert http(s) to ws(s)
+  const wsBase = base.startsWith('https://')
+    ? base.replace(/^https/i, 'wss')
+    : base.replace(/^http/i, 'ws')
+  return `${wsBase}/ws/queue`
 }
 
 // ── Contract config ─────────────────────────────────────────────────────────
@@ -88,40 +103,52 @@ export const configuredContractAddress: Address | null = isContractConfigured
 // Keep a non-routable typed fallback for hooks while disabled.
 export const contractAddressOrFallback: Address = configuredContractAddress || FALLBACK_DEAD_ADDRESS
 
-// ── Backend config ──────────────────────────────────────────────────────────
+// ── Backend config (mutable — updated by fetchBackendUrl) ───────────────────
 
 const explicitBackendUrl = normalizeUrl((process.env.NEXT_PUBLIC_BACKEND_URL || '').trim())
 const validatedExplicitUrl = validateBackendUrl(explicitBackendUrl)
 const localUrl = validateBackendUrl(normalizeUrl(detectLocalBackendUrl()))
 const sameOrigin = detectSameOrigin()
 
-// Priority: explicit env var > localhost detection > same-origin mode
-const resolvedBackendUrl: string | null = validatedExplicitUrl ?? localUrl ?? (sameOrigin ? '' : null)
+// Priority: explicit env var > localhost detection > same-origin mode > null
+let resolvedBackendUrl: string | null = validatedExplicitUrl ?? localUrl ?? (sameOrigin ? '' : null)
+let _backendInitDone = resolvedBackendUrl !== null
 
-export const isBackendConfigured = resolvedBackendUrl !== null
-export const backendConfigError = isBackendConfigured
+export let isBackendConfigured = resolvedBackendUrl !== null
+export let backendConfigError: string | null = isBackendConfigured
   ? null
   : 'Backend unreachable. Open the game from the server URL (not GitHub Pages).'
-
-// In same-origin mode, backendHttpUrl is '' (empty string).
-// buildBackendApiUrl will return relative paths like '/api/foo'.
-export const backendHttpUrl: string | null = resolvedBackendUrl
-
-export const backendWsUrl: string | null = (() => {
-  if (resolvedBackendUrl === null) {return null}
-  // Same-origin mode: derive WS URL from window.location
-  if (resolvedBackendUrl === '') {return deriveWsUrl()}
-  // Explicit URL: convert http(s) to ws(s)
-  const wsBase = resolvedBackendUrl.startsWith('https://')
-    ? resolvedBackendUrl.replace(/^https/i, 'wss')
-    : resolvedBackendUrl.replace(/^http/i, 'ws')
-  return `${wsBase}/ws/queue`
-})()
+export let backendHttpUrl: string | null = resolvedBackendUrl
+export let backendWsUrl: string | null = resolvedBackendUrl !== null ? deriveWsUrl(resolvedBackendUrl) : null
 
 export function buildBackendApiUrl(path: string): string | null {
   if (resolvedBackendUrl === null) {return null}
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  // Same-origin mode: return relative path (e.g. '/api/matchmaking/queue')
-  // Explicit URL: return full URL (e.g. 'https://example.com/api/matchmaking/queue')
   return `${resolvedBackendUrl}${normalizedPath}`
+}
+
+/**
+ * Fetch the backend URL from the public Gist (for GitHub Pages).
+ * Called once on app init. No-ops if a backend is already configured.
+ */
+export async function fetchBackendUrl(): Promise<void> {
+  if (_backendInitDone) {return}
+  _backendInitDone = true
+
+  try {
+    const res = await fetch(BACKEND_URL_GIST, { cache: 'no-store' })
+    if (!res.ok) {return}
+    const data = await (res.json() as Promise<{ url?: string }>)
+    const url = typeof data.url === 'string' ? normalizeUrl(data.url.trim()) : ''
+    const validated = validateBackendUrl(url)
+    if (!validated) {return}
+
+    resolvedBackendUrl = validated
+    isBackendConfigured = true
+    backendConfigError = null
+    backendHttpUrl = validated
+    backendWsUrl = deriveWsUrl(validated)
+  } catch {
+    // Gist fetch failed — leave backend unconfigured
+  }
 }
