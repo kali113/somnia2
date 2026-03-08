@@ -29,6 +29,7 @@ import WalletConnect from '@/components/game/WalletConnect'
 import { Volume2, VolumeX } from 'lucide-react'
 import { activateAudio, setMuted, isMuted } from '@/lib/game/audio'
 import { tapVirtualKey } from '@/lib/game/input'
+import { useAccount } from '@/lib/wagmi-shim'
 
 const GameCanvas = dynamic(() => import('@/components/game/GameCanvas'), {
   ssr: false,
@@ -48,6 +49,7 @@ type ContainerTxToast = {
 }
 
 function GamePageInner() {
+  const { address: connectedAddress, isConnected: isWalletConnected } = useAccount()
   const searchParams = useSearchParams()
   const router = useRouter()
   const gameStateRef = useRef<GameState | null>(null)
@@ -79,13 +81,23 @@ function GamePageInner() {
 
   // Somnia state
   const [somniaEvents, setSomniaEvents] = useState<SomniaEvent[]>([])
-  const [walletConnected, setWalletConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const [walletAddress, setWalletAddress] = useState<string | null>(connectedAddress ?? null)
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [containerTxToast, setContainerTxToast] = useState<ContainerTxToast | null>(null)
   const [resultSubmitting, setResultSubmitting] = useState(false)
   const [resultTxHash, setResultTxHash] = useState<string | null>(null)
   const [resultError, setResultError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isWalletConnected && connectedAddress) {
+      setWalletAddress(connectedAddress)
+      return
+    }
+
+    if (!isWalletConnected) {
+      setWalletAddress(null)
+    }
+  }, [connectedAddress, isWalletConnected])
 
   // Audio
   const [muted, setMutedState] = useState(() => isMuted())
@@ -186,7 +198,6 @@ function GamePageInner() {
 
   // Wallet handlers
   const handleWalletConnect = useCallback((address: string) => {
-    setWalletConnected(true)
     setWalletAddress(address)
 
     const conn = createReactivityConnection(handleSomniaEvent)
@@ -199,7 +210,6 @@ function GamePageInner() {
   }, [handleSomniaEvent])
 
   const handleWalletDisconnect = useCallback(() => {
-    setWalletConnected(false)
     setWalletAddress(null)
     setIsLiveMode(false)
     setContainerPrompt(null)
@@ -213,7 +223,7 @@ function GamePageInner() {
   }, [])
 
   const handleContainerVerificationRequested = useCallback((request: ContainerVerificationRequest) => {
-    if (!walletConnected || !walletAddress) {
+    if (!isWalletConnected || !walletAddress) {
       pushSystemEvent(createConnectionEvent('Wallet required for verified match container opens.', 'chain_error'))
       if (gameStateRef.current) {
         rejectVerifiedContainerOpen(gameStateRef.current, request.containerId)
@@ -264,7 +274,7 @@ function GamePageInner() {
         message: 'Container verification failed.',
       })
     })
-  }, [pushSystemEvent, walletConnected, walletAddress])
+  }, [isWalletConnected, pushSystemEvent, walletAddress])
 
   const handleStormCommitRequested = useCallback((request: StormCommitRequest) => {
     commitStormCircleOnChain(request).then(({ txHash, reason, commit }) => {
@@ -410,8 +420,8 @@ function GamePageInner() {
     tapVirtualKey(state.input, String(slotIndex + 1))
   }, [])
 
-  const canStartGame = !isMatchMode || walletConnected
-  const showWalletControl = !touchControls || isMatchMode || walletConnected
+  const canStartGame = !isMatchMode || isWalletConnected
+  const showWalletControl = !touchControls || isMatchMode || isWalletConnected
   const matchBannerTop = 'calc(env(safe-area-inset-top) + 0.75rem)'
   const utilityBarTop = touchControls
     ? `calc(env(safe-area-inset-top) + ${isMatchMode ? '3.75rem' : '0.75rem'})`
@@ -507,12 +517,12 @@ function GamePageInner() {
           : { top: utilityBarTop, right: 'calc(12px + 160px + 16px)' }}
       >
         {showWalletControl && (
-          <WalletConnect
-            onConnect={handleWalletConnect}
-            onDisconnect={handleWalletDisconnect}
-            isConnected={walletConnected}
-            address={walletAddress}
-          />
+            <WalletConnect
+              onConnect={handleWalletConnect}
+              onDisconnect={handleWalletDisconnect}
+              isConnected={isWalletConnected}
+              address={walletAddress}
+            />
         )}
         <button
           onClick={toggleMute}
