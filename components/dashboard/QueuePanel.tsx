@@ -87,7 +87,7 @@ export default function QueuePanel() {
   )
 
   // ── Matchmaking WebSocket for countdown timer ─────────────────────────
-  const { queue: wsQueue, me: matchmakingMe, refresh: refreshMatchmaking, backendConfigured, backendConfigError: matchmakingConfigError } = useMatchmaking(address ?? undefined)
+  const { queue: wsQueue, me: matchmakingMe, refresh: refreshMatchmaking, backendConfigured } = useMatchmaking(address ?? undefined)
 
   // ── Countdown timer state (hooks must be declared unconditionally) ─────
   const [countdown, setCountdown] = useState<number | null>(null)
