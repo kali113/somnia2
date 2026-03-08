@@ -12,11 +12,7 @@ import {
 import { somniaTestnet } from '@/lib/thirdweb-config'
 import {
   getIsValidSessionArgs,
-  getQueueSizeArgs,
-  getQueuePlayersArgs,
   getInQueueArgs,
-  getQueueOpenedAtArgs,
-  getQueueTimeoutArgs,
   joinQueueArgs,
   leaveQueueArgs,
   ENTRY_FEE,
@@ -25,14 +21,12 @@ import {
   truncateAddress,
   SOMNIA_FAUCET_URL,
 } from '@/lib/somnia/contract'
-import { fetchMatchmakingMe, useMatchmaking } from '@/lib/somnia/matchmaking-client'
+import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
 import { restoreSessionWallet, SESSION_UPDATED_EVENT, SESSION_MIN_REMAINING_MS } from '@/lib/somnia/session-wallet'
 import { Loader2, AlertTriangle, ExternalLink, Swords, Timer } from 'lucide-react'
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { formatEther, type Address } from 'viem'
 import { useRouter } from 'next/navigation'
-
-type QueuePlayersResult = readonly string[]
 
 /** Parse a Solidity revert reason from an error message */
 function parseRevertReason(err: Error | null): string | null {
@@ -87,7 +81,7 @@ export default function QueuePanel() {
   )
 
   // ── Matchmaking WebSocket for countdown timer ─────────────────────────
-  const { queue: wsQueue, me: matchmakingMe, refresh: refreshMatchmaking, backendConfigured } = useMatchmaking(address ?? undefined)
+  const { queue: wsQueue, me: matchmakingMe, refresh: refreshMatchmaking, backendConfigured, dismissMatch } = useMatchmaking(address ?? undefined)
 
   // ── Countdown timer state (hooks must be declared unconditionally) ─────
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -117,19 +111,9 @@ export default function QueuePanel() {
   }, [])
 
   // ── Read contract state ───────────────────────────────────────────────
-  const { data: queueSize, refetch: refetchQueueSize } = useReadContract<bigint>({
-    ...getQueueSizeArgs(),
-    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
-  })
-
-  const { data: queuePlayers, refetch: refetchQueuePlayers } = useReadContract<QueuePlayersResult>({
-    ...getQueuePlayersArgs(),
-    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
-  })
-
   const { data: isInQueue, refetch: refetchInQueue } = useReadContract<boolean>({
     ...getInQueueArgs(address ?? '0x0000000000000000000000000000000000000000'),
-    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5000 },
+    query: { enabled: !!address && IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 15_000 },
   })
 
   const { data: isValidSession } = useReadContract<boolean>({
@@ -141,17 +125,6 @@ export default function QueuePanel() {
       enabled: !!address && !!sessionAddress && IS_PIXEL_ROYALE_CONFIGURED,
       refetchInterval: 5_000,
     },
-  })
-
-  // On-chain queue timer fallback (used when WebSocket is unavailable)
-  const { data: onChainOpenedAt } = useReadContract<bigint>({
-    ...getQueueOpenedAtArgs(),
-    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED, refetchInterval: 5_000 },
-  })
-
-  const { data: onChainTimeout } = useReadContract<bigint>({
-    ...getQueueTimeoutArgs(),
-    query: { enabled: IS_PIXEL_ROYALE_CONFIGURED },
   })
 
   // Derive optimistic flag: auto-clear when on-chain state resolves
@@ -184,10 +157,7 @@ export default function QueuePanel() {
 
     handledJoinErrorRef.current = joinError
     void refetchInQueue()
-    void refetchQueueSize()
-    void refetchQueuePlayers()
 
-    // Schedule state update + auto-dismiss asynchronously (not synchronous in effect body)
     const t1 = setTimeout(() => {
       setOptimisticJoined(true)
     }, 0)
@@ -195,90 +165,33 @@ export default function QueuePanel() {
       resetJoin()
     }, 4000)
     return () => { clearTimeout(t1); clearTimeout(t2) }
-  }, [joinError, refetchInQueue, refetchQueueSize, refetchQueuePlayers, resetJoin])
+  }, [joinError, refetchInQueue, resetJoin])
 
   // Refetch after tx confirms
   useEffect(() => {
     if (joinHash || leaveHash) {
       const timer = setTimeout(() => {
-        void refetchQueueSize()
-        void refetchQueuePlayers()
         void refetchInQueue()
         void refreshMatchmaking()
       }, 3000)
       return () => { clearTimeout(timer); }
     }
-  }, [joinHash, leaveHash, refetchInQueue, refetchQueuePlayers, refetchQueueSize, refreshMatchmaking])
-
-  useEffect(() => {
-    if (!address || !joinHash) {
-      return
-    }
-
-    let cancelled = false
-    let attempts = 0
-
-    const checkForAssignedMatch = async () => {
-      if (cancelled) {
-        return
-      }
-
-      attempts += 1
-
-      try {
-        const me = await fetchMatchmakingMe(address)
-        if (cancelled) {
-          return
-        }
-
-        if (typeof me.redirectPath === 'string' && me.redirectPath.length > 0) {
-          window.location.assign(me.redirectPath)
-          return
-        }
-
-        if (typeof me.matchId === 'number') {
-          window.location.assign(`/game?matchId=${me.matchId}`)
-          return
-        }
-      } catch {
-        // Ignore transient backend timing issues during instant-start polling.
-      }
-
-      if (attempts < 60) {
-        window.setTimeout(() => {
-          void checkForAssignedMatch()
-        }, 2000)
-      }
-    }
-
-    const timer = window.setTimeout(() => {
-      void checkForAssignedMatch()
-    }, 2000)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [address, joinHash])
+  }, [joinHash, leaveHash, refetchInQueue, refreshMatchmaking])
 
   // Track dismissed match IDs so we don't redirect back to a finished game
-  const dismissedMatchRef = useRef<Set<number>>(new Set())
-
   useEffect(() => {
-    // If returning from a game page, mark that match as dismissed
     if (typeof window !== 'undefined') {
       const returning = sessionStorage.getItem('pixel_royale_returning_from_game')
       if (returning) {
-        dismissedMatchRef.current.add(Number(returning))
+        dismissMatch(Number(returning))
         sessionStorage.removeItem('pixel_royale_returning_from_game')
       }
     }
-  }, [])
+  }, [dismissMatch])
 
   useEffect(() => {
     const matchId = matchmakingMe?.matchId
     if (typeof matchId !== 'number') {return}
-    if (dismissedMatchRef.current.has(matchId)) {return}
 
     if (typeof matchmakingMe?.redirectPath === 'string' && matchmakingMe.redirectPath.length > 0) {
       router.replace(matchmakingMe.redirectPath)
@@ -288,7 +201,7 @@ export default function QueuePanel() {
     router.replace(`/game?matchId=${matchId}`)
   }, [matchmakingMe?.matchId, matchmakingMe?.redirectPath, router])
 
-  const currentQueueSize = queueSize ? Number(queueSize) : 0
+  const currentQueueSize = wsQueue?.size ?? 0
   const hasEnoughBalance = balance ? balance.value >= MIN_QUEUE_BALANCE : false
   const hasSessionWallet = !!sessionAddress
   const hasSessionConfigured = hasSessionWallet && isValidSession === true
@@ -318,20 +231,16 @@ export default function QueuePanel() {
   const playerInQueue = isInQueue === true || optimisticJoined || isMatchedOrRedirecting
   const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming || isMatchedOrRedirecting
   const normalizedAddress = address?.toLowerCase() ?? null
-  const queuedPlayers = Array.isArray(queuePlayers)
-    ? queuePlayers.filter((player): player is string => typeof player === 'string')
-    : []
+  const queuedPlayers = wsQueue?.players ?? []
 
   // Queue progress percentage
   const queueProgress = (currentQueueSize / 20) * 100
 
   // ── Countdown timer logic ──────────────────────────────────────────────
   // Resolve timer source: prefer WebSocket, fall back to on-chain reads
-  const resolvedOpenedAt: number | null = wsQueue?.openedAt
-    ?? (onChainOpenedAt && Number(onChainOpenedAt) > 0 ? Number(onChainOpenedAt) : null)
-  const resolvedTimeoutSec: number = wsQueue?.timeoutSec
-    ?? (onChainTimeout ? Number(onChainTimeout) : 120)
-  const resolvedMinPlayers: number = wsQueue?.minPlayers ?? 1
+  const resolvedOpenedAt: number | null = wsQueue?.openedAt ?? null
+  const resolvedTimeoutSec: number = wsQueue?.timeoutSec ?? 30
+  const resolvedMinPlayers: number = wsQueue?.minPlayers ?? 2
 
   // Compute whether the timer should be active
   const timerActive = !!(resolvedOpenedAt && currentQueueSize >= resolvedMinPlayers)

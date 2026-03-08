@@ -162,7 +162,7 @@ export async function openContainerVerifiedOnChain(
       functionName: 'openContainerVerifiedForPlayer',
       chain: SOMNIA_TESTNET,
       args: [
-        playerAddress as `0x${string}`,
+        playerAddress,
         BigInt(request.gameId),
         BigInt(request.containerId),
         containerKey,

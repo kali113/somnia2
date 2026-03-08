@@ -21,9 +21,7 @@ pragma solidity ^0.8.24;
 contract PixelRoyale {
     // ──────────────────────────── Constants ────────────────────────────
     uint256 public constant MAX_PLAYERS       = 20;
-    uint256 public constant MIN_PLAYERS       = 1;
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
-    uint256 public constant QUEUE_TIMEOUT     = 30;           // seconds
     uint16 public constant MAP_WIDTH          = 3200;
     uint16 public constant MAP_HEIGHT         = 3200;
     uint16 public constant INITIAL_STORM_X    = 1600;
@@ -38,6 +36,8 @@ contract PixelRoyale {
     address public owner;
     address public orchestrator;
     uint256 public nextGameId;
+    uint256 public minPlayers = 2;
+    uint256 public queueTimeout = 30; // seconds
 
     // Queue
     address[] public queue;
@@ -153,6 +153,10 @@ contract PixelRoyale {
         bytes32 entropyHash,
         uint256 timestamp
     );
+    event MinPlayersUpdated(uint256 oldValue, uint256 newValue);
+    event QueueTimeoutUpdated(uint256 oldValue, uint256 newValue);
+    event GameBotRegistered(uint256 indexed gameId, address indexed bot);
+    event GameCancelled(uint256 indexed gameId, uint256 refundedPool);
 
     // ──────────────────────────── Modifiers ────────────────────────────
     modifier onlyOwner() {
@@ -188,11 +192,6 @@ contract PixelRoyale {
 
         emit PlayerJoinedQueue(msg.sender, queue.length);
 
-        if (QUEUE_TIMEOUT == 0 && queue.length >= MIN_PLAYERS) {
-            _startGame();
-            return;
-        }
-
         if (queue.length == MAX_PLAYERS) {
             _startGame();
         }
@@ -209,10 +208,10 @@ contract PixelRoyale {
         require(ok, "REFUND_FAILED");
     }
 
-    /// @notice Orchestrator can force-start a game after timeout if MIN_PLAYERS met.
+    /// @notice Orchestrator can force-start a game after timeout if minPlayers met.
     function forceStartGame() external onlyOrchestrator {
-        require(queue.length >= MIN_PLAYERS, "NOT_ENOUGH_PLAYERS");
-        require(block.timestamp >= queueOpenedAt + QUEUE_TIMEOUT, "TOO_EARLY");
+        require(queue.length >= minPlayers, "NOT_ENOUGH_PLAYERS");
+        require(block.timestamp >= queueOpenedAt + queueTimeout, "TOO_EARLY");
         _startGame();
     }
 
@@ -279,22 +278,6 @@ contract PixelRoyale {
         // Remainder stays in contract as protocol revenue
         _recordPlayerStats(_gameId, _placements, _kills);
         _storeGameResult(_gameId, _placements, pool);
-    }
-
-    /// @notice Emit an elimination event during an active game.
-    /// @param _gameId    The active game ID.
-    /// @param _player    The eliminated player address.
-    /// @param _killer    The player who scored the kill (or address(0) for storm/self).
-    /// @param _placement The placement position (e.g. 20 = eliminated first in 20-player game).
-    function emitElimination(
-        uint256 _gameId,
-        address _player,
-        address _killer,
-        uint256 _placement
-    ) external onlyOrchestrator {
-        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
-        require(activeGamePlayers[_gameId][_player], "PLAYER_NOT_IN_GAME");
-        emit PlayerEliminated(_gameId, _player, _killer, _placement, block.timestamp);
     }
 
     // ──────────────────────────── Storm Commits ────────────────────────
@@ -704,6 +687,49 @@ contract PixelRoyale {
         orchestrator = _orch;
     }
 
+    /// @notice Update the minimum number of players required to start a game.
+    function setMinPlayers(uint256 _minPlayers) external onlyOwner {
+        require(_minPlayers >= 1 && _minPlayers <= MAX_PLAYERS, "INVALID_MIN_PLAYERS");
+        emit MinPlayersUpdated(minPlayers, _minPlayers);
+        minPlayers = _minPlayers;
+    }
+
+    /// @notice Update the queue timeout (seconds before orchestrator can force-start).
+    function setQueueTimeout(uint256 _timeout) external onlyOwner {
+        emit QueueTimeoutUpdated(queueTimeout, _timeout);
+        queueTimeout = _timeout;
+    }
+
+    /// @notice Register bot placeholder addresses as valid game players.
+    /// @dev Must be called BEFORE submitGameResult so bots pass _validatePlacements.
+    function registerGameBots(uint256 _gameId, address[] calldata _bots) external onlyOrchestrator {
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        for (uint256 i = 0; i < _bots.length; i++) {
+            require(_bots[i] != address(0), "ZERO_BOT_ADDRESS");
+            if (!activeGamePlayers[_gameId][_bots[i]]) {
+                activeGamePlayers[_gameId][_bots[i]] = true;
+                activeGamePlayerCounts[_gameId] += 1;
+                emit GameBotRegistered(_gameId, _bots[i]);
+            }
+        }
+    }
+
+    /// @notice Cancel a stuck game that was started but never settled.
+    /// @dev Refunds pool to contract balance (available as protocol fees).
+    ///      We don't track individual player deposits per game,
+    ///      so refund goes to protocol. Owner can manually redistribute.
+    function cancelGame(uint256 _gameId) external onlyOwner {
+        uint8 playerCount = activeGamePlayerCounts[_gameId];
+        uint256 pool = unsettledPrizePools[_gameId];
+        require(playerCount > 0 && pool > 0, "GAME_NOT_ACTIVE");
+
+        delete unsettledPrizePools[_gameId];
+        totalUnsettledPrizePools -= pool;
+        delete activeGamePlayerCounts[_gameId];
+
+        emit GameCancelled(_gameId, pool);
+    }
+
     /// @notice Withdraw protocol fees.
     function withdrawFees(uint256 _amount) external onlyOwner {
         require(_amount <= _availableProtocolFees(), "INSUFFICIENT_AVAILABLE_FEES");
@@ -768,7 +794,7 @@ contract PixelRoyale {
         address[] calldata _placements,
         uint8 recordedPlayerCount
     ) internal view {
-        require(_placements.length >= MIN_PLAYERS, "NOT_ENOUGH_PLAYERS");
+        require(_placements.length >= minPlayers, "NOT_ENOUGH_PLAYERS");
         require(_placements.length <= MAX_PLAYERS, "TOO_MANY_PLAYERS");
         require(_placements.length == recordedPlayerCount, "PLAYER_COUNT_MISMATCH");
 

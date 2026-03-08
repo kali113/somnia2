@@ -140,7 +140,15 @@ export function getQueueTimeoutArgs() {
   return {
     address: PIXEL_ROYALE_ADDRESS,
     abi: pixelRoyaleAbi,
-    functionName: 'QUEUE_TIMEOUT',
+    functionName: 'queueTimeout',
+  } as const
+}
+
+export function getMinPlayersArgs() {
+  return {
+    address: PIXEL_ROYALE_ADDRESS,
+    abi: pixelRoyaleAbi,
+    functionName: 'minPlayers',
   } as const
 }
 

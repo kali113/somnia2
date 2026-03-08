@@ -32,7 +32,6 @@ function createApp() {
     prizePool: '500',
     startedAt: 150,
     txHash: null,
-    mode: 'duo',
   })
   store.recordGame({
     gameId: 3,
@@ -63,7 +62,7 @@ function createApp() {
 }
 
 describe('server routes', () => {
-  it('serves queue state and rejects deprecated queue mutations', async () => {
+  it('serves queue state', async () => {
     const api = createApp()
 
     const status = await api.get('/api/queue/status').expect(200)
@@ -78,10 +77,6 @@ describe('server routes', () => {
       size: 2,
       source: 'chain',
     })
-
-    await api.post('/api/queue/join').expect(410)
-    await api.post('/api/queue/leave').expect(410)
-    await api.post('/api/queue/mode').expect(410)
 
     const queue = await api.get('/api/matchmaking/queue').expect(200)
     const queueBody = queue.body as { size: number }

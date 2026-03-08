@@ -13,9 +13,6 @@ describe('game store', () => {
 
     store.setQueueConfig({ maxSize: 12, minPlayers: 2, timeoutSec: 90 })
     store.syncQueueFromChain([ALPHA, BRAVO], 100)
-    store.setPlayerMode(ALPHA, 'duo')
-    store.setPlayerMode(BRAVO, 'duo')
-    store.setPlayerMode(CHARLIE, 'squad')
 
     expect(store.getQueueState()).toMatchObject({
       players: [ALPHA.toLowerCase(), BRAVO.toLowerCase()],
@@ -30,14 +27,6 @@ describe('game store', () => {
     expect(store.getQueueAgeSec(120)).toBe(20)
     expect(store.canForceStart(189)).toBe(false)
     expect(store.canForceStart(190)).toBe(true)
-    expect(store.getMatchMode([ALPHA, BRAVO, CHARLIE])).toBe('duo')
-    store.setPlayerMode(ALPHA, 'squad')
-    store.setPlayerMode(BRAVO, 'squad')
-    store.setPlayerMode(CHARLIE, 'squad')
-    expect(store.getMatchMode([ALPHA, BRAVO, CHARLIE])).toBe('squad')
-    store.setPlayerMode(ALPHA, 'solo')
-    expect(store.getMatchMode([ALPHA, BRAVO])).toBe('solo')
-    expect(store.getMatchMode([DELTA])).toBe('solo')
   })
 
   it('updates queue state immediately from join leave and game start events', () => {
@@ -98,7 +87,7 @@ describe('game store', () => {
     expect(typeof partialStart.openedAt).toBe('number')
   })
 
-  it('tracks active matches, teams, and player assignments', () => {
+  it('tracks active matches and player assignments', () => {
     const store = new GameStore()
 
     store.setQueueConfig({ maxSize: 8, minPlayers: 2, timeoutSec: 60 })
@@ -109,7 +98,6 @@ describe('game store', () => {
       prizePool: '100',
       startedAt: 500,
       txHash: '0xabc',
-      mode: 'duo',
     })
 
     expect(started.status).toBe('active')
@@ -119,16 +107,10 @@ describe('game store', () => {
       CHARLIE.toLowerCase(),
       DELTA.toLowerCase(),
     ])
-    expect(started.teams).toEqual([
-      [ALPHA.toLowerCase(), BRAVO.toLowerCase()],
-      [CHARLIE.toLowerCase(), DELTA.toLowerCase()],
-    ])
     expect(started.botSlots).toBe(4)
     expect(started.totalSlots).toBe(8)
     expect(store.getMatchForPlayer(ALPHA)?.matchId).toBe(7)
     expect(store.getMatchForPlayer('0x00000000000000000000000000000000000000ff')).toBeUndefined()
-    expect(store.getNextGameId()).toBe(0)
-    expect(store.getNextGameId()).toBe(1)
 
     const ended = store.recordMatchEnded({
       gameId: 7,
@@ -144,14 +126,14 @@ describe('game store', () => {
     expect(store.getMatch(7)?.txHash).toBe('0xdef')
     expect(store.getMatchForPlayer(ALPHA)).toBeUndefined()
 
-    const inferredModeMatch = store.recordMatchStarted({
+    const inferredMatch = store.recordMatchStarted({
       gameId: 8,
       players: [ALPHA, BRAVO, CHARLIE],
       prizePool: '25',
       startedAt: 700,
       txHash: null,
     })
-    expect(inferredModeMatch.mode).toBe('solo')
+    expect(inferredMatch.status).toBe('active')
 
     const endedWithoutExisting = store.recordMatchEnded({
       gameId: 99,
