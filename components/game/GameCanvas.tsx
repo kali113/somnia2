@@ -70,16 +70,21 @@ export default function GameCanvas({
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
+  const resizeFrameRef = useRef<number>(0)
+  const viewportSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 })
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const lastTimeRef = useRef(-1)
   const manualAdvanceRef = useRef(false)
 
-  const handleResize = useCallback(() => {
+  const applyResize = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) {return}
     const viewport = window.visualViewport
     const width = Math.max(1, Math.round(viewport?.width ?? window.innerWidth))
     const height = Math.max(1, Math.round(viewport?.height ?? window.innerHeight))
+    if (viewportSizeRef.current.width === width && viewportSizeRef.current.height === height) {return}
+
+    viewportSizeRef.current = { width, height }
     canvas.width = width
     canvas.height = height
     canvas.style.width = `${width}px`
@@ -88,6 +93,14 @@ export default function GameCanvas({
       resizeGame(gameStateRef.current, width, height)
     }
   }, [gameStateRef])
+
+  const handleResize = useCallback(() => {
+    if (resizeFrameRef.current !== 0) {return}
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = 0
+      applyResize()
+    })
+  }, [applyResize])
 
   const stepGame = useCallback((dt: number) => {
     const state = gameStateRef.current
@@ -238,18 +251,18 @@ export default function GameCanvas({
 
     window.addEventListener('resize', handleResize)
     window.visualViewport?.addEventListener('resize', handleResize)
-    window.visualViewport?.addEventListener('scroll', handleResize)
 
     return () => {
       cancelled = true
       manualAdvanceRef.current = false
       lastTimeRef.current = -1
       cancelAnimationFrame(animFrameRef.current)
+      cancelAnimationFrame(resizeFrameRef.current)
+      resizeFrameRef.current = 0
       window.removeEventListener('pointerdown', handleUserActivation)
       window.removeEventListener('keydown', handleUserActivation)
       window.removeEventListener('resize', handleResize)
       window.visualViewport?.removeEventListener('resize', handleResize)
-      window.visualViewport?.removeEventListener('scroll', handleResize)
       win.render_game_to_text = undefined
       win.pixel_debug_state = undefined
       win.pixel_debug_snapshot = undefined
@@ -259,7 +272,7 @@ export default function GameCanvas({
       gameStateRef.current = null
     }
   }, [
-    handleResize, stepGame, onKillFeedUpdate, onAliveCountUpdate,
+    applyResize, handleResize, stepGame, onKillFeedUpdate, onAliveCountUpdate,
     onPhaseChange, onPlayerUpdate, onStormUpdate, onStormCommitRequested, onSupplyDrop,
     onContainerPromptUpdate, onContainerVerificationRequested, onContainerOpened,
     gameStateRef, botCount, mode, gameId, verifiedContainers, verifiedStorms,
