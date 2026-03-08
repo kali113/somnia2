@@ -13,6 +13,7 @@ export type SomniaEventType =
   | 'reward_claimed'
   | 'session_approved'
   | 'session_revoked'
+  | 'player_eliminated'
   | 'chain_connected'
   | 'chain_error'
 
@@ -30,6 +31,7 @@ export interface SomniaEvent {
     | StormCommittedEventData
     | ChestOpenedEventData
     | RewardClaimedEventData
+    | PlayerEliminatedEventData
     | SessionEventData
     | ConnectionEventData
   source: 'testnet' | 'orchestrator'
@@ -105,6 +107,14 @@ export interface SessionEventData {
   player: string
   sessionKey: string
   expiry?: number
+}
+
+export interface PlayerEliminatedEventData {
+  gameId: number
+  player: string
+  killer: string
+  placement: number
+  eliminatedAt: number
 }
 
 export interface ConnectionEventData {
@@ -311,6 +321,24 @@ export function createSessionRevokedEvent(
   }
 }
 
+export function createPlayerEliminatedEvent(
+  gameId: number,
+  player: string,
+  killer: string,
+  placement: number,
+  eliminatedAt: number,
+  txHash?: string,
+): SomniaEvent {
+  return {
+    id: nextId(),
+    type: 'player_eliminated',
+    timestamp: Date.now(),
+    data: { gameId, player, killer, placement, eliminatedAt } as PlayerEliminatedEventData,
+    source: 'testnet',
+    txHash,
+  }
+}
+
 export function createConnectionEvent(
   message: string,
   type: SomniaEventType = 'chain_connected',
@@ -374,6 +402,10 @@ export function formatEventMessage(event: SomniaEvent): string {
       const weapon = d.weaponId ? `weapon:${d.weaponId}` : 'no-weapon'
       const utility = d.consumableId ? `, utility:${d.consumableId}` : ''
       return `${d.player.slice(0, 6)}... opened ${label} (${weapon}, ammo:+${d.ammoAmount}${utility})`
+    }
+    case 'player_eliminated': {
+      const d = event.data as PlayerEliminatedEventData
+      return `${d.killer.slice(0, 6)}... eliminated ${d.player.slice(0, 6)}... (#${d.placement}) in match #${d.gameId}`
     }
     case 'reward_claimed': {
       const d = event.data as RewardClaimedEventData

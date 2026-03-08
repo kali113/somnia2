@@ -86,6 +86,7 @@ export function useMatchmaking(address?: string) {
   const [activeMatch, setActiveMatch] = useState<MatchRecord | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
+  const [resolvedWsUrl, setResolvedWsUrl] = useState<string | null>(backendWsUrl)
 
   const wsRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -116,7 +117,9 @@ export function useMatchmaking(address?: string) {
   }, [])
 
   const refresh = useCallback(async () => {
-    if (!isBackendConfigured) {
+    // Check at call time (not closure capture time) since fetchBackendUrl
+    // may have updated the config after this callback was created
+    if (!buildBackendApiUrl('/api/health')) {
       return
     }
 
@@ -158,6 +161,8 @@ export function useMatchmaking(address?: string) {
       // On GitHub Pages, fetch backend URL from Gist before first refresh
       await fetchBackendUrl()
       if (cancelled) {return}
+      // Update WS URL state after fetch (may have changed)
+      setResolvedWsUrl(backendWsUrl)
       await refresh()
     }
 
@@ -181,13 +186,13 @@ export function useMatchmaking(address?: string) {
   }, [refresh])
 
   useEffect(() => {
-    if (!isBackendConfigured || !backendWsUrl) {
+    if (!resolvedWsUrl) {
       return
     }
 
     const wsUrl = address
-      ? `${backendWsUrl}?address=${address.toLowerCase()}`
-      : backendWsUrl
+      ? `${resolvedWsUrl}?address=${address.toLowerCase()}`
+      : resolvedWsUrl
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -264,7 +269,7 @@ export function useMatchmaking(address?: string) {
       wsRef.current = null
       setWsConnected(false)
     }
-  }, [address])
+  }, [address, resolvedWsUrl])
 
   return useMemo(() => ({
     queue,

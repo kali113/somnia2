@@ -380,6 +380,10 @@ function handleIndexedEvent(event: IndexedEvent) {
       broadcastGameEvent(event)
       break
     }
+    case 'player_eliminated': {
+      broadcastGameEvent(event)
+      break
+    }
     case 'reward_claimed':
     case 'session_approved':
     case 'session_revoked': {
@@ -517,6 +521,7 @@ async function startReactivitySubscription(): Promise<void> {
       'event RewardClaimed(address indexed player, uint256 amount)',
       'event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry)',
       'event SessionKeyRevoked(address indexed player, address indexed sessionKey)',
+      'event PlayerEliminated(uint256 indexed gameId, address indexed player, address indexed killer, uint256 placement, uint256 timestamp)',
       'event ReactiveForceStartAttempt(address indexed player, uint256 queueSize, bool success, bytes returnData)',
       'event ReactiveRewardClaim(uint256 indexed gameId, address indexed player, uint256 placement, bool success, bytes returnData)',
       'event LeaderboardUpdated(uint256 indexed gameId, address indexed winner, uint256 playerCount, uint256 prizePool)',

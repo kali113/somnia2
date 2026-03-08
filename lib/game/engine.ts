@@ -77,6 +77,7 @@ export interface KillFeedEntry {
   victim: string
   weapon: string
   time: number
+  txHash?: string
 }
 
 export type ContainerPromptStatus = 'ready' | 'searching' | 'verifying'
@@ -120,7 +121,7 @@ export interface StormCommitRequest extends BaseStormCommitRequest {
 
 // ── Game State ──────────────────────────────────────────────────────────────
 
-export type GamePhase = 'lobby' | 'dropping' | 'playing' | 'victory' | 'eliminated'
+export type GamePhase = 'lobby' | 'dropping' | 'playing' | 'spectating' | 'victory' | 'eliminated'
 
 export interface GameState {
   phase: GamePhase
@@ -153,6 +154,8 @@ export interface GameState {
   aimAssistBotIdx: number   // index into bots[], -1 if no target
   /** Counts down from totalPlayers as entities are eliminated. */
   nextPlacement: number
+  /** Index into alive bots for spectator camera target (-1 = auto-nearest). */
+  spectatorTargetIdx: number
 
   // Callbacks for React UI
   onKillFeedUpdate?: (feed: KillFeedEntry[]) => void
@@ -257,6 +260,7 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
     searchNonce: 0,
     aimAssistBotIdx: -1,
     nextPlacement: botCount + 1, // total participants (player + bots)
+    spectatorTargetIdx: -1,
   }
 
   // Store cleanup on canvas for later
@@ -268,6 +272,36 @@ export function initGame(canvas: HTMLCanvasElement, options?: {
 function randomWeaponId(): string {
   const weaponIds = ['ar', 'shotgun', 'smg', 'sniper'] as const
   return weaponIds[Math.floor(Math.random() * weaponIds.length)]
+}
+
+function getAliveBots(state: GameState): Bot[] {
+  return state.bots.filter(b => b.alive)
+}
+
+function getSpectatorTarget(state: GameState): Bot | null {
+  const alive = getAliveBots(state)
+  if (alive.length === 0) { return null }
+
+  // Handle arrow key cycling
+  if (state.input.justPressed.has('ArrowRight') || state.input.justPressed.has('d')) {
+    state.spectatorTargetIdx = (state.spectatorTargetIdx + 1) % alive.length
+  } else if (state.input.justPressed.has('ArrowLeft') || state.input.justPressed.has('a')) {
+    state.spectatorTargetIdx = (state.spectatorTargetIdx - 1 + alive.length) % alive.length
+  }
+
+  // Clamp to valid range if bots have died since last frame
+  if (state.spectatorTargetIdx < 0 || state.spectatorTargetIdx >= alive.length) {
+    state.spectatorTargetIdx = 0
+  }
+
+  return alive[state.spectatorTargetIdx]
+}
+
+/** Skip spectator mode and go directly to the eliminated results screen. */
+export function skipSpectating(state: GameState): void {
+  if (state.phase !== 'spectating') {return}
+  state.phase = 'eliminated'
+  state.onPhaseChange?.('eliminated')
 }
 
 function weightedPick<T>(options: Array<{ value: T; weight: number }>): T {
@@ -556,25 +590,38 @@ function rebuildEntityGrid(state: GameState, grid?: SpatialGridRef<Player>): Spa
 // ── Main Update ─────────────────────────────────────────────────────────────
 
 export function updateGame(state: GameState, dt: number) {
-  if (state.phase !== 'playing') {return}
+  if (state.phase !== 'playing' && state.phase !== 'spectating') {return}
 
   state.time += dt
   const now = state.time
 
-  // Update camera first so mouse-to-world conversion matches this frame's render
-  updateCamera(state.camera, state.player.x, state.player.y, dt)
+  const isSpectating = state.phase === 'spectating'
 
-  // Update mouse world coords
-  updateMouseWorld(state.input, state.camera.x, state.camera.y, state.player.x, state.player.y)
+  // In spectator mode, follow the selected alive bot (arrow keys to cycle)
+  if (isSpectating) {
+    const target = getSpectatorTarget(state)
+    if (target) {
+      updateCamera(state.camera, target.x, target.y, dt)
+    }
+    clearFrameInput(state.input)
+  } else {
+    // Update camera first so mouse-to-world conversion matches this frame's render
+    updateCamera(state.camera, state.player.x, state.player.y, dt)
 
-  // ── Aim assist (human player only) ───────────────────────────────────
-  const aimAssist = computeAimAssist(state)
-  state.aimAssistBotIdx = aimAssist?.botIdx ?? -1
-  if (aimAssist) {
-    state.input.mouseWorldX = aimAssist.worldX
-    state.input.mouseWorldY = aimAssist.worldY
+    // Update mouse world coords
+    updateMouseWorld(state.input, state.camera.x, state.camera.y, state.player.x, state.player.y)
+
+    // ── Aim assist (human player only) ───────────────────────────────────
+    const aimAssist = computeAimAssist(state)
+    state.aimAssistBotIdx = aimAssist?.botIdx ?? -1
+    if (aimAssist) {
+      state.input.mouseWorldX = aimAssist.worldX
+      state.input.mouseWorldY = aimAssist.worldY
+    }
   }
 
+  // ── Player-specific logic (skip when spectating) ─────────────────────
+  if (!isSpectating) {
   // ── Get colliders near player ─────────────────────────────────────────
   const envColliders = getEnvironmentColliders(state.map, state.player.x, state.player.y, 100)
   const structureColliders = getStructureColliders(state.map, state.player.x, state.player.y, 320)
@@ -736,6 +783,7 @@ export function updateGame(state: GameState, dt: number) {
       state.player.metal += 100
     }
   }
+  } // end !isSpectating
 
   const entityGrid = rebuildEntityGrid(state)
 
@@ -816,8 +864,8 @@ export function updateGame(state: GameState, dt: number) {
           state.aliveTeams--
           state.placement = state.nextPlacement
           state.nextPlacement--
-          state.phase = 'eliminated'
-          state.onPhaseChange?.('eliminated')
+          state.phase = 'spectating'
+          state.onPhaseChange?.('spectating')
         }
         continue
       }
@@ -871,6 +919,9 @@ export function updateGame(state: GameState, dt: number) {
             state.phase = 'victory'
             state.onPhaseChange?.('victory')
             playVictory()
+          } else if (state.aliveTeams <= 1 && state.phase === 'spectating') {
+            state.phase = 'eliminated'
+            state.onPhaseChange?.('eliminated')
           }
         }
         break
@@ -966,8 +1017,8 @@ export function updateGame(state: GameState, dt: number) {
       state.aliveTeams--
       state.placement = state.nextPlacement
       state.nextPlacement--
-      state.phase = 'eliminated'
-      state.onPhaseChange?.('eliminated')
+      state.phase = 'spectating'
+      state.onPhaseChange?.('spectating')
     }
   }
 
@@ -1011,6 +1062,9 @@ export function updateGame(state: GameState, dt: number) {
         state.phase = 'victory'
         state.onPhaseChange?.('victory')
         playVictory()
+      } else if (state.aliveTeams <= 1 && state.phase === 'spectating') {
+        state.phase = 'eliminated'
+        state.onPhaseChange?.('eliminated')
       }
     }
   }
@@ -1069,6 +1123,9 @@ function handleMeleeHit(state: GameState, attacker: Player, attackerId: number) 
           state.phase = 'victory'
           state.onPhaseChange?.('victory')
           playVictory()
+        } else if (state.aliveTeams <= 1 && state.phase === 'spectating') {
+          state.phase = 'eliminated'
+          state.onPhaseChange?.('eliminated')
         }
       }
       return

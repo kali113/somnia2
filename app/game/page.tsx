@@ -8,12 +8,13 @@ import {
   confirmStormCircleCommit,
   fallbackStormCircleCommit,
   rejectVerifiedContainerOpen,
+  skipSpectating,
   type GameState, type GamePhase, type KillFeedEntry, type ContainerPromptState, type ContainerVerificationRequest, type StormCommitRequest,
 } from '@/lib/game/engine'
 import type { Player } from '@/lib/game/player'
 import type { GameMode } from '@/lib/game/constants'
 import type { StormState } from '@/lib/game/storm'
-import { createConnectionEvent, type SomniaEvent } from '@/lib/somnia/events'
+import { createConnectionEvent, type SomniaEvent, type PlayerEliminatedEventData } from '@/lib/somnia/events'
 import { createReactivityConnection } from '@/lib/somnia/reactivity'
 import { fetchMatchById, type MatchRecord } from '@/lib/somnia/matchmaking-client'
 import { isBackendConfigured, backendConfigError } from '@/lib/somnia/runtime-config'
@@ -25,6 +26,7 @@ import KillFeed from '@/components/game/KillFeed'
 import VictoryScreen from '@/components/game/VictoryScreen'
 import EventFeed from '@/components/game/EventFeed'
 import MobileControls from '@/components/game/MobileControls'
+import SpectatorBanner from '@/components/game/SpectatorBanner'
 import WalletConnect from '@/components/game/WalletConnect'
 import { Volume2, VolumeX } from 'lucide-react'
 import { activateAudio, setMuted, isMuted } from '@/lib/game/audio'
@@ -180,6 +182,22 @@ function GamePageInner() {
           entropyHash: data.entropyHash,
           committedAt: data.timestamp,
           txHash: event.txHash ?? null,
+        })
+      }
+    }
+
+    if (event.type === 'player_eliminated' && gameStateRef.current) {
+      const data = event.data as PlayerEliminatedEventData
+      const activeGameId = gameStateRef.current.gameId
+      if (data.gameId === activeGameId && event.txHash) {
+        setKillFeed(prev => {
+          const updated = prev.map(entry => {
+            if (!entry.txHash && entry.victim === data.player.slice(0, 6) + '...') {
+              return { ...entry, txHash: event.txHash }
+            }
+            return entry
+          })
+          return updated
         })
       }
     }
@@ -384,12 +402,26 @@ function GamePageInner() {
 
   // Game callbacks
   const handlePlayAgain = useCallback(() => {
-    window.location.reload()
-  }, [])
+    if (isMatchMode) {
+      sessionStorage.setItem('pixel_royale_returning_from_game', String(parsedMatchId))
+      router.push('/')
+    } else {
+      window.location.reload()
+    }
+  }, [isMatchMode, parsedMatchId, router])
 
   const handleBackToMenu = useCallback(() => {
+    // Mark this match as dismissed so the dashboard doesn't redirect back
+    if (isMatchMode) {
+      sessionStorage.setItem('pixel_royale_returning_from_game', String(parsedMatchId))
+    }
     router.push('/')
-  }, [router])
+  }, [router, isMatchMode, parsedMatchId])
+
+  const handleSkipSpectating = useCallback(() => {
+    const state = gameStateRef.current
+    if (state) {skipSpectating(state)}
+  }, [])
 
   const toggleMute = useCallback(() => {
     const newMuted = !muted
@@ -467,7 +499,8 @@ function GamePageInner() {
             gameStateRef={gameStateRef}
           />
 
-          <KillFeed entries={killFeed} gameTime={gameTime} touchControls={touchControls} />
+          <KillFeed entries={killFeed} gameTime={gameTime} touchControls={touchControls} onChainEvents={somniaEvents} />
+          <SpectatorBanner phase={phase} aliveCount={aliveCount} onSkip={handleSkipSpectating} />
           <EventFeed events={somniaEvents} isLive={isLiveMode} touchControls={touchControls} />
 
           <VictoryScreen

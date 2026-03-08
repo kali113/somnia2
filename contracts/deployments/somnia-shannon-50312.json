@@ -4,7 +4,7 @@
   "rpcUrl": "https://rpc.ankr.com/somnia_testnet",
   "deployer": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "initialOrchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
-  "orchestrator": "0xf00d22ab42f0fa8ca39d54f432671a853c8539d0",
+  "orchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "contract": {
     "name": "PixelRoyale",
     "address": "0xf568e74856c12e115e18b59e247ee7045164e98c",

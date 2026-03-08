@@ -241,6 +241,10 @@ function normalizeKills(rawKills: unknown, expectedLength: number): number[] | n
   return kills
 }
 
+function safeLogValue(value: string): string {
+  return value.replace(/[\r\n\t]/g, '_')
+}
+
 /**
  * POST /api/game/result
  * Submit a validated game result from a privileged orchestrator caller.
@@ -462,6 +466,96 @@ gameRouter.post('/storm', privilegedWriteLimiter, asyncHandler(async (req, res) 
     console.error(`[game] Failed to commit storm circle for game #${gameId}, phase ${phase}: ${message}`)
     return res.status(500).json({
       error: 'Failed to commit storm circle',
+      reason: 'tx_failed',
+    })
+  }
+}))
+
+/**
+ * POST /api/game/elimination
+ * Record a player elimination on-chain. Called by the game engine when a player is eliminated.
+ */
+gameRouter.post('/elimination', privilegedWriteLimiter, asyncHandler(async (req, res) => {
+  const {
+    store,
+    orchestratorClient,
+    contractAddress,
+  } = getServerLocals(req)
+
+  if (!hasPrivilegedAccess(req)) {
+    return rejectPrivilegedAccess(res)
+  }
+
+  const body = req.body as {
+    gameId?: unknown
+    player?: unknown
+    killer?: unknown
+    placement?: unknown
+  }
+
+  const gameId = Number(body.gameId)
+  if (!Number.isInteger(gameId) || gameId < 0) {
+    return res.status(400).json({ error: 'Invalid gameId', reason: 'invalid_game_id' })
+  }
+
+  const player = typeof body.player === 'string' && isAddress(body.player) ? body.player : null
+  if (!player) {
+    return res.status(400).json({ error: 'Invalid player address', reason: 'invalid_player' })
+  }
+
+  const killer = typeof body.killer === 'string' && isAddress(body.killer) ? body.killer : null
+  if (!killer) {
+    return res.status(400).json({ error: 'Invalid killer address', reason: 'invalid_killer' })
+  }
+
+  const placement = Number(body.placement)
+  if (!Number.isInteger(placement) || placement < 1 || placement > 20) {
+    return res.status(400).json({ error: 'Invalid placement', reason: 'invalid_placement' })
+  }
+
+  const match = store.getMatch(gameId)
+  if (!match || match.status !== 'active') {
+    return res.status(404).json({ error: 'Active match not found', reason: 'match_not_found' })
+  }
+
+  if (!orchestratorClient || contractAddress.toLowerCase() === ZERO_ADDRESS) {
+    return res.status(503).json({ error: 'On-chain elimination recording unavailable', reason: 'orchestrator_unavailable' })
+  }
+  const eliminationOrchestratorAccount = orchestratorClient.account
+  if (!eliminationOrchestratorAccount) {
+    return res.status(503).json({ error: 'On-chain elimination recording unavailable', reason: 'orchestrator_unavailable' })
+  }
+
+  try {
+    const abi = [{
+      type: 'function',
+      name: 'emitElimination',
+      inputs: [
+        { name: '_gameId', type: 'uint256' },
+        { name: '_player', type: 'address' },
+        { name: '_killer', type: 'address' },
+        { name: '_placement', type: 'uint256' },
+      ],
+      outputs: [],
+      stateMutability: 'nonpayable',
+    }] as const
+
+    const txHash = await orchestratorClient.writeContract({
+      account: eliminationOrchestratorAccount,
+      chain: orchestratorClient.chain,
+      address: contractAddress,
+      abi,
+      functionName: 'emitElimination',
+      args: [BigInt(gameId), player, killer, BigInt(placement)],
+    })
+
+    console.log(`[game] Recorded elimination for game #${gameId}, placement ${placement}, tx: ${txHash}`)
+    return res.json({ success: true, gameId, player, killer, placement, txHash })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[game] Failed to record elimination for game #${gameId}: ${safeLogValue(message)}`)
+    return res.status(500).json({
+      error: 'Failed to record elimination',
       reason: 'tx_failed',
     })
   }

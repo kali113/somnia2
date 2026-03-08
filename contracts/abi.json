@@ -154,6 +154,43 @@
         "type": "uint256"
       },
       {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "killer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "placement",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlayerEliminated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
         "indexed": false,
         "internalType": "address[]",
         "name": "players",
@@ -570,6 +607,34 @@
   {
     "inputs": [],
     "name": "forceStartGame",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_gameId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_player",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_killer",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_placement",
+        "type": "uint256"
+      }
+    ],
+    "name": "emitElimination",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1214,6 +1279,34 @@
       }
     ],
     "name": "submitGameResult",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_gameId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_player",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_killer",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_placement",
+        "type": "uint256"
+      }
+    ],
+    "name": "emitElimination",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

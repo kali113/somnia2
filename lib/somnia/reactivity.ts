@@ -24,6 +24,7 @@ import {
   createSessionApprovedEvent,
   createSessionRevokedEvent,
   createStormCommittedEvent,
+  createPlayerEliminatedEvent,
   type SomniaEvent,
 } from './events'
 
@@ -335,6 +336,16 @@ function handleIndexedEvent(
         txHash,
       ))
       break
+    case 'player_eliminated':
+      onEvent(createPlayerEliminatedEvent(
+        event.gameId as number,
+        (event.player as string).toLowerCase(),
+        (event.killer as string).toLowerCase(),
+        event.placement as number,
+        event.eliminatedAt as number,
+        txHash,
+      ))
+      break
   }
 }
 
@@ -421,6 +432,16 @@ function handleDecodedEvent(
       onEvent(createSessionRevokedEvent(
         (args.player as string).toLowerCase(),
         (args.sessionKey as string).toLowerCase(),
+        txHash,
+      ))
+      break
+    case 'PlayerEliminated':
+      onEvent(createPlayerEliminatedEvent(
+        Number(args.gameId),
+        (args.player as string).toLowerCase(),
+        (args.killer as string).toLowerCase(),
+        Number(args.placement),
+        Number(args.timestamp),
         txHash,
       ))
       break
@@ -530,6 +551,18 @@ function handleLog(
       return
     }
 
+    if (parsed.eventName === 'PlayerEliminated') {
+      onEvent(createPlayerEliminatedEvent(
+        Number(parsed.args.gameId),
+        parsed.args.player.toLowerCase(),
+        parsed.args.killer.toLowerCase(),
+        Number(parsed.args.placement),
+        Number(parsed.args.timestamp),
+        txHash,
+      ))
+      return
+    }
+
     if (parsed.eventName === 'ContainerOpened') {
       const containerTypeCode = Number(parsed.args.containerType)
       const containerType = containerTypeCode === 1
@@ -598,6 +631,7 @@ type DecodedSomniaEvent =
   | { eventName: 'RewardClaimed'; args: { player: string; amount: bigint } }
   | { eventName: 'SessionKeyApproved'; args: { player: string; sessionKey: string; expiry: bigint } }
   | { eventName: 'SessionKeyRevoked'; args: { player: string; sessionKey: string } }
+  | { eventName: 'PlayerEliminated'; args: { gameId: bigint; player: string; killer: string; placement: bigint; timestamp: bigint } }
   | {
       eventName: 'ContainerOpened'
       args: {
