@@ -19,8 +19,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-default-setup:
+    name: Detect default setup
+    runs-on: ubuntu-latest
+    outputs:
+      default_setup_enabled: ${{ steps.detect.outputs.default_setup_enabled }}
+    steps:
+      - name: Detect GitHub CodeQL default setup
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          response_file="$RUNNER_TEMP/codeql-default-setup.json"
+          status_code="$(curl -sS -o "$response_file" -w '%{http_code}' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$REPOSITORY/code-scanning/default-setup")"
+
+          case "$status_code" in
+            200)
+              state="$(python - <<'PY' "$response_file"
+import json
+import sys
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    payload = json.load(handle)
+print(payload.get('state', ''))
+PY
+)"
+              if [ "$state" = "configured" ]; then
+                echo "default_setup_enabled=true" >> "$GITHUB_OUTPUT"
+                echo "GitHub CodeQL default setup is enabled; skipping advanced workflow."
+              else
+                echo "default_setup_enabled=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            404)
+              echo "default_setup_enabled=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unexpected response from default setup API: HTTP $status_code"
+              cat "$response_file"
+              exit 1
+              ;;
+          esac
+
+  use-default-setup:
+    name: Use repository default setup
+    needs: detect-default-setup
+    if: needs.detect-default-setup.outputs.default_setup_enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip duplicate CodeQL upload
+        run: |
+          echo "Repository-level CodeQL default setup is enabled."
+          echo "Skipping the advanced workflow to avoid duplicate SARIF uploads."
+
   analyze:
     name: Analyze
+    needs: detect-default-setup
+    if: needs.detect-default-setup.outputs.default_setup_enabled != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
