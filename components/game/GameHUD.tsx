@@ -1,6 +1,6 @@
 'use client'
 
-import { WEAPONS, ITEMS, RARITY_COLORS, BUILD_PIECE_ORDER, BUILD_PIECES } from '@/lib/game/constants'
+import { WEAPONS, ITEMS, RARITY_COLORS, BUILD_PIECE_ORDER, BUILD_PIECES, type BuildPieceId } from '@/lib/game/constants'
 import type { Player } from '@/lib/game/player'
 import type { StormState } from '@/lib/game/storm'
 import type { ContainerPromptState } from '@/lib/game/engine'
@@ -14,6 +14,8 @@ interface GameHUDProps {
   containerPrompt: ContainerPromptState | null
   touchControls?: boolean
   onSelectSlot?: (slotIndex: number) => void
+  onSelectBuildPiece?: (pieceId: BuildPieceId) => void
+  onCycleBuildMaterial?: () => void
 }
 
 function containerLabel(type: ContainerPromptState['containerType']): string {
@@ -30,6 +32,8 @@ export default function GameHUD({
   containerPrompt,
   touchControls = false,
   onSelectSlot,
+  onSelectBuildPiece,
+  onCycleBuildMaterial,
 }: GameHUDProps) {
   if (!player) {return null}
 
@@ -48,6 +52,7 @@ export default function GameHUD({
     || player.consumables.medkit > 0
     || player.consumables.mini_shield > 0
     || player.consumables.shield_potion > 0
+  const touchBottomPanelWidth = 'min(calc(100vw - 7.25rem), 15.5rem)'
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60)
@@ -123,7 +128,12 @@ export default function GameHUD({
         </div>
 
         {/* Inventory slots */}
-        <div className={`flex w-full justify-center ${touchControls ? 'max-w-[17rem] gap-0.5' : 'max-w-[24rem] gap-1'}`}>
+        <div
+          className={touchControls
+            ? 'flex self-start gap-0.5 pl-0.5'
+            : 'flex w-full max-w-[24rem] justify-center gap-1'}
+          style={touchControls ? { width: touchBottomPanelWidth } : undefined}
+        >
           {player.slots.map((slot, i) => {
             const isActive = i === player.activeSlot
             const weapon = slot ? WEAPONS[slot.weaponId] : null
@@ -227,7 +237,10 @@ export default function GameHUD({
         )}
 
         {containerPrompt && (
-          <div className="w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono sm:w-auto">
+          <div
+            className={`rounded-lg border border-[rgba(255,215,0,0.45)] bg-[rgba(0,0,0,0.7)] px-4 py-2 text-center font-mono ${touchControls ? 'self-start sm:w-auto' : 'sm:w-auto'}`}
+            style={touchControls ? { width: touchBottomPanelWidth } : { width: 'min(18rem,calc(100vw-1.5rem))' }}
+          >
             <div className="text-[11px] text-[#ffd166]">
               {containerLabel(containerPrompt.containerType)} NEARBY
             </div>
@@ -257,28 +270,59 @@ export default function GameHUD({
 
         {/* Build mode indicator */}
         {player.buildMode && (
-          <div className={`rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] font-mono text-xs text-[#d7ffe0] ${touchControls ? 'w-[min(16rem,calc(100vw-1.5rem))] px-3 py-2' : 'w-[min(18rem,calc(100vw-1.5rem))] px-4 py-2 sm:w-auto'}`}>
+          <div
+            className={`rounded-lg border border-[rgba(76,255,76,0.4)] bg-[rgba(76,255,76,0.12)] font-mono text-xs text-[#d7ffe0] ${touchControls ? 'self-start px-3 py-2' : 'w-[min(18rem,calc(100vw-1.5rem))] px-4 py-2 sm:w-auto'}`}
+            style={touchControls ? { width: touchBottomPanelWidth } : undefined}
+          >
             <div className="text-[11px] text-[#4cff4c]">
               BUILD: {activePiece.name.toUpperCase()} ({player.buildMaterial.toUpperCase()}) - {activePiece.baseCost} mats
             </div>
             <div className={canAffordPiece ? 'text-[rgba(255,255,255,0.75)]' : 'text-[#ff7b7b]'}>
               {touchControls
-                ? (canAffordPiece ? 'Aim to preview, tap PLACE to build.' : `Need ${activePiece.baseCost} ${player.buildMaterial}`)
+                ? (canAffordPiece ? 'Aim to preview, tap PLACE to build, and use the piece/material buttons below.' : `Need ${activePiece.baseCost} ${player.buildMaterial}`)
                 : (canAffordPiece ? activePiece.purpose : `Need ${activePiece.baseCost} ${player.buildMaterial}`)}
             </div>
-            <div className={`mt-1 flex flex-wrap text-[rgba(255,255,255,0.65)] ${touchControls ? 'gap-1 text-[9px]' : 'gap-2 text-[10px]'}`}>
-              {BUILD_PIECE_ORDER.map((pieceId, index) => {
-                const piece = BUILD_PIECES[pieceId]
-                const selected = pieceId === player.buildPiece
-                return (
-                  <span key={pieceId} className={selected ? 'text-[#4cff4c]' : ''}>
-                    {touchControls
-                      ? piece.name
-                      : `${index === 0 ? 'Z' : index === 1 ? 'X' : 'C'}:${piece.name}`}
-                  </span>
-                )
-              })}
-            </div>
+            {touchControls ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onCycleBuildMaterial?.()}
+                  className="pointer-events-auto rounded-md border border-[rgba(255,255,255,0.16)] bg-[rgba(0,0,0,0.28)] px-2 py-1 text-[10px] text-[rgba(255,255,255,0.9)]"
+                  aria-label={`Cycle build material. Current material ${player.buildMaterial}`}
+                >
+                  MAT {player.buildMaterial.toUpperCase()}
+                </button>
+                {BUILD_PIECE_ORDER.map((pieceId) => {
+                  const piece = BUILD_PIECES[pieceId]
+                  const selected = pieceId === player.buildPiece
+                  return (
+                    <button
+                      key={pieceId}
+                      type="button"
+                      onClick={() => onSelectBuildPiece?.(pieceId)}
+                      className={`pointer-events-auto rounded-md border px-2 py-1 text-[10px] ${selected
+                        ? 'border-[rgba(76,255,76,0.5)] bg-[rgba(76,255,76,0.18)] text-[#d7ffe0]'
+                        : 'border-[rgba(255,255,255,0.12)] bg-[rgba(0,0,0,0.22)] text-[rgba(255,255,255,0.76)]'}`}
+                      aria-label={`Select build piece ${piece.name}`}
+                    >
+                      {piece.name}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[rgba(255,255,255,0.65)]">
+                {BUILD_PIECE_ORDER.map((pieceId, index) => {
+                  const piece = BUILD_PIECES[pieceId]
+                  const selected = pieceId === player.buildPiece
+                  return (
+                    <span key={pieceId} className={selected ? 'text-[#4cff4c]' : ''}>
+                      {`${index === 0 ? 'Z' : index === 1 ? 'X' : 'C'}:${piece.name}`}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 

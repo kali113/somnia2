@@ -179,7 +179,10 @@ export function setVirtualAim(state: InputState, x: number, y: number, firing = 
 
 export function clearVirtualAim(state: InputState) {
   state.virtualAimActive = false
-  state.mouseDown = false
+}
+
+export function setVirtualFireHeld(state: InputState, held: boolean) {
+  state.mouseDown = held
 }
 
 export function tapVirtualKey(state: InputState, key: string) {

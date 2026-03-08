@@ -63,6 +63,8 @@ export default function EventFeed({ events, isLive, touchControls = false }: Eve
   }, [])
 
   if (touchControls) {
+    if (!isLive && events.length === 0) {return null}
+
     return (
       <div
         className="pointer-events-none absolute left-3 z-10"
