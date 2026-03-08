@@ -384,12 +384,21 @@ function GamePageInner() {
 
   // Game callbacks
   const handlePlayAgain = useCallback(() => {
-    window.location.reload()
-  }, [])
+    if (isMatchMode) {
+      sessionStorage.setItem('pixel_royale_returning_from_game', String(parsedMatchId))
+      router.push('/')
+    } else {
+      window.location.reload()
+    }
+  }, [isMatchMode, parsedMatchId, router])
 
   const handleBackToMenu = useCallback(() => {
+    // Mark this match as dismissed so the dashboard doesn't redirect back
+    if (isMatchMode) {
+      sessionStorage.setItem('pixel_royale_returning_from_game', String(parsedMatchId))
+    }
     router.push('/')
-  }, [router])
+  }, [router, isMatchMode, parsedMatchId])
 
   const toggleMute = useCallback(() => {
     const newMuted = !muted

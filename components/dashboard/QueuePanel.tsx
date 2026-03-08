@@ -261,15 +261,31 @@ export default function QueuePanel() {
     }
   }, [address, joinHash])
 
+  // Track dismissed match IDs so we don't redirect back to a finished game
+  const dismissedMatchRef = useRef<Set<number>>(new Set())
+
   useEffect(() => {
+    // If returning from a game page, mark that match as dismissed
+    if (typeof window !== 'undefined') {
+      const returning = sessionStorage.getItem('pixel_royale_returning_from_game')
+      if (returning) {
+        dismissedMatchRef.current.add(Number(returning))
+        sessionStorage.removeItem('pixel_royale_returning_from_game')
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const matchId = matchmakingMe?.matchId
+    if (typeof matchId !== 'number') {return}
+    if (dismissedMatchRef.current.has(matchId)) {return}
+
     if (typeof matchmakingMe?.redirectPath === 'string' && matchmakingMe.redirectPath.length > 0) {
       router.replace(matchmakingMe.redirectPath)
       return
     }
 
-    if (typeof matchmakingMe?.matchId === 'number') {
-      router.replace(`/game?matchId=${matchmakingMe.matchId}`)
-    }
+    router.replace(`/game?matchId=${matchId}`)
   }, [matchmakingMe?.matchId, matchmakingMe?.redirectPath, router])
 
   const currentQueueSize = queueSize ? Number(queueSize) : 0
