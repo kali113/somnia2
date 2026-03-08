@@ -88,11 +88,38 @@ export function useMatchmaking(address?: string) {
 
   const wsRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const refreshRequestIdRef = useRef(0)
+
+  const mergeMeState = useCallback((
+    previous: MatchmakingMeResponse | null,
+    next: MatchmakingMeResponse | null,
+  ): MatchmakingMeResponse | null => {
+    if (!next) {
+      return previous
+    }
+
+    if (previous?.status === 'matched' && next.status !== 'matched') {
+      return previous
+    }
+
+    if (previous?.status === 'matched' && next.status === 'matched') {
+      return {
+        ...previous,
+        ...next,
+        match: next.match ?? previous.match,
+        redirectPath: next.redirectPath ?? previous.redirectPath,
+      }
+    }
+
+    return next
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!isBackendConfigured) {
       return
     }
+
+    const requestId = ++refreshRequestIdRef.current
 
     try {
       const [nextQueue, nextMe] = await Promise.all([
@@ -100,8 +127,12 @@ export function useMatchmaking(address?: string) {
         address ? fetchMatchmakingMe(address) : Promise.resolve(null),
       ])
 
+      if (requestId !== refreshRequestIdRef.current) {
+        return
+      }
+
       setQueue(nextQueue)
-      setMe(nextMe)
+      setMe((prev) => mergeMeState(prev, nextMe))
 
       if (nextMe?.match) {
         setActiveMatch(nextMe.match)
@@ -112,10 +143,13 @@ export function useMatchmaking(address?: string) {
 
       setError(null)
     } catch (err) {
+      if (requestId !== refreshRequestIdRef.current) {
+        return
+      }
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
     }
-  }, [address])
+  }, [address, mergeMeState])
 
   useEffect(() => {
     let cancelled = false
@@ -201,6 +235,7 @@ export function useMatchmaking(address?: string) {
 
           if (address && payload.address.toLowerCase() !== address.toLowerCase()) {return}
 
+          refreshRequestIdRef.current += 1
           setMe((prev) => ({
             address: address?.toLowerCase() || payload.address,
             status: 'matched',
@@ -208,6 +243,13 @@ export function useMatchmaking(address?: string) {
             redirectPath: payload.redirectPath,
             match: prev?.match,
           }))
+
+          if (prevMatchNeedsFetch(payload.matchId)) {
+            fetchMatchById(payload.matchId).then((match) => {
+              setActiveMatch(match)
+              setMe((prev) => prev ? { ...prev, match } : prev)
+            }).catch(() => undefined)
+          }
         }
       } catch {
         // Ignore malformed payloads
@@ -231,4 +273,8 @@ export function useMatchmaking(address?: string) {
     backendConfigError,
     refresh,
   }), [queue, me, activeMatch, error, wsConnected, refresh])
+}
+
+function prevMatchNeedsFetch(matchId: number): boolean {
+  return Number.isFinite(matchId)
 }

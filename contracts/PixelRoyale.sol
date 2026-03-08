@@ -21,9 +21,9 @@ pragma solidity ^0.8.24;
 contract PixelRoyale {
     // ──────────────────────────── Constants ────────────────────────────
     uint256 public constant MAX_PLAYERS       = 20;
-    uint256 public constant MIN_PLAYERS       = 1;
+    uint256 public constant MIN_PLAYERS       = 2;
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
-    uint256 public constant QUEUE_TIMEOUT     = 0;            // seconds
+    uint256 public constant QUEUE_TIMEOUT     = 30;           // seconds
     uint16 public constant MAP_WIDTH          = 3200;
     uint16 public constant MAP_HEIGHT         = 3200;
     uint16 public constant INITIAL_STORM_X    = 1600;

@@ -143,7 +143,7 @@ export class Indexer {
 
     this.polling = setInterval(() => {
       void poll()
-    }, 5000)
+    }, 2000)
   }
 
   stop() {
@@ -227,6 +227,7 @@ export class Indexer {
       const txHash = log.transactionHash ?? null
 
       if (parsed.eventName === 'PlayerJoinedQueue') {
+        this.store.recordQueueJoin(parsed.args.player)
         this.onEvent({
           type: 'queue_joined',
           player: parsed.args.player.toLowerCase(),
@@ -237,6 +238,7 @@ export class Indexer {
       }
 
       if (parsed.eventName === 'PlayerLeftQueue') {
+        this.store.recordQueueLeave(parsed.args.player)
         this.onEvent({
           type: 'queue_left',
           player: parsed.args.player.toLowerCase(),
@@ -250,6 +252,8 @@ export class Indexer {
         const timestamp = await this.getBlockTimestamp(log.blockNumber)
         const players = parsed.args.players.map((p) => p.toLowerCase())
         const prizePool = parsed.args.prizePool.toString()
+
+        this.store.recordQueueGameStarted(players)
 
         this.store.recordMatchStarted({
           gameId: Number(parsed.args.gameId),

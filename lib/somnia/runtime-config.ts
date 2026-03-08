@@ -10,8 +10,30 @@ function normalizeUrl(value: string): string {
   return value.replace(/\/+$/, '')
 }
 
-function isLocalHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1'
+/**
+ * Detect whether the frontend is served from the same origin as the backend.
+ * When nginx serves both the static site and proxies /api/* and /ws/*,
+ * we can use relative URLs (same-origin mode) — no explicit backend URL needed.
+ */
+function detectSameOrigin(): boolean {
+  if (typeof window === 'undefined') {return false}
+  const host = window.location.hostname
+  // localhost dev server with backend on :3001 is NOT same-origin
+  if (host === 'localhost' || host === '127.0.0.1') {return false}
+  // GitHub Pages is NOT same-origin (no backend there)
+  if (host.endsWith('.github.io')) {return false}
+  // Everything else (VM IP, CF tunnel, custom domain) IS same-origin
+  // because nginx proxies /api/* and /ws/* to the backend
+  return true
+}
+
+function detectLocalBackendUrl(): string {
+  if (typeof window === 'undefined') {return ''}
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `http://${host}:3001`
+  }
+  return ''
 }
 
 function validateBackendUrl(value: string): string | null {
@@ -26,7 +48,7 @@ function validateBackendUrl(value: string): string | null {
       return normalized
     }
 
-    if (parsed.protocol === 'http:' && isLocalHostname(parsed.hostname)) {
+    if (parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
       return normalized
     }
 
@@ -36,20 +58,13 @@ function validateBackendUrl(value: string): string | null {
   }
 }
 
-function toWsUrl(httpUrl: string): string {
-  return httpUrl.startsWith('https://')
-    ? httpUrl.replace(/^https/i, 'wss')
-    : httpUrl.replace(/^http/i, 'ws')
+function deriveWsUrl(): string | null {
+  if (typeof window === 'undefined') {return null}
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}/ws/queue`
 }
 
-function detectLocalBackendUrl(): string {
-  if (typeof window === 'undefined') {return ''}
-  const host = window.location.hostname
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return `http://${host}:3001`
-  }
-  return ''
-}
+// ── Contract config ─────────────────────────────────────────────────────────
 
 const configuredContractEnv = (
   process.env.NEXT_PUBLIC_PIXEL_ROYALE_ADDRESS ||
@@ -73,20 +88,40 @@ export const configuredContractAddress: Address | null = isContractConfigured
 // Keep a non-routable typed fallback for hooks while disabled.
 export const contractAddressOrFallback: Address = configuredContractAddress || FALLBACK_DEAD_ADDRESS
 
-const backendEnv = normalizeUrl((process.env.NEXT_PUBLIC_BACKEND_URL || detectLocalBackendUrl()).trim())
-const validatedBackendEnv = validateBackendUrl(backendEnv)
-const backendValid = validatedBackendEnv !== null
+// ── Backend config ──────────────────────────────────────────────────────────
 
-export const isBackendConfigured = backendValid
+const explicitBackendUrl = normalizeUrl((process.env.NEXT_PUBLIC_BACKEND_URL || '').trim())
+const validatedExplicitUrl = validateBackendUrl(explicitBackendUrl)
+const localUrl = validateBackendUrl(normalizeUrl(detectLocalBackendUrl()))
+const sameOrigin = detectSameOrigin()
+
+// Priority: explicit env var > localhost detection > same-origin mode
+const resolvedBackendUrl: string | null = validatedExplicitUrl ?? localUrl ?? (sameOrigin ? '' : null)
+
+export const isBackendConfigured = resolvedBackendUrl !== null
 export const backendConfigError = isBackendConfigured
   ? null
-  : 'Missing NEXT_PUBLIC_BACKEND_URL. Use https:// for non-local backends; http:// is allowed only for localhost.'
+  : 'Backend unreachable. Open the game from the server URL (not GitHub Pages).'
 
-export const backendHttpUrl: string | null = validatedBackendEnv
-export const backendWsUrl: string | null = validatedBackendEnv ? `${toWsUrl(validatedBackendEnv)}/ws/queue` : null
+// In same-origin mode, backendHttpUrl is '' (empty string).
+// buildBackendApiUrl will return relative paths like '/api/foo'.
+export const backendHttpUrl: string | null = resolvedBackendUrl
+
+export const backendWsUrl: string | null = (() => {
+  if (resolvedBackendUrl === null) {return null}
+  // Same-origin mode: derive WS URL from window.location
+  if (resolvedBackendUrl === '') {return deriveWsUrl()}
+  // Explicit URL: convert http(s) to ws(s)
+  const wsBase = resolvedBackendUrl.startsWith('https://')
+    ? resolvedBackendUrl.replace(/^https/i, 'wss')
+    : resolvedBackendUrl.replace(/^http/i, 'ws')
+  return `${wsBase}/ws/queue`
+})()
 
 export function buildBackendApiUrl(path: string): string | null {
-  if (!backendHttpUrl) {return null}
+  if (resolvedBackendUrl === null) {return null}
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${backendHttpUrl}${normalizedPath}`
+  // Same-origin mode: return relative path (e.g. '/api/matchmaking/queue')
+  // Explicit URL: return full URL (e.g. 'https://example.com/api/matchmaking/queue')
+  return `${resolvedBackendUrl}${normalizedPath}`
 }

@@ -25,11 +25,12 @@ import {
   truncateAddress,
   SOMNIA_FAUCET_URL,
 } from '@/lib/somnia/contract'
-import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
+import { fetchMatchmakingMe, useMatchmaking } from '@/lib/somnia/matchmaking-client'
 import { restoreSessionWallet, SESSION_UPDATED_EVENT, SESSION_MIN_REMAINING_MS } from '@/lib/somnia/session-wallet'
 import { Loader2, AlertTriangle, ExternalLink, Swords, Timer } from 'lucide-react'
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { formatEther, type Address } from 'viem'
+import { useRouter } from 'next/navigation'
 
 type QueuePlayersResult = readonly string[]
 
@@ -58,6 +59,7 @@ function friendlyQueueError(err: Error | null): string | null {
 }
 
 export default function QueuePanel() {
+  const router = useRouter()
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const isOnSomnia = chainId === somniaTestnet.id
@@ -85,7 +87,7 @@ export default function QueuePanel() {
   )
 
   // ── Matchmaking WebSocket for countdown timer ─────────────────────────
-  const { queue: wsQueue } = useMatchmaking(address ?? undefined)
+  const { queue: wsQueue, me: matchmakingMe, refresh: refreshMatchmaking, backendConfigured, backendConfigError: matchmakingConfigError } = useMatchmaking(address ?? undefined)
 
   // ── Countdown timer state (hooks must be declared unconditionally) ─────
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -202,16 +204,82 @@ export default function QueuePanel() {
         void refetchQueueSize()
         void refetchQueuePlayers()
         void refetchInQueue()
+        void refreshMatchmaking()
       }, 3000)
       return () => { clearTimeout(timer); }
     }
-  }, [joinHash, leaveHash, refetchQueueSize, refetchQueuePlayers, refetchInQueue])
+  }, [joinHash, leaveHash, refetchInQueue, refetchQueuePlayers, refetchQueueSize, refreshMatchmaking])
+
+  useEffect(() => {
+    if (!address || !joinHash) {
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+
+    const checkForAssignedMatch = async () => {
+      if (cancelled) {
+        return
+      }
+
+      attempts += 1
+
+      try {
+        const me = await fetchMatchmakingMe(address)
+        if (cancelled) {
+          return
+        }
+
+        if (typeof me.redirectPath === 'string' && me.redirectPath.length > 0) {
+          window.location.assign(me.redirectPath)
+          return
+        }
+
+        if (typeof me.matchId === 'number') {
+          window.location.assign(`/game?matchId=${me.matchId}`)
+          return
+        }
+      } catch {
+        // Ignore transient backend timing issues during instant-start polling.
+      }
+
+      if (attempts < 12) {
+        window.setTimeout(() => {
+          void checkForAssignedMatch()
+        }, 1000)
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      void checkForAssignedMatch()
+    }, 1000)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [address, joinHash])
+
+  useEffect(() => {
+    if (typeof matchmakingMe?.redirectPath === 'string' && matchmakingMe.redirectPath.length > 0) {
+      router.replace(matchmakingMe.redirectPath)
+      return
+    }
+
+    if (typeof matchmakingMe?.matchId === 'number') {
+      router.replace(`/game?matchId=${matchmakingMe.matchId}`)
+    }
+  }, [matchmakingMe?.matchId, matchmakingMe?.redirectPath, router])
 
   const currentQueueSize = queueSize ? Number(queueSize) : 0
   const hasEnoughBalance = balance ? balance.value >= MIN_QUEUE_BALANCE : false
   const hasSessionWallet = !!sessionAddress
   const hasSessionConfigured = hasSessionWallet && isValidSession === true
   const [sessionExpiringSoon, setSessionExpiringSoon] = useState(false)
+  const isMatchedOrRedirecting = matchmakingMe?.status === 'matched'
+    || typeof matchmakingMe?.redirectPath === 'string'
+    || typeof matchmakingMe?.matchId === 'number'
 
   // Check session expiry periodically (Date.now() is impure, so we use an interval)
   useEffect(() => {
@@ -231,8 +299,8 @@ export default function QueuePanel() {
     return () => { clearTimeout(t); clearInterval(interval) }
   }, [sessionExpiry])
 
-  const playerInQueue = isInQueue === true || optimisticJoined
-  const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming
+  const playerInQueue = isInQueue === true || optimisticJoined || isMatchedOrRedirecting
+  const isBusy = isJoining || isLeaving || joinConfirming || leaveConfirming || isMatchedOrRedirecting
   const normalizedAddress = address?.toLowerCase() ?? null
   const queuedPlayers = Array.isArray(queuePlayers)
     ? queuePlayers.filter((player): player is string => typeof player === 'string')
@@ -339,6 +407,15 @@ export default function QueuePanel() {
           Matchmaking is currently limited to solo queue.
         </p>
       </div>
+
+      {!backendConfigured && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
+          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
+          <p className="text-xs font-mono text-[#ff4444]">
+            {matchmakingConfigError || 'Backend unreachable. Queue status may be incomplete.'}
+          </p>
+        </div>
+      )}
 
       {/* Queue Progress */}
       <div className="mb-4">
@@ -452,6 +529,15 @@ export default function QueuePanel() {
           >
             {isSwitchingChain ? 'Switching...' : 'Switch to Somnia'}
           </button>
+        </div>
+      ) : isMatchedOrRedirecting ? (
+        <div className="rounded-lg border border-[rgba(58,232,255,0.25)] bg-[rgba(58,232,255,0.06)] p-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-[#3ae8ff]" />
+            <span className="text-sm font-mono font-bold text-[#3ae8ff]">
+              Entering match...
+            </span>
+          </div>
         </div>
       ) : playerInQueue ? (
         <button
