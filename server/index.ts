@@ -48,6 +48,7 @@ dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet
 const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
 const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
+const MANUAL_FORCE_START_ABI = parseAbi(['function manualForceStart()'])
 
 function readDeployment(): {
   contract?: { address?: string }
@@ -90,6 +91,11 @@ const rawContractAddress = (
 ).trim()
 const CONTRACT_ADDRESS: Address = isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
+const rawReactiveOrchestrator = (deployment.reactiveOrchestrator?.address ?? '').trim()
+const REACTIVE_ORCHESTRATOR_ADDRESS: Address = isAddress(rawReactiveOrchestrator)
+  ? rawReactiveOrchestrator
+  : ZERO_ADDRESS
+const REACTIVE_ORCHESTRATOR_CONFIGURED = REACTIVE_ORCHESTRATOR_ADDRESS.toLowerCase() !== ZERO_ADDRESS
 const REACTIVITY_EVENT_SOURCES = [
   CONTRACT_ADDRESS,
   deployment.reactivityHandler?.address,
@@ -122,11 +128,17 @@ const CORS_ORIGINS = configuredCorsOrigins.length > 0
     ]
 
 // ── Somnia chain definition ─────────────────────────────────────────────────
+const SOMNIA_WS_URL = process.env.SOMNIA_WS_URL || 'wss://dream-rpc.somnia.network/ws'
 const somniaTestnet = defineChain({
   id: 50312,
   name: 'Somnia Testnet',
   nativeCurrency: { name: 'Somnia Test Token', symbol: 'STT', decimals: 18 },
-  rpcUrls: { default: { http: [...SOMNIA_RPC_FALLBACKS] } },
+  rpcUrls: {
+    default: {
+      http: [...SOMNIA_RPC_FALLBACKS],
+      webSocket: [SOMNIA_WS_URL],
+    },
+  },
   blockExplorers: { default: { name: 'Somnia Shannon Explorer', url: 'https://shannon-explorer.somnia.network/' } },
   testnet: true,
 })
@@ -241,6 +253,40 @@ app.get('/api/health', (_req, res) => {
     uptime: process.uptime(),
     contractAddress: CONTRACT_CONFIGURED ? CONTRACT_ADDRESS : null,
     orchestrator: orchestratorAccount?.address ?? null,
+  })
+})
+
+app.get('/api/status/reactivity', (_req, res) => {
+  const reactiveOrchestrator = deployment.reactiveOrchestrator?.address ?? null
+  const reactiveRewards = deployment.reactiveRewards?.address ?? null
+  const leaderboardAddr = deployment.leaderboard?.address ?? null
+  const handlerAddr = deployment.reactivityHandler?.address ?? null
+
+  res.json({
+    offChainSubscription: {
+      active: reactivityActive,
+      wsUrl: SOMNIA_WS_URL,
+      watchedContracts: REACTIVITY_EVENT_SOURCES,
+    },
+    onChainSubscriptions: {
+      precompile: '0x0000000000000000000000000000000000000100',
+      reactiveOrchestrator,
+      reactiveRewards,
+      leaderboard: leaderboardAddr,
+      reactivityHandler: handlerAddr,
+      count: 5,
+      note: 'On-chain subscriptions fire callbacks via the Somnia Reactivity Precompile',
+    },
+    fallbackIndexer: {
+      active: true,
+      intervalMs: 2000,
+      note: 'Secondary event source — reactivity push is primary',
+    },
+    fallbackForceStart: {
+      active: Boolean(forceStartTimer),
+      intervalMs: FORCE_START_INTERVAL_MS,
+      note: 'Safety-net if on-chain ReactiveOrchestrator does not fire',
+    },
   })
 })
 
@@ -482,8 +528,7 @@ server.on('close', () => {
 const indexer = new Indexer(publicClient, CONTRACT_ADDRESS, store, handleIndexedEvent)
 
 // ── Somnia Reactivity (off-chain push subscription) ─────────────────────────
-const SOMNIA_WS_URL = process.env.SOMNIA_WS_URL || 'wss://dream-rpc.somnia.network/ws'
-
+let reactivityActive = false
 let reactivityCleanup: (() => void) | null = null
 
 async function startReactivitySubscription(): Promise<void> {
@@ -638,7 +683,7 @@ async function startReactivitySubscription(): Promise<void> {
             timestamp: Date.now(),
           })
 
-          console.log(`[reactivity] Event received: ${decoded.eventName}`)
+          console.log(`[reactivity] ⚡ Event pushed via Somnia Reactivity: ${decoded.eventName}`)
         } catch (_err) {
           // Silently ignore decode errors for unrecognized events
         }
@@ -654,12 +699,16 @@ async function startReactivitySubscription(): Promise<void> {
       return
     }
 
-    reactivityCleanup = () => {
-      result.unsubscribe().catch(() => {})
+    reactivityActive = true
+
+    if (typeof result?.unsubscribe === 'function') {
+      reactivityCleanup = () => {
+        result.unsubscribe().catch(() => {})
+      }
     }
 
-    console.log(`[reactivity] Off-chain subscription active (id: ${result.subscriptionId})`)
-    console.log(`[reactivity] Watching contracts: ${REACTIVITY_EVENT_SOURCES.join(', ')}`)
+    console.log(`[reactivity] ✓ Off-chain subscription active (id: ${result?.subscriptionId ?? 'ws-push'})`)
+    console.log(`[reactivity] Watching ${REACTIVITY_EVENT_SOURCES.length} contracts: ${REACTIVITY_EVENT_SOURCES.join(', ')}`)
     console.log(`[reactivity] WebSocket: ${SOMNIA_WS_URL}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -668,41 +717,65 @@ async function startReactivitySubscription(): Promise<void> {
   }
 }
 
-// ── Timeout matchmaking orchestrator ───────────────────────────────────────
+// ── Fallback matchmaking orchestrator ──────────────────────────────────────
+// The primary matchmaking path is the on-chain ReactiveOrchestrator contract,
+// which is triggered by the Somnia Reactivity Precompile when PlayerJoinedQueue
+// fires. This server-side loop is a safety-net fallback that runs at a longer
+// interval in case the reactive subscription has not started the game.
+const FORCE_START_INTERVAL_MS = 15_000
 let forceStartInFlight = false
 let forceStartTimer: ReturnType<typeof setInterval> | null = null
 
 function startForceStartLoop() {
   if (forceStartTimer || !orchestratorClient || !orchestratorAccount || !CONTRACT_CONFIGURED) {return}
 
+  if (REACTIVE_ORCHESTRATOR_CONFIGURED) {
+    console.log(`[orchestrator] Fallback via ReactiveOrchestrator.manualForceStart() at ${REACTIVE_ORCHESTRATOR_ADDRESS}`)
+  } else {
+    console.log('[orchestrator] Fallback via direct PixelRoyale.forceStartGame()')
+  }
+  console.log(`[orchestrator] Fallback forceStart loop active (every ${FORCE_START_INTERVAL_MS / 1000}s)`)
+
   const tickForceStart = async (): Promise<void> => {
     if (forceStartInFlight || !orchestratorClient || !orchestratorAccount) {return}
     if (!store.canForceStart()) {return}
 
+    // When the ReactiveOrchestrator is the on-chain orchestrator, the backend
+    // wallet no longer has permission to call forceStartGame() directly on
+    // PixelRoyale. Instead we call manualForceStart() on the orchestrator
+    // contract, which in turn calls forceStartGame() with the correct authority.
+    const useReactiveOrchestrator = REACTIVE_ORCHESTRATOR_CONFIGURED
+    const targetAddress = useReactiveOrchestrator ? REACTIVE_ORCHESTRATOR_ADDRESS : CONTRACT_ADDRESS
+    const targetAbi = useReactiveOrchestrator ? MANUAL_FORCE_START_ABI : FORCE_START_ABI
+    const targetFunction = useReactiveOrchestrator ? 'manualForceStart' : 'forceStartGame'
+
+    console.log(`[orchestrator] Fallback: reactivity has not started game yet, calling ${targetFunction} on ${targetAddress}`)
     forceStartInFlight = true
     try {
       const txHash = await orchestratorClient.writeContract({
         account: orchestratorAccount,
         chain: somniaTestnet,
-        address: CONTRACT_ADDRESS,
-        abi: FORCE_START_ABI,
-        functionName: 'forceStartGame',
+        address: targetAddress,
+        abi: targetAbi,
+        functionName: targetFunction,
         args: [],
       })
 
       broadcast('orchestrator_status', {
         status: 'force_start_submitted',
         txHash,
+        via: useReactiveOrchestrator ? 'reactive_orchestrator' : 'direct',
       })
 
-      console.log(`[orchestrator] forceStartGame submitted: ${txHash}`)
+      console.log(`[orchestrator] ⏱ Fallback ${targetFunction} submitted: ${txHash}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       broadcast('orchestrator_status', {
         status: 'force_start_failed',
         error: message,
+        via: useReactiveOrchestrator ? 'reactive_orchestrator' : 'direct',
       })
-      console.error(`[orchestrator] forceStartGame failed: ${message}`)
+      console.error(`[orchestrator] ⏱ Fallback ${targetFunction} failed: ${message}`)
     } finally {
       forceStartInFlight = false
     }
@@ -710,31 +783,35 @@ function startForceStartLoop() {
 
   forceStartTimer = setInterval(() => {
     void tickForceStart()
-  }, 3000)
+  }, FORCE_START_INTERVAL_MS)
 }
 
 // ── Start server ────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════╗
-║   PIXEL ROYALE — Game Orchestrator Server            ║
+║   PIXEL ROYALE — Reactive Game Server                ║
 ║                                                      ║
-║   HTTP:      http://localhost:${PORT}                  ║
-║   WebSocket: ws://localhost:${PORT}/ws/queue            ║
-║   Contract:  ${CONTRACT_ADDRESS.slice(0, 20)}...       ║
-║   Chain:     Somnia Testnet (50312)                  ║
+║   HTTP:       http://localhost:${PORT}                  ║
+║   WebSocket:  ws://localhost:${PORT}/ws/queue            ║
+║   Contract:   ${CONTRACT_ADDRESS.slice(0, 20)}...       ║
+║   Chain:      Somnia Testnet (50312)                  ║
+║   Reactivity: ON (precompile + off-chain SDK)        ║
 ╚══════════════════════════════════════════════════════╝
   `)
 
+  // Start reactivity first — it is the primary event pipeline
+  startReactivitySubscription().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[reactivity] failed to start: ${message}`)
+  })
+
+  // Polling indexer as secondary/fallback event source
   indexer.start().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[indexer] failed to start: ${message}`)
   })
 
+  // Fallback forceStart loop (safety net if reactive orchestrator doesn't fire)
   startForceStartLoop()
-
-  startReactivitySubscription().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`[reactivity] failed to start: ${message}`)
-  })
 })
