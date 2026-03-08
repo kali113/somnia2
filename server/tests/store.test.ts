@@ -46,31 +46,56 @@ describe('game store', () => {
     store.setQueueConfig({ maxSize: 20, minPlayers: 1, timeoutSec: 0 })
 
     store.recordQueueJoin(ALPHA)
-    expect(store.getQueueState()).toMatchObject({
-      players: [ALPHA.toLowerCase()],
-      size: 1,
-      openedAt: expect.any(Number),
-    })
+    const joinedSolo = store.getQueueState()
+    expect(joinedSolo.players).toEqual([ALPHA.toLowerCase()])
+    expect(joinedSolo.size).toBe(1)
+    expect(typeof joinedSolo.openedAt).toBe('number')
 
     store.recordQueueJoin(BRAVO)
-    expect(store.getQueueState()).toMatchObject({
-      players: [ALPHA.toLowerCase(), BRAVO.toLowerCase()],
-      size: 2,
-    })
+    const joinedPair = store.getQueueState()
+    expect(joinedPair.players).toEqual([ALPHA.toLowerCase(), BRAVO.toLowerCase()])
+    expect(joinedPair.size).toBe(2)
 
     store.recordQueueLeave(ALPHA)
-    expect(store.getQueueState()).toMatchObject({
-      players: [BRAVO.toLowerCase()],
-      size: 1,
-      openedAt: expect.any(Number),
-    })
+    const afterLeave = store.getQueueState()
+    expect(afterLeave.players).toEqual([BRAVO.toLowerCase()])
+    expect(afterLeave.size).toBe(1)
+    expect(typeof afterLeave.openedAt).toBe('number')
+
+    store.recordQueueLeave(BRAVO)
+    const emptiedQueue = store.getQueueState()
+    expect(emptiedQueue.players).toEqual([])
+    expect(emptiedQueue.size).toBe(0)
+    expect(emptiedQueue.openedAt).toBeNull()
+
+    store.recordQueueJoin(BRAVO)
 
     store.recordQueueGameStarted([BRAVO])
-    expect(store.getQueueState()).toMatchObject({
-      players: [],
-      size: 0,
-      openedAt: null,
-    })
+    const afterImmediateStart = store.getQueueState()
+    expect(afterImmediateStart.players).toEqual([])
+    expect(afterImmediateStart.size).toBe(0)
+    expect(afterImmediateStart.openedAt).toBeNull()
+  })
+
+  it('covers duplicate joins and queue timing edge cases', () => {
+    const store = new GameStore()
+
+    store.setQueueConfig({ maxSize: 20, minPlayers: 2, timeoutSec: 30 })
+    expect(store.getQueueAgeSec(999)).toBe(0)
+    expect(store.canForceStart(999)).toBe(false)
+
+    store.recordQueueJoin(ALPHA)
+    store.recordQueueJoin(ALPHA)
+    expect(store.getQueueState().players).toEqual([ALPHA.toLowerCase()])
+    expect(store.canForceStart(999)).toBe(false)
+
+    store.recordQueueJoin(BRAVO)
+    expect(store.canForceStart(1)).toBe(false)
+
+    store.recordQueueGameStarted([ALPHA])
+    const partialStart = store.getQueueState()
+    expect(partialStart.players).toEqual([BRAVO.toLowerCase()])
+    expect(typeof partialStart.openedAt).toBe('number')
   })
 
   it('tracks active matches, teams, and player assignments', () => {
