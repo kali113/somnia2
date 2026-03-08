@@ -201,7 +201,7 @@ function rejectPrivilegedAccess(res: Response): Response {
 }
 
 function normalizePlacements(rawPlacements: unknown): Address[] | null {
-  if (!Array.isArray(rawPlacements) || rawPlacements.length < 2 || rawPlacements.length > 20) {
+  if (!Array.isArray(rawPlacements) || rawPlacements.length < 1 || rawPlacements.length > 20) {
     return null
   }
 
@@ -245,6 +245,26 @@ function safeLogValue(value: string): string {
   return value.replace(/[\r\n\t]/g, '_')
 }
 
+const REGISTER_BOTS_ABI = [{
+  type: 'function',
+  name: 'registerGameBots',
+  inputs: [
+    { name: '_gameId', type: 'uint256' },
+    { name: '_bots', type: 'address[]' },
+  ],
+  outputs: [],
+  stateMutability: 'nonpayable',
+}] as const
+
+const ACTIVE_GAME_PLAYER_COUNT_ABI = [{
+  type: 'function',
+  name: 'activeGamePlayerCounts',
+  stateMutability: 'view',
+  inputs: [{ name: '', type: 'uint256' }],
+  outputs: [{ name: '', type: 'uint8' }],
+}] as const
+
+
 /**
  * POST /api/game/result
  * Submit a validated game result from a privileged orchestrator caller.
@@ -252,6 +272,7 @@ function safeLogValue(value: string): string {
 gameRouter.post('/result', privilegedWriteLimiter, asyncHandler(async (req, res) => {
   const {
     store,
+    publicClient,
     orchestratorClient,
     contractAddress,
   } = getServerLocals(req)
@@ -286,15 +307,6 @@ gameRouter.post('/result', privilegedWriteLimiter, asyncHandler(async (req, res)
     return res.status(404).json({ error: 'Active match not found', reason: 'match_not_found' })
   }
 
-  if (match.players.length !== placements.length) {
-    return res.status(400).json({ error: 'Placements do not match the active match roster', reason: 'roster_mismatch' })
-  }
-
-  const roster = new Set(match.players.map((player) => player.toLowerCase()))
-  if (placements.some((player) => !roster.has(player))) {
-    return res.status(400).json({ error: 'Placements include players outside the active match', reason: 'roster_mismatch' })
-  }
-
   if (!orchestratorClient || contractAddress.toLowerCase() === ZERO_ADDRESS) {
     return res.status(503).json({ error: 'On-chain result submission unavailable', reason: 'orchestrator_unavailable' })
   }
@@ -303,8 +315,48 @@ gameRouter.post('/result', privilegedWriteLimiter, asyncHandler(async (req, res)
     return res.status(503).json({ error: 'On-chain result submission unavailable', reason: 'orchestrator_unavailable' })
   }
 
+  // Idempotency check: if the game is already settled on-chain, return early
   try {
-    const abi = [{
+    const playerCount = await publicClient.readContract({
+      address: contractAddress,
+      abi: ACTIVE_GAME_PLAYER_COUNT_ABI,
+      functionName: 'activeGamePlayerCounts',
+      args: [BigInt(gameId)],
+    })
+    if (playerCount === 0) {
+      console.log(`[game] Game #${gameId} already settled on-chain, skipping submission`)
+      return res.json({ success: true, gameId, txHash: null, alreadySettled: true })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[game] Idempotency check failed for game #${gameId}, proceeding: ${message}`)
+  }
+
+  // Identify bot addresses: any address in placements NOT in match.players
+  const rosterSet = new Set(match.players.map((p) => p.toLowerCase()))
+  const botAddresses = placements.filter((p) => !rosterSet.has(p.toLowerCase()))
+
+  try {
+    // Register bots on-chain first if any exist
+    if (botAddresses.length > 0) {
+      const botTxHash = await orchestratorClient.writeContract({
+        account: orchestratorAccount,
+        chain: orchestratorClient.chain,
+        address: contractAddress,
+        abi: REGISTER_BOTS_ABI,
+        functionName: 'registerGameBots',
+        args: [BigInt(gameId), botAddresses],
+      })
+
+      await publicClient.waitForTransactionReceipt({
+        hash: botTxHash,
+        timeout: 90_000,
+      })
+
+      console.log(`[game] Registered ${String(botAddresses.length)} bots for game #${gameId}: ${botTxHash}`)
+    }
+
+    const submitAbi = [{
       type: 'function',
       name: 'submitGameResult',
       inputs: [
@@ -320,12 +372,37 @@ gameRouter.post('/result', privilegedWriteLimiter, asyncHandler(async (req, res)
       account: orchestratorAccount,
       chain: orchestratorClient.chain,
       address: contractAddress,
-      abi,
+      abi: submitAbi,
       functionName: 'submitGameResult',
       args: [BigInt(gameId), placements, kills.map((value) => BigInt(value))],
     })
 
     console.log(`[game] Submitted result for game #${gameId} on-chain: ${txHash}`)
+
+    // Update store directly (don't wait for indexer)
+    const now = Math.floor(Date.now() / 1000)
+    const winner = placements[0].toLowerCase()
+    const prizePool = match.prizePool
+
+    store.recordMatchEnded({
+      gameId,
+      winner,
+      placements: placements.map((p) => p.toLowerCase()),
+      prizePool,
+      endedAt: now,
+      txHash,
+    })
+
+    store.recordGame({
+      gameId,
+      timestamp: now,
+      winner,
+      placements: placements.map((p) => p.toLowerCase()),
+      kills,
+      prizePool,
+      playerCount: placements.length,
+    })
+
     return res.json({ success: true, gameId, txHash })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

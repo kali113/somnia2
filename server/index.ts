@@ -199,6 +199,7 @@ function rejectUpgrade(socket: Duplex, statusCode: number, message: string): voi
 
 // ── Express app ─────────────────────────────────────────────────────────────
 const app = express()
+app.set('trust proxy', 1)
 app.disable('x-powered-by')
 setServerLocals(app, {
   contractAddress: CONTRACT_ADDRESS,
@@ -491,6 +492,13 @@ async function startReactivitySubscription(): Promise<void> {
     return
   }
 
+  if (!SOMNIA_WS_URL) {
+    console.log('[reactivity] No WebSocket URL configured, skipping off-chain subscription')
+    return
+  }
+
+  console.log(`[reactivity] Connecting via WebSocket: ${SOMNIA_WS_URL}`)
+
   try {
     // Create a WebSocket-backed public client for the SDK
     const wsPublicClient = createPublicClient({
@@ -544,7 +552,83 @@ async function startReactivitySubscription(): Promise<void> {
             data: eventData,
           })
 
-          // Broadcast the decoded event to all WebSocket clients
+          // Update store and trigger WS broadcasts based on event type
+          if (decoded.eventName === 'PlayerJoinedQueue') {
+            const args = decoded.args as { player: Address; queueSize: bigint }
+            store.recordQueueJoin(args.player)
+            handleIndexedEvent({
+              type: 'queue_joined',
+              player: args.player.toLowerCase(),
+              queueSize: Number(args.queueSize),
+              txHash: null,
+            })
+          } else if (decoded.eventName === 'PlayerLeftQueue') {
+            const args = decoded.args as { player: Address; queueSize: bigint }
+            store.recordQueueLeave(args.player)
+            handleIndexedEvent({
+              type: 'queue_left',
+              player: args.player.toLowerCase(),
+              queueSize: Number(args.queueSize),
+              txHash: null,
+            })
+          } else if (decoded.eventName === 'GameStarted') {
+            const args = decoded.args as { gameId: bigint; players: readonly Address[]; prizePool: bigint }
+            const players = [...args.players].map((p) => p.toLowerCase())
+            const prizePool = args.prizePool.toString()
+            const now = Math.floor(Date.now() / 1000)
+
+            store.recordQueueGameStarted(players)
+            store.recordMatchStarted({
+              gameId: Number(args.gameId),
+              players,
+              prizePool,
+              startedAt: now,
+              txHash: null,
+            })
+            handleIndexedEvent({
+              type: 'game_started',
+              gameId: Number(args.gameId),
+              players,
+              prizePool,
+              txHash: null,
+            })
+          } else if (decoded.eventName === 'GameEnded') {
+            const args = decoded.args as { gameId: bigint; winner: Address; placements: readonly Address[]; prizePool: bigint }
+            const gameId = Number(args.gameId)
+            const winner = args.winner.toLowerCase()
+            const placements = [...args.placements].map((p) => p.toLowerCase())
+            const prizePool = args.prizePool.toString()
+            const now = Math.floor(Date.now() / 1000)
+
+            store.recordMatchEnded({
+              gameId,
+              winner,
+              placements,
+              prizePool,
+              endedAt: now,
+              txHash: null,
+            })
+            store.recordGame({
+              gameId,
+              timestamp: now,
+              winner,
+              placements,
+              // TODO: GameEnded event doesn't include kills — kill data comes from the /result endpoint
+              kills: placements.map(() => 0),
+              prizePool,
+              playerCount: placements.length,
+            })
+            handleIndexedEvent({
+              type: 'game_ended',
+              gameId,
+              winner,
+              placements,
+              prizePool,
+              txHash: null,
+            })
+          }
+
+          // Broadcast the raw decoded event for all events (for kill feed etc.)
           broadcastGameEvent({
             type: 'reactivity_event',
             eventName: decoded.eventName,
@@ -565,7 +649,8 @@ async function startReactivitySubscription(): Promise<void> {
     })
 
     if (result instanceof Error) {
-      console.error(`[reactivity] Failed to create subscription: ${result.message}`)
+      console.warn(`[reactivity] Subscription unavailable: ${result.message}`)
+      console.log('[reactivity] Falling back to polling indexer only')
       return
     }
 

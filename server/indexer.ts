@@ -12,8 +12,8 @@ const INDEXER_ABI = parseAbi([
   'function getQueuePlayers() view returns (address[])',
   'function queueOpenedAt() view returns (uint256)',
   'function MAX_PLAYERS() view returns (uint256)',
-  'function MIN_PLAYERS() view returns (uint256)',
-  'function QUEUE_TIMEOUT() view returns (uint256)',
+  'function minPlayers() view returns (uint256)',
+  'function queueTimeout() view returns (uint256)',
   'event PlayerJoinedQueue(address indexed player, uint256 queueSize)',
   'event PlayerLeftQueue(address indexed player, uint256 queueSize)',
   'event GameStarted(uint256 indexed gameId, address[] players, uint256 prizePool)',
@@ -142,9 +142,8 @@ export class Indexer {
           }
 
           lastBlock = currentBlock
+          await this.syncQueueState()
         }
-
-        await this.syncQueueState()
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         console.warn(`[indexer] Poll failed: ${message}`)
@@ -174,12 +173,12 @@ export class Indexer {
       this.client.readContract({
         address: this.contractAddress,
         abi: INDEXER_ABI,
-        functionName: 'MIN_PLAYERS',
+        functionName: 'minPlayers',
       }),
       this.client.readContract({
         address: this.contractAddress,
         abi: INDEXER_ABI,
-        functionName: 'QUEUE_TIMEOUT',
+        functionName: 'queueTimeout',
       }),
     ])
 
@@ -304,6 +303,7 @@ export class Indexer {
           timestamp,
           winner,
           placements,
+          // TODO: GameEnded event doesn't include kills — kill data comes from the /result endpoint
           kills: placements.map(() => 0),
           prizePool,
           playerCount: placements.length,

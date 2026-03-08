@@ -1,47 +1,46 @@
 {
   "chainId": 50312,
   "chainName": "Somnia Testnet",
-  "rpcUrl": "https://rpc.ankr.com/somnia_testnet",
+  "rpcUrl": "https://dream-rpc.somnia.network",
   "deployer": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "initialOrchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "orchestrator": "0x9b0A751158E47444aaF11b7808A565F93aE1248B",
   "contract": {
     "name": "PixelRoyale",
-    "address": "0xf568e74856c12e115e18b59e247ee7045164e98c",
-    "txHash": "0x21959b7f3160eccaf20fd04dfcda479e9b6345f29a1bf265abc438c7fc3fd076",
-    "deployedAtBlock": 324985833
+    "address": "0xef910efc9fde98707019ecaa434817753036f67e",
+    "txHash": "0x66027dee04b37ca92674335f912b167628f494f981a0841947c8470dadf4b7e7",
+    "deployedAtBlock": 325345906
   },
   "reactivityHandler": {
     "name": "PixelRoyaleReactivityHandler",
-    "address": "0xcb056b200d236f445d7c1fafa63f4bc5079a9689",
-    "txHash": "0x0363f2192cf344d3d6496f5b960c2ae8a950675f7edbd0601ba8e729bcd7c367",
-    "deployedAtBlock": 324985846
+    "address": "0x8fac9d2248a2053cf169a4a8759cb4d5cd00f9c3",
+    "txHash": "0x00d8e9cfd84c18a2982c8bbd62ecf4283fbfdadc24848ae0285bf7ba772883fd",
+    "deployedAtBlock": 325345913
   },
   "reactiveOrchestrator": {
     "name": "PixelRoyaleReactiveOrchestrator",
-    "address": "0xf00d22ab42f0fa8ca39d54f432671a853c8539d0",
-    "txHash": "0x2bb8ae229b38c43ee3d9212ef4630e8d7b3287f7bc9e491fee2e328cf56bf0bf",
-    "deployedAtBlock": 324985858,
-    "activatedByTxHash": "0xa90a67d0c7f01daed21d49198867de3a7a3fbdfc7eef59deb2516d6d3cd49869"
+    "address": "0x4fb83d8bf8376c3424d544f25f38b71b9f8d7f32",
+    "txHash": "0xccba67796d3a81776369b768eb7a158feabb4058bccf2aaf4e1e916582737b03",
+    "deployedAtBlock": 325345921
   },
   "reactiveRewards": {
     "name": "PixelRoyaleReactiveRewards",
-    "address": "0x96abd01cd1a1234038fad222c2bbdab6d55bbc26",
-    "txHash": "0xebff5cee3b98118e8326e780158c4b3cc92dad0787560fe48f8161f5609104ab",
-    "deployedAtBlock": 324985870
+    "address": "0x3a7e571cbb4568d3b2d1ac4e4b3ba36c448bfbb4",
+    "txHash": "0x295656fc9548f0bd581192793a850f03c8b007f65b886a94aac767ec7419be41",
+    "deployedAtBlock": 325345928
   },
   "leaderboard": {
     "name": "PixelRoyaleLeaderboard",
-    "address": "0x6f74d228a9c91c3bfe845a2905f0d6f2450c1c6d",
-    "txHash": "0x2edbf5053373845999d46f179d06a1a9f5d6c908741a264a5c883d5601aedc29",
-    "deployedAtBlock": 324985880
+    "address": "0xfda4323622b3f62a7a4b731e06ebf2b9c1d585e1",
+    "txHash": "0x9f6f58632d261bf9261d7c5318176456c2bb1fe771cb8981a844b321fb121a75",
+    "deployedAtBlock": 325345936
   },
-  "deployedAt": "2026-03-08T11:07:17.140Z",
+  "deployedAt": "2026-03-08T21:10:50.059Z",
   "subscriptions": {
-    "gameStartedMirror": "0x9b1562cbc4059fd7451b0fddff8dc2138a0d58af20677c185b895d7a4c3d203b",
-    "gameEndedMirror": "0xe917aa89f7f10885fe14ca0a16e36eaccf7d1fc15de10453a0e4c3fc9a78a8d0",
-    "matchmaking": "0x8fe0073708b4682691c7cadeb7853661907d15f4327595e59ae8b287cbd4a049",
-    "rewards": "0xceb1a7689a45b5da06ebac6684b0cd0a5544cc6d396b8f68b40dc667e874aa36",
-    "leaderboard": "0xfab7799a69c2d652be9f73b7eecba3d8e31dc2addaf943b1e75606306ccd50b3"
+    "gameStartedMirror": "0xea53f7324779421188ffad8d03c484774c303fcc5c8ed973a5f35dffc6a4538b",
+    "gameEndedMirror": "0x7625cd2d630b764624704f70b37109705bb08fb518ed3d8d3d5a5601c5e41eea",
+    "matchmaking": "0xaa6fc236722caebfc4a0e52d9a2d30464c3936163e804a9128b29579b835cb67",
+    "rewards": "0x8893d48fb21ec8307b1047502a27ee0c2c6b3e0c81dc1074dd5e3837dfbf456f",
+    "leaderboard": "0x495bd8147fc94333e1c9b46c13d970e4712faf5fe833006543ef178b999a0b91"
   }
 }

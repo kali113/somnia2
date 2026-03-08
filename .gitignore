@@ -19,3 +19,9 @@ tsconfig.tsbuildinfo
 output/
 ops/vm/dist/
 scripts/dist/
+coverage/
+server/coverage/
+agent-comm/
+CONTEXT_HANDOFF.md
+Screenshot *.png
+contracts/contracts_PixelRoyale_sol_PixelRoyale.abi

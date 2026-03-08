@@ -145,6 +145,7 @@ async function compileContract(
     language: 'Solidity',
     sources: Object.fromEntries(sources),
     settings: {
+      viaIR: true,
       optimizer: { enabled: true, runs: 200 },
       outputSelection: {
         '*': {
@@ -314,33 +315,10 @@ async function main(): Promise<void> {
     [contractAddress],
   )
 
-  const setOrchestratorAbi = [
-    {
-      type: 'function',
-      name: 'setOrchestrator',
-      inputs: [{ name: '_orch', type: 'address' }],
-      outputs: [],
-      stateMutability: 'nonpayable',
-    },
-  ] as const
-
-  const setOrchestratorTx = await walletClient.writeContract({
-    address: contractAddress,
-    abi: setOrchestratorAbi,
-    functionName: 'setOrchestrator',
-    args: [reactiveOrchestratorDeployment.address],
-    account,
-    chain: somniaShannon,
-    gasPrice,
-  })
-
-  await publicClient.waitForTransactionReceipt({
-    hash: setOrchestratorTx,
-    timeout: 300_000,
-    pollingInterval: 2_000,
-  })
-
-  console.log(`Reactive orchestrator activated: ${reactiveOrchestratorDeployment.address}`)
+  // Keep the backend wallet (initialOrchestratorAddress) as the orchestrator
+  // so forceStartGame() can be called from the backend loop.
+  // The reactive orchestrator contract is deployed but not activated.
+  console.log(`Orchestrator remains: ${initialOrchestratorAddress} (backend wallet)`)
 
   const deploymentsDir = path.join(projectRoot, 'contracts', 'deployments')
   await mkdir(deploymentsDir, { recursive: true })
@@ -351,7 +329,7 @@ async function main(): Promise<void> {
     rpcUrl,
     deployer: account.address,
     initialOrchestrator: initialOrchestratorAddress,
-    orchestrator: reactiveOrchestratorDeployment.address,
+    orchestrator: initialOrchestratorAddress,
     contract: {
       name: 'PixelRoyale',
       address: contractAddress,
@@ -369,7 +347,6 @@ async function main(): Promise<void> {
       address: reactiveOrchestratorDeployment.address,
       txHash: reactiveOrchestratorDeployment.txHash,
       deployedAtBlock: reactiveOrchestratorDeployment.blockNumber,
-      activatedByTxHash: setOrchestratorTx,
     },
     reactiveRewards: {
       name: 'PixelRoyaleReactiveRewards',

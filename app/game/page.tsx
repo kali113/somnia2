@@ -351,7 +351,7 @@ function GamePageInner() {
       message: 'Submitting container verification transaction...',
     })
 
-    openContainerVerifiedOnChain(request).then(({ txHash, reason, reward }) => {
+    openContainerVerifiedOnChain(request, walletAddress).then(({ txHash, reason, reward }) => {
       if (!gameStateRef.current) {return}
 
       if (txHash && reward) {

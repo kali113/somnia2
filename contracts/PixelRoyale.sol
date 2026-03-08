@@ -21,9 +21,8 @@ pragma solidity ^0.8.24;
 contract PixelRoyale {
     // ──────────────────────────── Constants ────────────────────────────
     uint256 public constant MAX_PLAYERS       = 20;
-    uint256 public constant MIN_PLAYERS       = 2;
+
     uint256 public constant ENTRY_FEE         = 0.001 ether; // 0.001 STT
-    uint256 public constant QUEUE_TIMEOUT     = 30;           // seconds
     uint16 public constant MAP_WIDTH          = 3200;
     uint16 public constant MAP_HEIGHT         = 3200;
     uint16 public constant INITIAL_STORM_X    = 1600;
@@ -38,6 +37,8 @@ contract PixelRoyale {
     address public owner;
     address public orchestrator;
     uint256 public nextGameId;
+    uint256 public minPlayers = 2;
+    uint256 public queueTimeout = 30; // seconds
 
     // Queue
     address[] public queue;
@@ -153,6 +154,10 @@ contract PixelRoyale {
         bytes32 entropyHash,
         uint256 timestamp
     );
+    event MinPlayersUpdated(uint256 oldValue, uint256 newValue);
+    event QueueTimeoutUpdated(uint256 oldValue, uint256 newValue);
+    event GameBotRegistered(uint256 indexed gameId, address indexed bot);
+    event GameCancelled(uint256 indexed gameId, uint256 refundedPool);
 
     // ──────────────────────────── Modifiers ────────────────────────────
     modifier onlyOwner() {
@@ -188,11 +193,6 @@ contract PixelRoyale {
 
         emit PlayerJoinedQueue(msg.sender, queue.length);
 
-        if (QUEUE_TIMEOUT == 0 && queue.length >= MIN_PLAYERS) {
-            _startGame();
-            return;
-        }
-
         if (queue.length == MAX_PLAYERS) {
             _startGame();
         }
@@ -209,10 +209,10 @@ contract PixelRoyale {
         require(ok, "REFUND_FAILED");
     }
 
-    /// @notice Orchestrator can force-start a game after timeout if MIN_PLAYERS met.
+    /// @notice Orchestrator can force-start a game after timeout if minPlayers met.
     function forceStartGame() external onlyOrchestrator {
-        require(queue.length >= MIN_PLAYERS, "NOT_ENOUGH_PLAYERS");
-        require(block.timestamp >= queueOpenedAt + QUEUE_TIMEOUT, "TOO_EARLY");
+        require(queue.length >= minPlayers, "NOT_ENOUGH_PLAYERS");
+        require(block.timestamp >= queueOpenedAt + queueTimeout, "TOO_EARLY");
         _startGame();
     }
 
@@ -382,23 +382,54 @@ contract PixelRoyale {
         uint32 _seed,
         uint32 _playerNonce
     ) external {
+        _openContainerVerified(msg.sender, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+    }
+
+    /// @notice Open a loot container using an approved session key for a player.
+    function openContainerVerifiedForPlayer(
+        address _player,
+        uint256 _gameId,
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
+    ) external {
+        require(_player != address(0), "ZERO_ADDRESS");
+        require(
+            msg.sender == _player || sessionKeys[_player][msg.sender] > block.timestamp,
+            "INVALID_SESSION"
+        );
+
+        _openContainerVerified(_player, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+    }
+
+    function _openContainerVerified(
+        address _player,
+        uint256 _gameId,
+        uint256 _containerId,
+        bytes32 _containerKey,
+        uint8 _containerType,
+        uint32 _seed,
+        uint32 _playerNonce
+    ) internal {
         require(_containerKey != bytes32(0), "INVALID_CONTAINER_KEY");
         require(_containerType <= 2, "INVALID_CONTAINER_TYPE");
         require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
-        require(activeGamePlayers[_gameId][msg.sender], "PLAYER_NOT_IN_GAME");
+        require(activeGamePlayers[_gameId][_player], "PLAYER_NOT_IN_GAME");
         require(!openedContainers[_gameId][_containerKey], "CONTAINER_ALREADY_OPENED");
-        require(!playerContainerOpened[msg.sender][_containerKey], "CONTAINER_ALREADY_OPENED");
+        require(!playerContainerOpened[_player][_containerKey], "CONTAINER_ALREADY_OPENED");
 
-        uint16 roll = _deriveRoll(_gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
+        uint16 roll = _deriveRoll(_player, _gameId, _containerId, _containerKey, _containerType, _seed, _playerNonce);
         ContainerReward memory reward = _deriveContainerReward(_containerType, roll, _playerNonce);
 
         openedContainers[_gameId][_containerKey] = true;
-        playerContainerOpened[msg.sender][_containerKey] = true;
+        playerContainerOpened[_player][_containerKey] = true;
 
         emit ContainerOpened(
             _gameId,
             _containerId,
-            msg.sender,
+            _player,
             _containerKey,
             _containerType,
             roll,
@@ -416,6 +447,7 @@ contract PixelRoyale {
     }
 
     function _deriveRoll(
+        address _player,
         uint256 _gameId,
         uint256 _containerId,
         bytes32 _containerKey,
@@ -426,7 +458,7 @@ contract PixelRoyale {
         uint256 entropy = uint256(keccak256(abi.encodePacked(
             _gameId,
             _containerId,
-            msg.sender,
+            _player,
             _containerKey,
             _containerType,
             _seed,
@@ -672,6 +704,49 @@ contract PixelRoyale {
         orchestrator = _orch;
     }
 
+    /// @notice Update the minimum number of players required to start a game.
+    function setMinPlayers(uint256 _minPlayers) external onlyOwner {
+        require(_minPlayers >= 1 && _minPlayers <= MAX_PLAYERS, "INVALID_MIN_PLAYERS");
+        emit MinPlayersUpdated(minPlayers, _minPlayers);
+        minPlayers = _minPlayers;
+    }
+
+    /// @notice Update the queue timeout (seconds before orchestrator can force-start).
+    function setQueueTimeout(uint256 _timeout) external onlyOwner {
+        emit QueueTimeoutUpdated(queueTimeout, _timeout);
+        queueTimeout = _timeout;
+    }
+
+    /// @notice Register bot placeholder addresses as valid game players.
+    /// @dev Must be called BEFORE submitGameResult so bots pass _validatePlacements.
+    function registerGameBots(uint256 _gameId, address[] calldata _bots) external onlyOrchestrator {
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        for (uint256 i = 0; i < _bots.length; i++) {
+            require(_bots[i] != address(0), "ZERO_BOT_ADDRESS");
+            if (!activeGamePlayers[_gameId][_bots[i]]) {
+                activeGamePlayers[_gameId][_bots[i]] = true;
+                activeGamePlayerCounts[_gameId] += 1;
+                emit GameBotRegistered(_gameId, _bots[i]);
+            }
+        }
+    }
+
+    /// @notice Cancel a stuck game that was started but never settled.
+    /// @dev Refunds pool to contract balance (available as protocol fees).
+    ///      We don't track individual player deposits per game,
+    ///      so refund goes to protocol. Owner can manually redistribute.
+    function cancelGame(uint256 _gameId) external onlyOwner {
+        uint8 playerCount = activeGamePlayerCounts[_gameId];
+        uint256 pool = unsettledPrizePools[_gameId];
+        require(playerCount > 0 && pool > 0, "GAME_NOT_ACTIVE");
+
+        delete unsettledPrizePools[_gameId];
+        totalUnsettledPrizePools -= pool;
+        delete activeGamePlayerCounts[_gameId];
+
+        emit GameCancelled(_gameId, pool);
+    }
+
     /// @notice Withdraw protocol fees.
     function withdrawFees(uint256 _amount) external onlyOwner {
         require(_amount <= _availableProtocolFees(), "INSUFFICIENT_AVAILABLE_FEES");
@@ -736,7 +811,7 @@ contract PixelRoyale {
         address[] calldata _placements,
         uint8 recordedPlayerCount
     ) internal view {
-        require(_placements.length >= MIN_PLAYERS, "NOT_ENOUGH_PLAYERS");
+        require(_placements.length >= minPlayers, "NOT_ENOUGH_PLAYERS");
         require(_placements.length <= MAX_PLAYERS, "TOO_MANY_PLAYERS");
         require(_placements.length == recordedPlayerCount, "PLAYER_COUNT_MISMATCH");
 

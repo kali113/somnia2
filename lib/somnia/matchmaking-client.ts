@@ -91,6 +91,7 @@ export function useMatchmaking(address?: string) {
   const wsRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const refreshRequestIdRef = useRef(0)
+  const dismissedMatchIdsRef = useRef<Set<number>>(new Set())
 
   const mergeMeState = useCallback((
     previous: MatchmakingMeResponse | null,
@@ -100,7 +101,17 @@ export function useMatchmaking(address?: string) {
       return previous
     }
 
+    // Allow downgrade from 'matched' if the match has ended or been dismissed
     if (previous?.status === 'matched' && next.status !== 'matched') {
+      // If the previous match is ended, allow the downgrade
+      if (previous.match?.status === 'ended') {
+        return next
+      }
+      // If the matchId was dismissed, allow the downgrade
+      if (previous.matchId !== undefined && dismissedMatchIdsRef.current.has(previous.matchId)) {
+        return next
+      }
+      // Otherwise keep the matched state (game still active)
       return previous
     }
 
@@ -155,6 +166,16 @@ export function useMatchmaking(address?: string) {
     }
   }, [address, mergeMeState])
 
+  const dismissMatch = useCallback((matchId: number) => {
+    dismissedMatchIdsRef.current.add(matchId)
+    setMe((prev) => {
+      if (prev?.matchId === matchId) {
+        return { ...prev, status: 'idle', matchId: undefined, redirectPath: undefined, match: undefined }
+      }
+      return prev
+    })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     const runRefresh = async () => {
@@ -190,82 +211,108 @@ export function useMatchmaking(address?: string) {
       return
     }
 
-    const wsUrl = address
-      ? `${resolvedWsUrl}?address=${address.toLowerCase()}`
-      : resolvedWsUrl
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let reconnectAttempt = 0
+    let intentionallyClosed = false
 
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
+    const connect = () => {
+      if (intentionallyClosed) {
+        return
+      }
 
-    ws.onopen = () => {
-      setWsConnected(true)
-    }
+      const wsUrl = address
+        ? `${resolvedWsUrl}?address=${address.toLowerCase()}`
+        : resolvedWsUrl
 
-    ws.onclose = () => {
-      setWsConnected(false)
-      wsRef.current = null
-    }
+      ws = new WebSocket(wsUrl)
+      wsRef.current = ws
 
-    ws.onerror = () => {
-      setError('WebSocket connection failed')
-    }
+      ws.onopen = () => {
+        setWsConnected(true)
+        reconnectAttempt = 0
+      }
 
-    ws.onmessage = (evt) => {
-      try {
-        if (typeof evt.data !== 'string') {
-          return
+      ws.onclose = () => {
+        setWsConnected(false)
+        wsRef.current = null
+
+        if (!intentionallyClosed) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30_000)
+          reconnectAttempt++
+          reconnectTimer = setTimeout(connect, delay)
         }
+      }
 
-        const envelope = JSON.parse(evt.data) as WsEnvelope
+      ws.onerror = () => {
+        // onclose will fire after onerror, which handles reconnection
+      }
 
-        if (envelope.type === 'queue_update') {
-          setQueue(envelope.data as QueueSnapshot)
-          return
-        }
-
-        if (envelope.type === 'match_updated') {
-          const match = envelope.data as MatchRecord
-          setActiveMatch((prev) => {
-            if (!prev) {return match}
-            if (prev.matchId !== match.matchId) {return prev}
-            return match
-          })
-          return
-        }
-
-        if (envelope.type === 'match_assigned') {
-          const payload = envelope.data as {
-            address: string
-            matchId: number
-            redirectPath: string
-            status: 'active' | 'ended'
+      ws.onmessage = (evt) => {
+        try {
+          if (typeof evt.data !== 'string') {
+            return
           }
 
-          if (address && payload.address.toLowerCase() !== address.toLowerCase()) {return}
+          const envelope = JSON.parse(evt.data) as WsEnvelope
 
-          refreshRequestIdRef.current += 1
-          setMe((prev) => ({
-            address: address?.toLowerCase() || payload.address,
-            status: 'matched',
-            matchId: payload.matchId,
-            redirectPath: payload.redirectPath,
-            match: prev?.match,
-          }))
-
-          if (prevMatchNeedsFetch(payload.matchId)) {
-            fetchMatchById(payload.matchId).then((match) => {
-              setActiveMatch(match)
-              setMe((prev) => prev ? { ...prev, match } : prev)
-            }).catch(() => undefined)
+          if (envelope.type === 'queue_update') {
+            setQueue(envelope.data as QueueSnapshot)
+            return
           }
+
+          if (envelope.type === 'match_updated') {
+            const match = envelope.data as MatchRecord
+            setActiveMatch((prev) => {
+              if (!prev) {return match}
+              if (prev.matchId !== match.matchId) {return prev}
+              return match
+            })
+            return
+          }
+
+          if (envelope.type === 'match_assigned') {
+            const payload = envelope.data as {
+              address: string
+              matchId: number
+              redirectPath: string
+              status: 'active' | 'ended'
+            }
+
+            if (address && payload.address.toLowerCase() !== address.toLowerCase()) {return}
+
+            refreshRequestIdRef.current += 1
+            setMe((prev) => ({
+              address: address?.toLowerCase() || payload.address,
+              status: 'matched',
+              matchId: payload.matchId,
+              redirectPath: payload.redirectPath,
+              match: prev?.match,
+            }))
+
+            if (prevMatchNeedsFetch(payload.matchId)) {
+              fetchMatchById(payload.matchId).then((match) => {
+                setActiveMatch(match)
+                setMe((prev) => prev ? { ...prev, match } : prev)
+              }).catch(() => undefined)
+            }
+          }
+        } catch {
+          // Ignore malformed payloads
         }
-      } catch {
-        // Ignore malformed payloads
       }
     }
 
+    connect()
+
     return () => {
-      ws.close()
+      intentionallyClosed = true
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+      }
+      if (ws) {
+        ws.close()
+      }
       wsRef.current = null
       setWsConnected(false)
     }
@@ -280,7 +327,8 @@ export function useMatchmaking(address?: string) {
     backendConfigured: isBackendConfigured,
     backendConfigError,
     refresh,
-  }), [queue, me, activeMatch, error, wsConnected, refresh])
+    dismissMatch,
+  }), [queue, me, activeMatch, error, wsConnected, refresh, dismissMatch])
 }
 
 function prevMatchNeedsFetch(matchId: number): boolean {
