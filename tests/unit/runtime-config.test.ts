@@ -157,4 +157,94 @@ describe('runtime backend configuration', () => {
     expect(config.isBackendConfigured).toBe(false)
     expect(config.backendHttpUrl).toBeNull()
   })
+
+  it('fetchBackendUrl resolves backend from Gist on GitHub Pages', async () => {
+    const config = await loadRuntimeConfig({
+      hostname: 'kali113.github.io',
+    })
+
+    expect(config.isBackendConfigured).toBe(false)
+
+    // Mock the Gist fetch
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ url: 'https://test-tunnel.trycloudflare.com/' }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await config.fetchBackendUrl()
+
+    expect(config.isBackendConfigured).toBe(true)
+    expect(config.backendHttpUrl).toBe('https://test-tunnel.trycloudflare.com')
+    expect(config.backendWsUrl).toBe('wss://test-tunnel.trycloudflare.com/ws/queue')
+    expect(config.buildBackendApiUrl('/api/health')).toBe('https://test-tunnel.trycloudflare.com/api/health')
+
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchBackendUrl no-ops when backend is already configured', async () => {
+    const config = await loadRuntimeConfig({
+      backendUrl: 'https://existing.test',
+    })
+
+    expect(config.isBackendConfigured).toBe(true)
+
+    const mockFetch = vi.fn()
+    vi.stubGlobal('fetch', mockFetch)
+
+    await config.fetchBackendUrl()
+
+    // Should not have fetched — already configured
+    expect(mockFetch).not.toHaveBeenCalled()
+
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchBackendUrl handles fetch failure gracefully', async () => {
+    const config = await loadRuntimeConfig({
+      hostname: 'kali113.github.io',
+    })
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('network error'))
+    vi.stubGlobal('fetch', mockFetch)
+
+    await config.fetchBackendUrl()
+
+    expect(config.isBackendConfigured).toBe(false)
+
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchBackendUrl ignores non-ok responses', async () => {
+    const config = await loadRuntimeConfig({
+      hostname: 'kali113.github.io',
+    })
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await config.fetchBackendUrl()
+
+    expect(config.isBackendConfigured).toBe(false)
+
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchBackendUrl ignores invalid URLs from Gist', async () => {
+    const config = await loadRuntimeConfig({
+      hostname: 'kali113.github.io',
+    })
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ url: 'http://insecure.example.com' }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    await config.fetchBackendUrl()
+
+    expect(config.isBackendConfigured).toBe(false)
+
+    vi.unstubAllGlobals()
+  })
 })
