@@ -39,7 +39,11 @@ async function loadRuntimeConfig(options?: {
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
-        location: { hostname: options.hostname },
+        location: {
+          hostname: options.hostname,
+          protocol: 'https:',
+          host: options.hostname,
+        },
       },
     })
   } else {
@@ -90,16 +94,17 @@ describe('runtime backend configuration', () => {
     expect(config.buildBackendApiUrl('api/matchmaking/queue')).toBe('http://localhost:3001/api/matchmaking/queue')
   })
 
-  it('rejects insecure remote http backends', async () => {
+  it('rejects insecure remote http backends when explicit', async () => {
     const config = await loadRuntimeConfig({
       backendUrl: 'http://api.pixel.test',
     })
 
+    // Explicit insecure URL rejected, but SSR has no window so no same-origin fallback
     expect(config.isBackendConfigured).toBe(false)
     expect(config.backendHttpUrl).toBeNull()
     expect(config.backendWsUrl).toBeNull()
     expect(config.buildBackendApiUrl('/api/health')).toBeNull()
-    expect(config.backendConfigError).toMatch(/NEXT_PUBLIC_BACKEND_URL/)
+    expect(config.backendConfigError).toMatch(/Backend unreachable/)
   })
 
   it('rejects malformed backend URLs', async () => {
@@ -126,9 +131,20 @@ describe('runtime backend configuration', () => {
     expect(config.contractAddressOrFallback).toBe('0x000000000000000000000000000000000000dEaD')
   })
 
-  it('does not auto-detect a backend for non-local hosts', async () => {
+  it('uses same-origin mode for non-local, non-GitHub-Pages hosts', async () => {
     const config = await loadRuntimeConfig({
       hostname: 'pixel.example',
+    })
+
+    // Same-origin mode: frontend served from same host as backend via nginx proxy
+    expect(config.isBackendConfigured).toBe(true)
+    expect(config.backendHttpUrl).toBe('')
+    expect(config.buildBackendApiUrl('/api/health')).toBe('/api/health')
+  })
+
+  it('does not auto-detect a backend for GitHub Pages', async () => {
+    const config = await loadRuntimeConfig({
+      hostname: 'kali113.github.io',
     })
 
     expect(config.isBackendConfigured).toBe(false)
