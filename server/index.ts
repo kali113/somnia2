@@ -175,7 +175,16 @@ function tokensMatch(expected: string, presented: string): boolean {
 }
 
 function isAllowedCorsOrigin(origin: string | undefined): boolean {
-  return Boolean(origin && CORS_ORIGINS.includes(origin))
+  if (!origin) {return false}
+  if (CORS_ORIGINS.includes(origin)) {return true}
+  // Allow Cloudflare Tunnel origins (*.trycloudflare.com)
+  try {
+    const parsed = new URL(origin)
+    if (parsed.hostname.endsWith('.trycloudflare.com')) {return true}
+  } catch {
+    // ignore
+  }
+  return false
 }
 
 function rejectUpgrade(socket: Duplex, statusCode: number, message: string): void {
@@ -611,7 +620,7 @@ function startForceStartLoop() {
 
   forceStartTimer = setInterval(() => {
     void tickForceStart()
-  }, 5000)
+  }, 3000)
 }
 
 // ── Start server ────────────────────────────────────────────────────────────
