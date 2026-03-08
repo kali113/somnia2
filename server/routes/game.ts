@@ -549,10 +549,8 @@ gameRouter.post('/elimination', privilegedWriteLimiter, asyncHandler(async (req,
       args: [BigInt(gameId), player, killer, BigInt(placement)],
     })
 
-    const loggedPlayer = safeLogValue(player)
-    const loggedKiller = safeLogValue(killer)
     const loggedTxHash = safeLogValue(txHash)
-    console.log(`[game] Recorded elimination for game #${gameId}: ${loggedPlayer} by ${loggedKiller} (placement ${placement}), tx: ${loggedTxHash}`)
+    console.log(`[game] Recorded elimination for game #${gameId} (placement ${placement}), tx: ${loggedTxHash}`)
     return res.json({ success: true, gameId, player, killer, placement, txHash })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
