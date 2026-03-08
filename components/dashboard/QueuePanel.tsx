@@ -25,7 +25,7 @@ import {
   truncateAddress,
   SOMNIA_FAUCET_URL,
 } from '@/lib/somnia/contract'
-import { useMatchmaking } from '@/lib/somnia/matchmaking-client'
+import { fetchMatchmakingMe, useMatchmaking } from '@/lib/somnia/matchmaking-client'
 import { restoreSessionWallet, SESSION_UPDATED_EVENT, SESSION_MIN_REMAINING_MS } from '@/lib/somnia/session-wallet'
 import { Loader2, AlertTriangle, ExternalLink, Swords, Timer } from 'lucide-react'
 import { useEffect, useCallback, useState, useRef } from 'react'
@@ -209,6 +209,57 @@ export default function QueuePanel() {
       return () => { clearTimeout(timer); }
     }
   }, [joinHash, leaveHash, refetchInQueue, refetchQueuePlayers, refetchQueueSize, refreshMatchmaking])
+
+  useEffect(() => {
+    if (!address || !joinHash) {
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+
+    const checkForAssignedMatch = async () => {
+      if (cancelled) {
+        return
+      }
+
+      attempts += 1
+
+      try {
+        const me = await fetchMatchmakingMe(address)
+        if (cancelled) {
+          return
+        }
+
+        if (typeof me.redirectPath === 'string' && me.redirectPath.length > 0) {
+          window.location.assign(me.redirectPath)
+          return
+        }
+
+        if (typeof me.matchId === 'number') {
+          window.location.assign(`/game?matchId=${me.matchId}`)
+          return
+        }
+      } catch {
+        // Ignore transient backend timing issues during instant-start polling.
+      }
+
+      if (attempts < 12) {
+        window.setTimeout(() => {
+          void checkForAssignedMatch()
+        }, 1000)
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      void checkForAssignedMatch()
+    }, 1000)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [address, joinHash])
 
   useEffect(() => {
     if (typeof matchmakingMe?.redirectPath === 'string' && matchmakingMe.redirectPath.length > 0) {
