@@ -408,11 +408,11 @@ export default function QueuePanel() {
         </p>
       </div>
 
-      {!backendConfigured && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(255,68,68,0.1)] border border-[rgba(255,68,68,0.2)] p-3">
-          <AlertTriangle className="h-4 w-4 text-[#ff4444] flex-shrink-0" />
-          <p className="text-xs font-mono text-[#ff4444]">
-            {matchmakingConfigError || 'Backend unreachable. Queue status may be incomplete.'}
+      {!backendConfigured && typeof window !== 'undefined' && window.location.hostname.endsWith('.github.io') && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-[rgba(58,232,255,0.08)] border border-[rgba(58,232,255,0.2)] p-3">
+          <AlertTriangle className="h-4 w-4 text-[#3ae8ff] flex-shrink-0" />
+          <p className="text-xs font-mono text-[rgba(255,255,255,0.5)]">
+            Matchmaking requires the game server. Queue from the server URL instead of GitHub Pages.
           </p>
         </div>
       )}
