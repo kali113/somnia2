@@ -134,6 +134,13 @@ contract PixelRoyale {
         uint16 metalAmount,
         uint256 timestamp
     );
+    event PlayerEliminated(
+        uint256 indexed gameId,
+        address indexed player,
+        address indexed killer,
+        uint256 placement,
+        uint256 timestamp
+    );
     event StormCircleCommitted(
         uint256 indexed gameId,
         uint8 indexed phase,
@@ -274,6 +281,22 @@ contract PixelRoyale {
         _storeGameResult(_gameId, _placements, pool);
     }
 
+    /// @notice Emit an elimination event during an active game.
+    /// @param _gameId    The active game ID.
+    /// @param _player    The eliminated player address.
+    /// @param _killer    The player who scored the kill (or address(0) for storm/self).
+    /// @param _placement The placement position (e.g. 20 = eliminated first in 20-player game).
+    function emitElimination(
+        uint256 _gameId,
+        address _player,
+        address _killer,
+        uint256 _placement
+    ) external onlyOrchestrator {
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        require(activeGamePlayers[_gameId][_player], "PLAYER_NOT_IN_GAME");
+        emit PlayerEliminated(_gameId, _player, _killer, _placement, block.timestamp);
+    }
+
     // ──────────────────────────── Storm Commits ────────────────────────
 
     /// @notice Commit the next storm circle for a game using on-chain entropy.
@@ -333,6 +356,19 @@ contract PixelRoyale {
             entropyHash,
             block.timestamp
         );
+    }
+
+    // ──────────────────────────── Eliminations ─────────────────────────
+
+    /// @notice Record a player elimination on-chain for kill-feed reactivity.
+    function emitElimination(
+        uint256 _gameId,
+        address _player,
+        address _killer,
+        uint256 _placement
+    ) external onlyOrchestrator {
+        require(activeGamePlayerCounts[_gameId] > 0, "GAME_NOT_ACTIVE");
+        emit PlayerEliminated(_gameId, _player, _killer, _placement, block.timestamp);
     }
 
     // ──────────────────────────── Verified Containers ───────────────────

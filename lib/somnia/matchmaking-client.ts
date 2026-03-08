@@ -192,7 +192,7 @@ export function useMatchmaking(address?: string) {
 
     const wsUrl = address
       ? `${resolvedWsUrl}?address=${address.toLowerCase()}`
-      : backendWsUrl
+      : resolvedWsUrl
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws

@@ -95,8 +95,13 @@ export function restoreSessionWallet(): SessionWallet | null {
 /**
  * Get a viem WalletClient backed by the session wallet's private key.
  * Returns null if no valid session exists.
+ *
+ * When `extendIfExpiring` is true (default during gameplay), automatically
+ * extends the local expiry if the session is about to expire or just expired
+ * within a grace period. The on-chain approval may still be valid even if the
+ * local timer ran out, and the private key remains usable.
  */
-export function getSessionWalletClient() {
+export function getSessionWalletClient(extendIfExpiring = true) {
   if (typeof window === 'undefined') {return null}
 
   const raw = sessionStorage.getItem(SESSION_KEY)
@@ -105,7 +110,25 @@ export function getSessionWalletClient() {
   try {
     const stored = JSON.parse(raw) as unknown
     if (!isStoredSession(stored)) {return null}
-    if (!isAddress(stored.address) || Date.now() >= stored.expiry) {return null}
+    if (!isAddress(stored.address)) {return null}
+
+    const now = Date.now()
+    const expired = now >= stored.expiry
+    // Grace period: allow up to 30 minutes past expiry (key is still valid,
+    // only local timer ran out). Also auto-extend if within 5 min of expiry.
+    const GRACE_MS = 30 * 60_000
+    const EXTEND_THRESHOLD_MS = 5 * 60_000
+
+    if (expired && !extendIfExpiring) {return null}
+    if (expired && (now - stored.expiry) > GRACE_MS) {return null}
+
+    // Auto-extend the local expiry so subsequent calls don't keep hitting
+    // the grace window.
+    if (extendIfExpiring && (expired || (stored.expiry - now) < EXTEND_THRESHOLD_MS)) {
+      stored.expiry = now + DEFAULT_SESSION_DURATION_MS
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored))
+      notifySessionUpdated()
+    }
 
     const account = privateKeyToAccount(stored.privateKey as `0x${string}`)
     return createWalletClient({

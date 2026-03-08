@@ -143,8 +143,9 @@ export async function openContainerVerifiedOnChain(
     transport: http(SOMNIA_RPC_URL),
   })
 
-  // Use session wallet for signing (no Phantom popup)
-  const walletClient = getSessionWalletClient()
+  // Use session wallet for signing (no Phantom popup).
+  // Pass extendIfExpiring=true so mid-game expiry doesn't block container opens.
+  const walletClient = getSessionWalletClient(true)
   if (!walletClient) {
     return { txHash: null, reason: 'session_wallet_unavailable' }
   }

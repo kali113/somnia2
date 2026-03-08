@@ -21,6 +21,7 @@ const INDEXER_ABI = parseAbi([
   'event RewardClaimed(address indexed player, uint256 amount)',
   'event SessionKeyApproved(address indexed player, address indexed sessionKey, uint256 expiry)',
   'event SessionKeyRevoked(address indexed player, address indexed sessionKey)',
+  'event PlayerEliminated(uint256 indexed gameId, address indexed player, address indexed killer, uint256 placement, uint256 timestamp)',
 ] as const)
 
 export type IndexedEvent =
@@ -71,6 +72,15 @@ export type IndexedEvent =
     type: 'session_revoked'
     player: string
     sessionKey: string
+    txHash: string | null
+  }
+  | {
+    type: 'player_eliminated'
+    gameId: number
+    player: string
+    killer: string
+    placement: number
+    eliminatedAt: number
     txHash: string | null
   }
 
@@ -305,6 +315,19 @@ export class Indexer {
           winner,
           placements,
           prizePool,
+          txHash,
+        })
+        return
+      }
+
+      if (parsed.eventName === 'PlayerEliminated') {
+        this.onEvent({
+          type: 'player_eliminated',
+          gameId: Number(parsed.args.gameId),
+          player: parsed.args.player.toLowerCase(),
+          killer: parsed.args.killer.toLowerCase(),
+          placement: Number(parsed.args.placement),
+          eliminatedAt: Number(parsed.args.timestamp),
           txHash,
         })
         return
