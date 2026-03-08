@@ -315,7 +315,7 @@ export default function QueuePanel() {
     ?? (onChainOpenedAt && Number(onChainOpenedAt) > 0 ? Number(onChainOpenedAt) : null)
   const resolvedTimeoutSec: number = wsQueue?.timeoutSec
     ?? (onChainTimeout ? Number(onChainTimeout) : 120)
-  const resolvedMinPlayers: number = wsQueue?.minPlayers ?? 2
+  const resolvedMinPlayers: number = wsQueue?.minPlayers ?? 1
 
   // Compute whether the timer should be active
   const timerActive = !!(resolvedOpenedAt && currentQueueSize >= resolvedMinPlayers)
@@ -439,7 +439,7 @@ export default function QueuePanel() {
       </div>
 
       {/* Countdown Timer */}
-      {displayCountdown !== null && currentQueueSize >= 2 && (
+      {displayCountdown !== null && currentQueueSize >= 1 && (
         <div className="mb-4 rounded-lg border border-[rgba(58,232,255,0.25)] bg-[rgba(58,232,255,0.06)] p-3">
           <div className="flex items-center gap-2 mb-2">
             <Timer className="h-4 w-4 text-[#3ae8ff]" />
