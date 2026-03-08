@@ -40,6 +40,39 @@ describe('game store', () => {
     expect(store.getMatchMode([DELTA])).toBe('solo')
   })
 
+  it('updates queue state immediately from join leave and game start events', () => {
+    const store = new GameStore()
+
+    store.setQueueConfig({ maxSize: 20, minPlayers: 1, timeoutSec: 0 })
+
+    store.recordQueueJoin(ALPHA)
+    expect(store.getQueueState()).toMatchObject({
+      players: [ALPHA.toLowerCase()],
+      size: 1,
+      openedAt: expect.any(Number),
+    })
+
+    store.recordQueueJoin(BRAVO)
+    expect(store.getQueueState()).toMatchObject({
+      players: [ALPHA.toLowerCase(), BRAVO.toLowerCase()],
+      size: 2,
+    })
+
+    store.recordQueueLeave(ALPHA)
+    expect(store.getQueueState()).toMatchObject({
+      players: [BRAVO.toLowerCase()],
+      size: 1,
+      openedAt: expect.any(Number),
+    })
+
+    store.recordQueueGameStarted([BRAVO])
+    expect(store.getQueueState()).toMatchObject({
+      players: [],
+      size: 0,
+      openedAt: null,
+    })
+  })
+
   it('tracks active matches, teams, and player assignments', () => {
     const store = new GameStore()
 
