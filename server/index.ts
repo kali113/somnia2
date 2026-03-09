@@ -48,7 +48,6 @@ dotenv.config({ path: path.join(serverRoot, '.env.local'), override: true, quiet
 const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 const ZERO_PRIVATE_KEY = `0x${'0'.repeat(64)}`
 const FORCE_START_ABI = parseAbi(['function forceStartGame()'])
-const MANUAL_FORCE_START_ABI = parseAbi(['function manualForceStart()'])
 
 function readDeployment(): {
   contract?: { address?: string }
@@ -91,11 +90,7 @@ const rawContractAddress = (
 ).trim()
 const CONTRACT_ADDRESS: Address = isAddress(rawContractAddress) ? rawContractAddress : ZERO_ADDRESS
 const CONTRACT_CONFIGURED = CONTRACT_ADDRESS.toLowerCase() !== ZERO_ADDRESS
-const rawReactiveOrchestrator = (deployment.reactiveOrchestrator?.address ?? '').trim()
-const REACTIVE_ORCHESTRATOR_ADDRESS: Address = isAddress(rawReactiveOrchestrator)
-  ? rawReactiveOrchestrator
-  : ZERO_ADDRESS
-const REACTIVE_ORCHESTRATOR_CONFIGURED = REACTIVE_ORCHESTRATOR_ADDRESS.toLowerCase() !== ZERO_ADDRESS
+
 const REACTIVITY_EVENT_SOURCES = [
   CONTRACT_ADDRESS,
   deployment.reactivityHandler?.address,
@@ -285,7 +280,7 @@ app.get('/api/status/reactivity', (_req, res) => {
     fallbackForceStart: {
       active: Boolean(forceStartTimer),
       intervalMs: FORCE_START_INTERVAL_MS,
-      note: 'Safety-net if on-chain ReactiveOrchestrator does not fire',
+      note: 'Safety-net fallback — calls forceStartGame() directly if reactivity push has not triggered a game start',
     },
   })
 })
@@ -718,10 +713,11 @@ async function startReactivitySubscription(): Promise<void> {
 }
 
 // ── Fallback matchmaking orchestrator ──────────────────────────────────────
-// The primary matchmaking path is the on-chain ReactiveOrchestrator contract,
-// which is triggered by the Somnia Reactivity Precompile when PlayerJoinedQueue
-// fires. This server-side loop is a safety-net fallback that runs at a longer
-// interval in case the reactive subscription has not started the game.
+// The primary matchmaking path is the Somnia Reactivity push (off-chain SDK
+// events). This server-side loop is a safety-net fallback that calls
+// forceStartGame() directly on PixelRoyale when the reactive path hasn't
+// started a game within the interval. The backend wallet is the on-chain
+// orchestrator, so it has direct permission to call forceStartGame().
 const FORCE_START_INTERVAL_MS = 15_000
 let forceStartInFlight = false
 let forceStartTimer: ReturnType<typeof setInterval> | null = null
@@ -729,53 +725,44 @@ let forceStartTimer: ReturnType<typeof setInterval> | null = null
 function startForceStartLoop() {
   if (forceStartTimer || !orchestratorClient || !orchestratorAccount || !CONTRACT_CONFIGURED) {return}
 
-  if (REACTIVE_ORCHESTRATOR_CONFIGURED) {
-    console.log(`[orchestrator] Fallback via ReactiveOrchestrator.manualForceStart() at ${REACTIVE_ORCHESTRATOR_ADDRESS}`)
-  } else {
-    console.log('[orchestrator] Fallback via direct PixelRoyale.forceStartGame()')
-  }
+  console.log('[orchestrator] Fallback via direct PixelRoyale.forceStartGame()')
   console.log(`[orchestrator] Fallback forceStart loop active (every ${FORCE_START_INTERVAL_MS / 1000}s)`)
 
   const tickForceStart = async (): Promise<void> => {
     if (forceStartInFlight || !orchestratorClient || !orchestratorAccount) {return}
     if (!store.canForceStart()) {return}
 
-    // When the ReactiveOrchestrator is the on-chain orchestrator, the backend
-    // wallet no longer has permission to call forceStartGame() directly on
-    // PixelRoyale. Instead we call manualForceStart() on the orchestrator
-    // contract, which in turn calls forceStartGame() with the correct authority.
-    const useReactiveOrchestrator = REACTIVE_ORCHESTRATOR_CONFIGURED
-    const targetAddress = useReactiveOrchestrator ? REACTIVE_ORCHESTRATOR_ADDRESS : CONTRACT_ADDRESS
-    const targetAbi = useReactiveOrchestrator ? MANUAL_FORCE_START_ABI : FORCE_START_ABI
-    const targetFunction = useReactiveOrchestrator ? 'manualForceStart' : 'forceStartGame'
-
-    console.log(`[orchestrator] Fallback: reactivity has not started game yet, calling ${targetFunction} on ${targetAddress}`)
+    // The backend wallet is the on-chain orchestrator, so call forceStartGame()
+    // directly. This will revert cleanly if preconditions are not met (e.g.
+    // NOT_ENOUGH_PLAYERS), unlike the ReactiveOrchestrator's low-level .call()
+    // which swallows inner reverts.
+    console.log(`[orchestrator] ⏱ Fallback: reactivity has not started game yet, calling forceStartGame on ${CONTRACT_ADDRESS}`)
     forceStartInFlight = true
     try {
       const txHash = await orchestratorClient.writeContract({
         account: orchestratorAccount,
         chain: somniaTestnet,
-        address: targetAddress,
-        abi: targetAbi,
-        functionName: targetFunction,
+        address: CONTRACT_ADDRESS,
+        abi: FORCE_START_ABI,
+        functionName: 'forceStartGame',
         args: [],
       })
 
       broadcast('orchestrator_status', {
         status: 'force_start_submitted',
         txHash,
-        via: useReactiveOrchestrator ? 'reactive_orchestrator' : 'direct',
+        via: 'direct',
       })
 
-      console.log(`[orchestrator] ⏱ Fallback ${targetFunction} submitted: ${txHash}`)
+      console.log(`[orchestrator] ⏱ Fallback forceStartGame submitted: ${txHash}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       broadcast('orchestrator_status', {
         status: 'force_start_failed',
         error: message,
-        via: useReactiveOrchestrator ? 'reactive_orchestrator' : 'direct',
+        via: 'direct',
       })
-      console.error(`[orchestrator] ⏱ Fallback ${targetFunction} failed: ${message}`)
+      console.error(`[orchestrator] ⏱ Fallback forceStartGame failed: ${message}`)
     } finally {
       forceStartInFlight = false
     }
