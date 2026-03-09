@@ -179,7 +179,14 @@ export async function openContainerVerifiedOnChain(
     )
     if (!reward) {return { txHash, reason: 'event_missing' }}
     return { txHash, reward }
-  } catch {
-    return { txHash: null, reason: 'tx_failed' }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    // Extract on-chain revert reason (e.g. GAME_NOT_ACTIVE, INVALID_SESSION)
+    const revertMatch = message.match(/reverted with.*?["']([A-Z_]+)["']/) ??
+      message.match(/reason:\s*["']?([A-Z_]+)["']?/) ??
+      message.match(/\b(GAME_NOT_ACTIVE|PLAYER_NOT_IN_GAME|INVALID_SESSION|CONTAINER_ALREADY_OPENED|INVALID_CONTAINER_KEY|INVALID_CONTAINER_TYPE|ZERO_ADDRESS)\b/)
+    const reason = revertMatch?.[1] ?? 'tx_failed'
+    console.warn(`[container] openContainerVerifiedForPlayer failed: ${reason}`, message.slice(0, 200))
+    return { txHash: null, reason }
   }
 }
